@@ -15,6 +15,8 @@ cp "$server_root/deploy/compose.yaml" "$server_root/deploy/.env.example" "$outpu
 cp "$server_root/deploy/mosquitto/mosquitto.conf" "$server_root/deploy/mosquitto/acl" "$output/deploy/mosquitto/"
 cp "$server_root/scripts/install-linux.sh" "$server_root/scripts/load-offline.sh" "$output/scripts/"
 cp "$server_root/README.md" "$output/README.md"
+cp "$server_root/THIRD_PARTY_NOTICES.md" "$server_root/dependencies.json" "$output/"
+cp -R "$server_root/licenses" "$output/licenses"
 cp "$server_root/docs/"*.md "$output/docs/"
 cp "$server_root/internal/platform/assets/openapi.json" "$server_root/internal/platform/assets/message-contracts.schema.json" "$server_root/internal/platform/assets/mqtt-contracts.json" "$output/contracts/"
 printf 'GW_IMAGE=%s\nMOSQUITTO_IMAGE=%s\n' "$image" "$broker" > "$output/deploy/.env"

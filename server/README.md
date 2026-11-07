@@ -50,7 +50,7 @@ bash scripts/load-offline.sh
 sudo bash scripts/install-linux.sh
 ```
 
-离线包包含 Docker 镜像、镜像身份记录、SHA256 校验、Compose 和安装脚本；不包含客户凭据、CA 私钥、服务器私钥或运行数据。客户主机仍需事先安装 Docker Engine 和 Compose。镜像构建、Linux 安装、真实 MQTT Broker 以及生产 TLS 联调必须在目标环境执行；没有执行记录时，不应将配置文件的存在视为部署验收完成。
+离线包包含 Docker 镜像、镜像身份记录、SHA256 校验、Compose 和安装脚本；不包含客户凭据、CA 私钥、服务器私钥或运行数据。客户主机仍需事先安装 Docker Engine 和 Compose。Linux 安装、Compose 完整服务栈、真实 MQTT Broker 以及生产 TLS 联调必须在目标环境执行；没有执行记录时，不应将配置文件的存在视为部署验收完成。
 
 ## 客户对接方式
 

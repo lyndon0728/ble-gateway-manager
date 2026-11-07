@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -20,6 +21,25 @@ type apiHarness struct {
 	handler http.Handler
 	cookie  *http.Cookie
 	csrf    string
+}
+
+func TestCoreLoginTrackingIsBounded(t *testing.T) {
+	h := newHarness(t)
+	h.a.loginMu.Lock()
+	h.a.loginBuckets = map[string]loginBucket{}
+	for i := 0; i < 10000; i++ {
+		h.a.loginBuckets[fmt.Sprintf("name%d", i)] = loginBucket{At: time.Now(), Count: 1}
+	}
+	h.a.loginMu.Unlock()
+	r := h.do("POST", "/api/v1/auth/sessions", map[string]any{"name": "new-attacker-name", "password": "invalid"}, nil)
+	h.expect(r, 429, "ErrorResponse")
+	if len(h.a.loginBuckets) != 10000 {
+		t.Fatal("attacker grew login tracking without bound")
+	}
+	h.a.loginMu.Lock()
+	h.a.globalLogins = loginBucket{At: time.Now(), Count: 40}
+	h.a.loginMu.Unlock()
+	h.expect(h.do("POST", "/api/v1/auth/sessions", map[string]any{"name": "admin", "password": "a-strong-test-password"}, nil), 429, "ErrorResponse")
 }
 
 func newHarness(t *testing.T) *apiHarness {

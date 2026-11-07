@@ -103,6 +103,7 @@ type App struct {
 	loginSlots           chan struct{}
 	loginMu              sync.Mutex
 	loginBuckets         map[string]loginBucket
+	globalLogins         loginBucket
 	runtimeLock          *flock.Flock
 }
 type loginBucket struct {

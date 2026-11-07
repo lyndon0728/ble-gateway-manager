@@ -411,19 +411,33 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 		name = Str(m, "name")
 	}
 	a.loginMu.Lock()
-	b := a.loginBuckets[name]
-	if time.Since(b.At) > time.Minute {
-		b = loginBucket{At: time.Now()}
+	if time.Since(a.globalLogins.At) > time.Second {
+		a.globalLogins = loginBucket{At: time.Now()}
 	}
-	b.Count++
-	a.loginBuckets[name] = b
-	if len(a.loginBuckets) > 10000 {
+	a.globalLogins.Count++
+	if a.globalLogins.Count > 40 {
+		a.loginMu.Unlock()
+		Fail(w, r, 429, "LOGIN_RATE_LIMIT", "login rate exceeded; retry later")
+		return
+	}
+	b, tracked := a.loginBuckets[name]
+	if !tracked && len(a.loginBuckets) >= 10000 {
 		for k, v := range a.loginBuckets {
 			if time.Since(v.At) > time.Minute {
 				delete(a.loginBuckets, k)
 			}
 		}
+		if len(a.loginBuckets) >= 10000 {
+			a.loginMu.Unlock()
+			Fail(w, r, 429, "LOGIN_BUSY", "login tracking capacity reached; retry later")
+			return
+		}
 	}
+	if time.Since(b.At) > time.Minute {
+		b = loginBucket{At: time.Now()}
+	}
+	b.Count++
+	a.loginBuckets[name] = b
 	a.loginMu.Unlock()
 	if b.Count > 10 {
 		Fail(w, r, 429, "LOGIN_RATE_LIMIT", "too many login attempts")

@@ -4,7 +4,7 @@
 
 | 检查 | 结果 |
 | --- | --- |
-| `go test ./... -count=1 -timeout=90s` | 45 项顶层测试、23 项子测试通过 |
+| `go test ./... -count=1 -timeout=90s` | 46 项顶层测试、23 项子测试通过 |
 | `go vet ./...` | 通过 |
 | Go 格式化 | 通过 |
 | OpenAPI 3.1 验证 | 58 个操作、84 个 schema，验证通过，全部操作有服务端路由 |
@@ -13,8 +13,10 @@
 | Windows 构建 | 四个程序构建成功并实际运行 |
 | Linux amd64 构建 | 四个程序交叉构建成功，尚未在 Linux 主机执行 |
 | 部署脚本 | PowerShell 语法检查、Git Bash `bash -n`、Compose YAML 解析通过 |
-| 容器运行 | 本机没有 Docker，未执行镜像构建或 Compose 运行；CI 已配置相应检查 |
-| Race detector | 本机 CGO/C 编译工具链未配置，`go test -race` 未运行成功；Linux CI 配置执行该项 |
+| 容器构建 | GitHub Linux CI 的 Compose 配置检查及镜像构建通过；尚未运行完整 Compose 服务栈 |
+| Race detector | 本机缺少 CGO 工具链；GitHub Linux CI 的 `go test -race ./...` 通过 |
+
+GitHub 同时执行 Ubuntu 与 Windows 自动测试、构建，以及容器构建。运行记录可在 [Server CI](https://github.com/lyndon0728/ble-gateway-manager/actions/workflows/server-ci.yml) 查询；交付包 `release.json` 指明源码提交，`validation/github-ci.json` 保存该提交的运行结果。
 
 ## 实际进程端到端验证
 
