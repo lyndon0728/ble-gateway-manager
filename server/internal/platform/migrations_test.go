@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"fmt"
 	"net/url"
 	"path/filepath"
 	"strings"
@@ -164,5 +165,142 @@ func TestMigrationsRollbackAllExtensionDDLOnFailure(t *testing.T) {
 	}
 	if e = verify.QueryRow("SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('ble_peers','auto_connect_rules','auto_connect_triggers')").Scan(&count); e != nil || count != 0 {
 		t.Fatal("partial migration DDL leaked", count, e)
+	}
+}
+
+func migrationLineEndingDigests(t *testing.T, asset string) (lf, crlf string) {
+	t.Helper()
+	raw, e := Assets.ReadFile("assets/" + asset)
+	if e != nil {
+		t.Fatal(e)
+	}
+	unix := strings.ReplaceAll(string(raw), "\r\n", "\n")
+	if !strings.Contains(unix, "\n") {
+		t.Fatal("fixture needs multiple SQL lines")
+	}
+	lfSum := sha256.Sum256([]byte(unix))
+	crlfSum := sha256.Sum256([]byte(strings.ReplaceAll(unix, "\n", "\r\n")))
+	lf, crlf = hex.EncodeToString(lfSum[:]), hex.EncodeToString(crlfSum[:])
+	if lf == crlf {
+		t.Fatal("line-ending test did not change the digest")
+	}
+	return lf, crlf
+}
+
+func TestMigrationsUpgradeV1AcrossLineEndingsPreservesHistoricalChecksum(t *testing.T) {
+	for _, schema := range []string{"management.sql", "pipeline.sql"} {
+		t.Run(schema, func(t *testing.T) {
+			path, db, original := migrationV1Fixture(t, schema)
+			lf, crlf := migrationLineEndingDigests(t, schema)
+			other := lf
+			if original == lf {
+				other = crlf
+			}
+			if other == original {
+				t.Fatal("fixture did not select another checkout style")
+			}
+			if _, e := db.Exec("UPDATE schema_migrations SET checksum=? WHERE version=1", other); e != nil {
+				t.Fatal(e)
+			}
+			db.Close()
+			upgraded, e := openDB(path, schema)
+			if e != nil {
+				t.Fatal("equivalent SQL from the other operating system was rejected", e)
+			}
+			var saved string
+			var versions int
+			if e = upgraded.QueryRow("SELECT checksum FROM schema_migrations WHERE version=1").Scan(&saved); e != nil || saved != other {
+				t.Fatal("historical migration checksum was rewritten", saved, other, e)
+			}
+			if e = upgraded.QueryRow("SELECT count(*) FROM schema_migrations WHERE version IN (1,2)").Scan(&versions); e != nil || versions != 2 {
+				t.Fatal("migration 2 was not applied", versions, e)
+			}
+			v2LF, _ := migrationLineEndingDigests(t, strings.TrimSuffix(schema, ".sql")+".v2.sql")
+			if e = upgraded.QueryRow("SELECT checksum FROM schema_migrations WHERE version=2").Scan(&saved); e != nil || saved != v2LF {
+				t.Fatal("new migration did not use the canonical LF digest", saved, v2LF, e)
+			}
+			upgraded.Close()
+			again, e := openDB(path, schema)
+			if e != nil {
+				t.Fatal("second open rejected preserved historical digest", e)
+			}
+			defer again.Close()
+			if e = again.QueryRow("SELECT checksum FROM schema_migrations WHERE version=1").Scan(&saved); e != nil || saved != other {
+				t.Fatal("historical digest changed on reopen", saved, e)
+			}
+		})
+	}
+}
+
+func TestMigrationsReopenV2AcrossLineEndingsWithoutRewritingChecksum(t *testing.T) {
+	for _, schema := range []string{"management.sql", "pipeline.sql"} {
+		t.Run(schema, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "v2-state.db")
+			db, e := openDB(path, schema)
+			if e != nil {
+				t.Fatal(e)
+			}
+			asset := strings.TrimSuffix(schema, ".sql") + ".v2.sql"
+			lf, crlf := migrationLineEndingDigests(t, asset)
+			var current string
+			if e = db.QueryRow("SELECT checksum FROM schema_migrations WHERE version=2").Scan(&current); e != nil {
+				t.Fatal(e)
+			}
+			other := lf
+			if current == lf {
+				other = crlf
+			}
+			if current == other {
+				t.Fatal("fixture did not change the v2 digest")
+			}
+			if _, e = db.Exec("UPDATE schema_migrations SET checksum=? WHERE version=2", other); e != nil {
+				t.Fatal(e)
+			}
+			db.Close()
+			reopened, e := openDB(path, schema)
+			if e != nil {
+				t.Fatal("equivalent migration 2 line endings rejected", e)
+			}
+			defer reopened.Close()
+			var saved string
+			if e = reopened.QueryRow("SELECT checksum FROM schema_migrations WHERE version=2").Scan(&saved); e != nil || saved != other {
+				t.Fatal("v2 historical digest was rewritten", saved, other, e)
+			}
+		})
+	}
+}
+
+func TestMigrationsLineEndingCompatibilityDoesNotNormalizeOtherChanges(t *testing.T) {
+	for _, schema := range []string{"management.sql", "pipeline.sql"} {
+		for _, version := range []int{1, 2} {
+			t.Run(fmt.Sprintf("%s/version%d", schema, version), func(t *testing.T) {
+				path := filepath.Join(t.TempDir(), "modified-state.db")
+				db, e := openDB(path, schema)
+				if e != nil {
+					t.Fatal(e)
+				}
+				asset := schema
+				if version == 2 {
+					asset = strings.TrimSuffix(schema, ".sql") + ".v2.sql"
+				}
+				raw, e := Assets.ReadFile("assets/" + asset)
+				if e != nil {
+					t.Fatal(e)
+				}
+				changed := sha256.Sum256(append(raw, []byte("\n-- unauthorized migration content change\n")...))
+				if _, e = db.Exec("UPDATE schema_migrations SET checksum=? WHERE version=?", hex.EncodeToString(changed[:]), version); e != nil {
+					t.Fatal(e)
+				}
+				db.Close()
+				opened, e := openDB(path, schema)
+				if e == nil {
+					opened.Close()
+					t.Fatal("non-line-ending content change was treated as equivalent")
+				}
+				if !strings.Contains(e.Error(), "checksum") {
+					t.Fatal(e)
+				}
+			})
+		}
 	}
 }

@@ -262,8 +262,7 @@ func openDB(path, schemaName string) (*sql.DB, error) {
 	if err != nil {
 		return fail(err)
 	}
-	digest := sha256.Sum256(raw)
-	checksum := hex.EncodeToString(digest[:])
+	checksum := migrationChecksum(raw)
 	tx, err := db.BeginTx(context.Background(), nil)
 	if err != nil {
 		return fail(err)
@@ -294,7 +293,7 @@ func openDB(path, schemaName string) (*sql.DB, error) {
 		if err = tx.QueryRow("SELECT checksum FROM schema_migrations WHERE version=1").Scan(&old); err != nil {
 			return fail(err)
 		}
-		if old != checksum {
+		if !migrationChecksumMatches(raw, old) {
 			return fail(errors.New("migration checksum differs; refusing unsafe schema change"))
 		}
 	}
