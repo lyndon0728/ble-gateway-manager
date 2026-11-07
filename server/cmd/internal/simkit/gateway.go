@@ -12,11 +12,19 @@ import (
 )
 
 type Gateway struct {
-	DB                   *sql.DB
-	Namespace, GatewayID string
+	DB                           *sql.DB
+	Namespace, GatewayID         string
+	Profile                      string
+	NotificationsPerSubscription int
 }
 
 func OpenGateway(path, namespace, id string) (*Gateway, error) {
+	return OpenGatewayProfile(path, namespace, id, "reference-1")
+}
+func OpenGatewayProfile(path, namespace, id, profile string) (*Gateway, error) {
+	if profile != "reference-1" && profile != "gw32-profile-1" {
+		return nil, errors.New("profile must be reference-1 or gw32-profile-1")
+	}
 	db, e := Open(path)
 	if e != nil {
 		return nil, e
@@ -40,7 +48,11 @@ func OpenGateway(path, namespace, id string) (*Gateway, error) {
 		db.Close()
 		return nil, errors.New("simulator database identity mismatch")
 	}
-	g := &Gateway{db, namespace, id}
+	g := &Gateway{DB: db, Namespace: namespace, GatewayID: id, Profile: profile, NotificationsPerSubscription: 1}
+	if e = g.initializeGW32(); e != nil {
+		db.Close()
+		return nil, e
+	}
 	// Once execution intent is durable, a crash cannot prove physical completion.
 	// Recover as UNKNOWN, never execute that task a second time.
 	rows, e := db.Query("SELECT task_id FROM journal WHERE state='EXECUTING'")
@@ -131,6 +143,9 @@ func (g *Gateway) Enqueue(ctx context.Context, count int) error {
 	if count < 0 || count > 100000 {
 		return errors.New("count must be 0..100000")
 	}
+	if g.Profile == "gw32-profile-1" {
+		return g.EnqueueGW32(ctx, count)
+	}
 	tx, e := g.DB.BeginTx(ctx, nil)
 	if e != nil {
 		return e
@@ -155,7 +170,12 @@ func (g *Gateway) Enqueue(ctx context.Context, count int) error {
 	return tx.Commit()
 }
 func (g *Gateway) Batch(ctx context.Context) (map[string]any, error) {
-	rows, e := g.DB.QueryContext(ctx, "SELECT event_json FROM spool WHERE quarantined=0 ORDER BY rowid LIMIT 200")
+	version := "1.0"
+	e := g.DB.QueryRowContext(ctx, "SELECT schema_version FROM spool WHERE quarantined=0 ORDER BY rowid LIMIT 1").Scan(&version)
+	if e != nil && !errors.Is(e, sql.ErrNoRows) {
+		return nil, e
+	}
+	rows, e := g.DB.QueryContext(ctx, "SELECT event_json FROM spool WHERE quarantined=0 AND schema_version=? ORDER BY rowid LIMIT 200", version)
 	if e != nil {
 		return nil, e
 	}
@@ -175,11 +195,14 @@ func (g *Gateway) Batch(ctx context.Context) (map[string]any, error) {
 	if e = rows.Err(); e != nil {
 		return nil, e
 	}
-	return map[string]any{"schemaVersion": "1.0", "namespaceId": g.Namespace, "gatewayId": g.GatewayID, "batchId": ID("batch"), "events": events}, nil
+	return map[string]any{"schemaVersion": version, "namespaceId": g.Namespace, "gatewayId": g.GatewayID, "batchId": ID("batch"), "events": events}, nil
 }
 func (g *Gateway) Ack(ctx context.Context, batch, ack map[string]any) error {
 	if Str(ack, "namespaceId") != g.Namespace || Str(ack, "gatewayId") != g.GatewayID || Str(ack, "batchId") != Str(batch, "batchId") || Str(ack, "durability") != "RAW_PERSISTED" {
 		return errors.New("invalid ingress ACK identity/durability")
+	}
+	if v := Str(ack, "schemaVersion"); v != Str(batch, "schemaVersion") {
+		return errors.New("ACK schema version mismatch")
 	}
 	allowed := map[string]bool{}
 	for _, v := range batch["events"].([]any) {
@@ -277,6 +300,12 @@ func (g *Gateway) execute(ctx context.Context, cmd map[string]any, expires time.
 	}
 	params, _ := cmd["parameters"].(map[string]any)
 	details := map[string]any{}
+	if g.Profile == "gw32-profile-1" {
+		handled, e := g.executeGW32(ctx, cmd)
+		if handled || e != nil {
+			return e
+		}
+	}
 	switch Str(cmd, "type") {
 	case "CONFIGURE":
 		revision := Int(params, "desiredRevision")
@@ -347,6 +376,9 @@ func (g *Gateway) finish(ctx context.Context, task, state, verification string, 
 	return tx.Commit()
 }
 func (g *Gateway) Results(ctx context.Context) (map[string]any, error) {
+	if e := g.finalizeNetworkTrials(ctx); e != nil {
+		return nil, e
+	}
 	rows, e := g.DB.QueryContext(ctx, "SELECT result_json FROM results WHERE acked=0 ORDER BY task_id,sequence LIMIT 200")
 	if e != nil {
 		return nil, e
@@ -396,7 +428,10 @@ func (g *Gateway) AckResults(ctx context.Context, batch, ack map[string]any) err
 			}
 		}
 	}
-	return tx.Commit()
+	if e = tx.Commit(); e != nil {
+		return e
+	}
+	return g.finalizeNetworkTrials(ctx)
 }
 func (g *Gateway) Status(ctx context.Context) (map[string]any, error) {
 	var revision, bytes int64
@@ -406,5 +441,9 @@ func (g *Gateway) Status(ctx context.Context) (map[string]any, error) {
 	if e := g.DB.QueryRowContext(ctx, "SELECT COALESCE(SUM(length(event_json)),0) FROM spool").Scan(&bytes); e != nil {
 		return nil, e
 	}
-	return map[string]any{"schemaVersion": "1.0", "namespaceId": g.Namespace, "gatewayId": g.GatewayID, "observedAt": time.Now().UTC().Format(time.RFC3339Nano), "firmwareVersion": "simulator-1.0.0", "reportedConfigurationRevision": revision, "spoolBytes": bytes, "timeQuality": "SYNCED", "health": "OK"}, nil
+	firmware := "simulator-1.0.0"
+	if g.Profile == "gw32-profile-1" {
+		firmware = "simulator-gw32-1.1"
+	}
+	return map[string]any{"schemaVersion": "1.0", "namespaceId": g.Namespace, "gatewayId": g.GatewayID, "observedAt": time.Now().UTC().Format(time.RFC3339Nano), "firmwareVersion": firmware, "reportedConfigurationRevision": revision, "spoolBytes": bytes, "timeQuality": "SYNCED", "health": "OK"}, nil
 }

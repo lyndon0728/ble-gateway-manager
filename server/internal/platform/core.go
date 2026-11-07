@@ -34,7 +34,7 @@ import (
 //go:embed assets/*
 var Assets embed.FS
 
-const Version = "0.1.0"
+const Version = "0.2.0"
 
 type Config struct {
 	DataDir, ListenAddr, Role, NamespaceID, InstanceID, NodeID, PublicURL string
@@ -298,6 +298,9 @@ func openDB(path, schemaName string) (*sql.DB, error) {
 			return fail(errors.New("migration checksum differs; refusing unsafe schema change"))
 		}
 	}
+	if err = migrateExtensions(tx, schemaName); err != nil {
+		return fail(err)
+	}
 	if err = tx.Commit(); err != nil {
 		return fail(err)
 	}
@@ -322,6 +325,8 @@ func (a *App) Run(ctx context.Context) {
 	if a.Config.Role != "pipeline" {
 		workers.Add(1)
 		go func() { defer workers.Done(); a.StartControl(ctx) }()
+		workers.Add(1)
+		go func() { defer workers.Done(); a.StartAutoConnect(ctx) }()
 	}
 	if a.Config.Role != "manager" {
 		workers.Add(1)
@@ -355,6 +360,7 @@ func (a *App) Handler() http.Handler {
 		w.Write(b)
 	})
 	a.RegisterCore(r)
+	a.RegisterAutoConnect(r)
 	a.RegisterControl(r)
 	a.RegisterPipeline(r)
 	r.Get("/", a.console)

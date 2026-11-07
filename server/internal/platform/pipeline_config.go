@@ -35,7 +35,13 @@ func pipeLimit(r *http.Request) int {
 	return n
 }
 func parserDigest(id, version string) string {
-	return pipeHash([]string{"builtin", Version, id, version})
+	// Parser identity is immutable across server releases. Preserve the 0.1.0
+	// release digest for installed v1.0 implementations and version new behavior.
+	implementation := "0.1.0"
+	if id == "ble_ad" && version == "1.1.0" {
+		implementation = "ble-ad-service-uuid-1"
+	}
+	return pipeHash([]string{"builtin", implementation, id, version})
 }
 func (a *App) pipelineParsers(w http.ResponseWriter, r *http.Request) {
 	if _, ok := a.Require(w, r, "parser:read"); !ok {
@@ -44,7 +50,11 @@ func (a *App) pipelineParsers(w http.ResponseWriter, r *http.Request) {
 	items := []pipeMap{}
 	for _, p := range parserCatalog() {
 		schema := p["schemaVersions"].([]string)[0]
-		items = append(items, pipeMap{"parserId": p["parserId"], "version": p["version"], "schemaVersion": schema, "modelIds": []string{}, "protocolVersions": []string{}, "implementationDigest": parserDigest(ps(p, "parserId"), ps(p, "version")), "state": "INSTALLED", "maxInputBytes": 65536, "maxOutputRecords": 1})
+		maxBytes := 65536
+		if ps(p, "parserId") == "ble_ad" && ps(p, "version") == "1.1.0" {
+			maxBytes = 1650
+		}
+		items = append(items, pipeMap{"parserId": p["parserId"], "version": p["version"], "schemaVersion": schema, "modelIds": []string{}, "protocolVersions": []string{}, "implementationDigest": parserDigest(ps(p, "parserId"), ps(p, "version")), "state": "INSTALLED", "maxInputBytes": maxBytes, "maxOutputRecords": 1})
 	}
 	pjson(w, 200, pipePage(items, ""))
 }
@@ -62,6 +72,7 @@ func (a *App) pipelineParserTest(w http.ResponseWriter, r *http.Request) {
 	var records []ParsedRecord
 	if err == nil {
 		records, err = ParsePayload(id, ver, raw)
+		annotateServiceUUIDSource(records, ps(po(req, "metadata"), "sourceEventId"))
 	}
 	outputs := []pipeMap{}
 	errs := []pipeMap{}

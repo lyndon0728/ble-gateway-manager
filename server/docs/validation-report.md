@@ -1,46 +1,40 @@
-# 服务器 0.1.0 验证报告
+# 服务器 0.2.0 验证报告
 
-执行日期：2026-11-07。环境：Windows amd64，Go 1.27.3；本机 Intel Core i7-1165G7。以下结论来自实际执行，不将配置文件、模拟器或交叉构建等同于生产验收。
+执行日期：2026-11-07。环境：Windows amd64、Go 1.27.3。协议输入为 GW32I33V2 ESP—服务器 1.1 与板内 UART 1.1 设计稿；验证对象是服务端、API 契约与软件模拟器。
 
 | 检查 | 结果 |
 | --- | --- |
-| `go test ./... -count=1 -timeout=90s` | 46 项顶层测试、23 项子测试通过 |
-| `go vet ./...` | 通过 |
-| Go 格式化 | 通过 |
-| OpenAPI 3.1 验证 | 58 个操作、84 个 schema，验证通过，全部操作有服务端路由 |
-| 独立 JSON Schema | Draft 2020-12 结构验证通过 |
-| 数据库 | 管理库 18 表、数据库 9 表；WAL、FULL 同步、迁移校验和及外键测试通过 |
-| Windows 构建 | 四个程序构建成功并实际运行 |
-| Linux amd64 构建 | 四个程序交叉构建成功，尚未在 Linux 主机执行 |
-| 部署脚本 | PowerShell 语法检查、Git Bash `bash -n`、Compose YAML 解析通过 |
-| 容器构建 | GitHub Linux CI 的 Compose 配置检查及镜像构建通过；尚未运行完整 Compose 服务栈 |
-| Race detector | 本机缺少 CGO 工具链；GitHub Linux CI 的 `go test -race ./...` 通过 |
+| `go test ./... -json -count=1 -timeout=120s` | 85 项主测试、97 项子测试通过，0 失败 |
+| `go vet ./...`、gofmt | 通过 |
+| OpenAPI 3.1 / JSON Schema | 65 个操作、112 个 schema；所有操作均有路由；Draft 2020-12 结构验证通过 |
+| 数据库升级 | 保留 v1 数据；重复启动、v1/v2 校验和篡改拒绝、未来版本拒绝、DDL 中途失败回滚测试通过 |
+| 权限与并发 | 事务内撤权检查；单连接池下列表/修改/自动任务无嵌套查询阻塞；8 并发控制消费者仅创建一项触发任务 |
+| 脚本 | PowerShell 解析、Git Bash `bash -n` 通过 |
+| Windows 进程验证 | 服务器、网关模拟器、客户模拟器与维护 CLI 实际执行，见下文 |
 
-GitHub 同时执行 Ubuntu 与 Windows 自动测试、构建，以及容器构建。运行记录可在 [Server CI](https://github.com/lyndon0728/ble-gateway-manager/actions/workflows/server-ci.yml) 查询；交付包 `release.json` 指明源码提交，`validation/github-ci.json` 保存该提交的运行结果。
+本地执行日志位于交付包 `validation/`。源码仓库不提交包含运行凭据的临时数据目录。GitHub 的 Ubuntu/Windows、Linux race detector、镜像构建与 Windows GW32 进程测试结果，以同一源码提交的 `validation/github-ci.json` 为准。本机没有 Docker 或 C 编译器，未把交叉构建当成 Linux 部署验收。
 
-## 实际进程端到端验证
+## GW32 1.1 实际进程闭环
 
-执行 `scripts/e2e.ps1 -ServerPort 18181 -CustomerPort 19191`，使用独立临时目录与 HTTP 回环接口，启动服务器、网关模拟器、客户模拟器，最后调用维护 CLI。最终一次执行时间为 `2026-11-07T12:34:07Z`。
+执行 `scripts/e2e-v11.ps1`，报告时间 `2026-11-07T15:25:43Z`；使用独立临时目录、HTTP 回环接口和随机空闲端口：
 
-- 网关断网期间持久保留数据，重连后发送 10 条唯一事件。
-- 网关故意忽略一次服务器应用确认，使用相同事件身份重试。
-- 客户先持久提交，再故意丢弃一次 ACK；实际接收请求 2 次，持久投递 10 条，业务记录仍为 10 条。
-- REBOOT 任务达到 `SUCCEEDED`，执行结果为 `VERIFIED`。
-- 服务停止后，加密备份和空目录恢复通过；恢复标记存在，新的重解析需先对账最高 revision。
-- 测试结束后关闭本次启动的进程，保留证据，不修改现有客户数据。
+- 旧 1.0 温湿度两条与新 1.1 ADV/SCAN_RSP 同时接入，重试保留各自版本。
+- nRF 可连接 ADV 不带服务 UUID；ESP SCAN_RSP 含 128 位服务 UUID，规则自动创建且仅创建一次 GATT_CONNECT。
+- GATT_SUBSCRIBE 后上传一条通知，连同前述数据在客户侧形成 5 条业务记录；客户丢弃应用 ACK 后保持业务幂等。
+- UNSUBSCRIBE、DISCONNECT 成功；LINK_DOWN 原文被持久保存，服务端记录 CLOSED，断链事件不进入业务转发。
+- 双上行网络配置在服务器持久接管各接口探测后才返回 VERIFIED/SUCCEEDED，reported revision 为 2。
+- 重启模拟器后另执行 NETWORK/PASSIVE 诊断，保留 ETHERNET/WIFI_STA 配置快照，返回模拟 AP 观测并明确标记 `physicalMeasurements=false`。
 
-交付包 `validation/e2e-report.json` 与 `validation/go-test.json` 保存结果；原始本机证据目录记录在 JSON 中。证据目录包含测试运行凭据，**不会**打包或提交到代码库。
+该闭环没有真实 BLE、UART、Wi-Fi 或以太网故障切换参与；不会据此证明物理网络接口已经切换。
 
-## 故障与安全测试重点
+## 旧版与故障回归
 
-覆盖 T1/T2 事务故障回滚、16 路并发重复投递、服务重启后稳定身份与载荷、HTTP 部分/无应用 ACK、MQTT QoS1 PUBACK 与 retained ACK 不代表接管、遥测阻塞时控制结果仍可确认、旧租约 fencing、跨库规则激活失败恢复、慢目标隔离、映射失败隔离、签名与兼容校验、配置 CAS、任务 TTL/UNKNOWN、结果乱序不回退、跨组权限、CSRF、凭据撤销、重复设备凭据拒绝、恢复 revision floor 9 后新修订为 10、备份破坏/截断拒绝及维护运行锁。
+`e2e.ps1` 使用最终源码重复验证：10 条独立事件形成 10 条客户业务记录，客户两次请求、丢 ACK 重试、REBOOT VERIFIED，以及停机加密备份/空目录恢复成功。
 
-MQTT 测试使用真实 TCP 与 MQTT 3.1.1 测试 peer，能够检查应用与线级协议交互；它不替代 Mosquitto/EMQX 的生产 TLS、账户和 ACL 验收。
+新增测试覆盖：16/32/128 位 UUID 端序及九类 AD 类型；错误后续字段不能泄漏前缀候选；ADV/RSP 两种到达顺序；14 类不安全或不新鲜观测不触发连接；跨网关同对端独占；M 库提交后 P 库消费记录失败的重放去重；LINK_DOWN 先到时晚到 CONNECT 结果不得复活引用；网络探测和成功放在同批时拒绝；网络部分配置合并；MTU/实际安全状态/CCC/写回读验证；设备能力交集、私有 autoTrigger 注入拒绝、作用域 RBAC/CAS。
 
-## 局部吞吐测量
+旧 T1/T2 回滚、MQTT QoS1 应用确认、乱序结果、慢目标隔离、恢复 fencing、签名制品和维护锁等回归仍包含在全量套件内。
 
-`BenchmarkDurableIngress100`：每批 100 个不同身份的 18 字节参考帧，SQLite WAL / synchronous=FULL，约 **3,054 条事件/秒**，约 33 ms/批；执行 90 批，使用新的临时数据库。
+## 尚未取得的证据
 
-这只测量本机 T1 原始持久接管函数，**不包含** HTTP/TLS、无线扫描、后续解析、客户投递、长期元数据增长或真实磁盘断电。不能据此换算承诺网关台数；整体容量必须在客户机器、实际报文与目标接收端组合下进行长时间测试。
-
-真实硬件、生产证书/Broker、Linux 容器实际运行、物理断电恢复与生产容量仍是后续验收项，详见 `implementation-status.md`。
+真实 GW32 板卡、nRF/ESP UART、双射频配对、通知吞吐、Flash 掉电、生产 Broker/TLS/ACL、完整 Compose 部署和客户服务器容量仍需验收。本版不提供设备台数或持续吞吐承诺。原 0.1.0 T1 局部基准不能作为 0.2.0 含自动连接的容量结论。

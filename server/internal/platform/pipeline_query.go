@@ -51,6 +51,9 @@ func (a *App) eventView(ctx context.Context, key string, includeRaw bool) (pipeM
 			return nil, err
 		}
 		j := pipeMap{"processingRevision": revision, "state": processState(s), "bundleId": b, "outputIds": []string{}}
+		if revision == rev && s == "filtered" {
+			m["state"] = "FILTERED"
+		}
 		if code != "" {
 			j["errorCode"] = code
 		}

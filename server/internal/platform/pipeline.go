@@ -285,6 +285,11 @@ func (a *App) pipelineIngress(w http.ResponseWriter, r *http.Request) {
 	}
 	ack, err := a.AcceptIngress(r.Context(), ps(batch, "namespaceId"), ps(batch, "gatewayId"), batch)
 	if err != nil {
+		var ingressErr *PipelineIngressError
+		if errors.As(err, &ingressErr) {
+			pfail(w, r, ingressErr.Status, ingressErr.Code, ingressErr.Detail)
+			return
+		}
 		pfail(w, r, 503, "INGRESS_UNAVAILABLE", err.Error())
 		return
 	}
@@ -295,7 +300,7 @@ func (a *App) pipelineIngress(w http.ResponseWriter, r *http.Request) {
 // MQTT callers must authenticate the topic identity before calling this method.
 func (a *App) AcceptIngress(ctx context.Context, namespace, gateway string, batch pipeMap) (pipeMap, error) {
 	if err := a.Validate("IngressBatch", batch); err != nil {
-		return nil, errors.New("invalid ingress envelope")
+		return nil, &PipelineIngressError{400, "INGRESS_INVALID", "invalid ingress envelope"}
 	}
 	if ps(batch, "namespaceId") != namespace || ps(batch, "gatewayId") != gateway {
 		return nil, errors.New("authenticated identity mismatch")
@@ -304,9 +309,13 @@ func (a *App) AcceptIngress(ctx context.Context, namespace, gateway string, batc
 	if err != nil || ns != namespace {
 		return nil, errors.New("unknown namespace")
 	}
-	var lifecycle, model, group string
-	if err = a.Management.QueryRowContext(ctx, "SELECT lifecycle,model,scope_id FROM gateways WHERE gateway_id=?", gateway).Scan(&lifecycle, &model, &group); err != nil || lifecycle != "active" {
+	var lifecycle, model, group, capabilities string
+	if err = a.Management.QueryRowContext(ctx, "SELECT lifecycle,model,scope_id,capabilities_json FROM gateways WHERE gateway_id=?", gateway).Scan(&lifecycle, &model, &group, &capabilities); err != nil || lifecycle != "active" {
 		return nil, errors.New("gateway inactive or unknown")
+	}
+	version := ps(batch, "schemaVersion")
+	if version == "1.1" && !captureHasCapability(capabilities, CaptureContextCapability) {
+		return nil, &PipelineIngressError{403, "CAPTURE_CAPABILITY_REQUIRED", "gateway signed capabilities do not include GW32_CAPTURE_CONTEXT_1"}
 	}
 	events := pl(batch, "events")
 	if len(events) < 1 || len(events) > 200 {
@@ -324,6 +333,9 @@ func (a *App) AcceptIngress(ctx context.Context, namespace, gateway string, batc
 		decoded[i], err = base64.StdEncoding.Strict().DecodeString(ps(e, "payloadBase64"))
 		if err != nil || len(decoded[i]) > 65536 {
 			return nil, errors.New("invalid or oversized base64 payload")
+		}
+		if err := ValidateCaptureEvent(version, e, decoded[i]); err != nil {
+			return nil, err
 		}
 		total += len(decoded[i])
 		if ps(e, "capturedAt") != "" {
@@ -357,6 +369,9 @@ func (a *App) AcceptIngress(ctx context.Context, namespace, gateway string, batc
 		e := v.(map[string]any)
 		eventID := ps(e, "eventId")
 		hash := pipeHash(e)
+		if version == "1.1" {
+			hash = pipeHash(pipeMap{"schemaVersion": version, "event": e})
+		}
 		key := pipeStable("event", []string{ns, gateway, eventID})
 		var old string
 		err = tx.QueryRowContext(ctx, "SELECT immutable_hash FROM event_receipts WHERE event_key=?", key).Scan(&old)
@@ -371,7 +386,7 @@ func (a *App) AcceptIngress(ctx context.Context, namespace, gateway string, batc
 		if !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
 		}
-		meta := pipeMap{"rawEvent": e, "modelId": model, "groupId": group}
+		meta := pipeMap{"rawEvent": e, "modelId": model, "groupId": group, "ingressSchemaVersion": version}
 		estimatedBytes := int64(2*(len(decoded[i])+len(pipeJSON(meta))) + 4096)
 		capacityCode := pipelineStorageCheck(disk, reservedBytes+estimatedBytes, limit)
 		if used+int64(len(decoded[i])) > limit {
@@ -412,7 +427,7 @@ func (a *App) AcceptIngress(ctx context.Context, namespace, gateway string, batc
 	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
-	return pipeMap{"schemaVersion": "1.0", "namespaceId": ns, "gatewayId": gateway, "batchId": ps(batch, "batchId"), "receiverId": a.Config.InstanceID, "durability": "RAW_PERSISTED", "items": items, "traceId": pipeID("trace")}, nil
+	return pipeMap{"schemaVersion": version, "namespaceId": ns, "gatewayId": gateway, "batchId": ps(batch, "batchId"), "receiverId": a.Config.InstanceID, "durability": "RAW_PERSISTED", "items": items, "traceId": pipeID("trace")}, nil
 }
 
 type pipeJob struct {
@@ -461,6 +476,16 @@ func (a *App) ProcessOne(ctx context.Context) (bool, error) {
 	}
 	if epoch != j.Lease || state != "leased" {
 		return true, nil
+	}
+	if ps(po(po(pm(j.Meta), "rawEvent"), "capture"), "kind") == "GATT_LINK_DOWN" {
+		_, err = tx.ExecContext(ctx, "UPDATE processing_jobs SET state='filtered',mode=NULL,plan_json=?,output_count=0,error_code=NULL,completed_at_ms=?,lease_owner=NULL,lease_until_ms=NULL WHERE processing_id=? AND lease_token=?", pipeJSON(pipeMap{"consumer": "capture_control", "kind": "GATT_LINK_DOWN"}), pnow(), j.ID, j.Lease)
+		if err == nil {
+			_, err = tx.ExecContext(ctx, "UPDATE event_receipts SET custody_state='processed' WHERE event_key=? AND latest_revision=?", j.Key, j.Revision)
+		}
+		if err == nil {
+			err = tx.Commit()
+		}
+		return true, err
 	}
 	if parseErr != nil {
 		code := "PARSER_ERROR"
@@ -604,6 +629,10 @@ func pipelineWire(j pipeJob, rule pipeMap, rec ParsedRecord, t, rawEvent pipeMap
 	outputID := pipeStable("output", []any{j.Key, j.Revision, rec.Key})
 	deliveryID := pipeStable("delivery", []string{outputID, ps(t, "targetId"), ps(t, "version"), ps(t, "mappingVersion")})
 	wire := pipeMap{"deliveryId": deliveryID, "outputId": outputID, "namespaceId": j.Namespace, "gatewayId": j.Gateway, "sourceEventId": j.Event, "processingRevision": j.Revision, "recordKey": rec.Key, "targetId": ps(t, "targetId"), "targetVersion": ps(t, "version"), "schemaVersion": ps(rule, "schemaVersion"), "mappingVersion": ps(t, "mappingVersion"), "mode": ps(rule, "action"), "correction": j.Revision > 1, "receivedAt": pts(j.Accepted), "timeQuality": ps(rawEvent, "timeQuality"), "quality": rec.Quality}
+	if capture, ok := rawEvent["capture"].(map[string]any); ok {
+		wire["capture"] = pm(pipeJSON(capture))
+		wire["sourceSchemaVersion"] = "1.1"
+	}
 	if len(replaced) > 0 {
 		wire["replacesOutputIds"] = replaced
 	}
@@ -630,6 +659,9 @@ func evaluatePipeline(j pipeJob) (pipeMap, []ParsedRecord, error) {
 	}
 	if strings.Contains(hint, "ble-ad") {
 		packetType = "advertisement"
+	}
+	if kind := ps(po(raw, "capture"), "kind"); kind == "GATT_NOTIFY" || kind == "GATT_INDICATE" {
+		packetType = "gatt_value"
 	}
 	for _, rv := range pl(manifest, "rules") {
 		rule, ok := rv.(map[string]any)
@@ -660,6 +692,7 @@ func evaluatePipeline(j pipeJob) (pipeMap, []ParsedRecord, error) {
 		return rule, []ParsedRecord{{Key: "0", Data: pipeMap{}, Quality: []string{}}}, nil
 	case "DECODE":
 		records, err := ParsePayload(ps(rule, "parserId"), ps(rule, "parserVersion"), j.Raw)
+		annotateServiceUUIDSource(records, j.Event)
 		return rule, records, err
 	default:
 		return rule, nil, &ParserFailure{"ROUTE_INVALID", "unknown action"}
@@ -674,7 +707,7 @@ func (a *App) ReclaimPipelinePayloads(ctx context.Context) error {
 	defer tx.Rollback()
 	now := pnow()
 	// Only delivered originals past their promised raw-retention window are eligible.
-	rows, err := tx.QueryContext(ctx, `SELECT e.event_key FROM event_receipts e WHERE e.raw_retention_until_ms<? AND e.raw_purged_at_ms IS NULL AND NOT EXISTS(SELECT 1 FROM processing_jobs j WHERE j.event_key=e.event_key AND j.state NOT IN ('completed','filtered','terminated')) AND NOT EXISTS(SELECT 1 FROM delivery_outbox d JOIN processing_results r ON r.output_id=d.output_id JOIN processing_jobs j ON j.processing_id=r.processing_id WHERE j.event_key=e.event_key AND d.state NOT IN ('delivered','terminated')) LIMIT 100`, now)
+	rows, err := tx.QueryContext(ctx, `SELECT e.event_key FROM event_receipts e WHERE e.raw_retention_until_ms<? AND e.raw_purged_at_ms IS NULL AND NOT EXISTS(SELECT 1 FROM raw_events original WHERE original.event_key=e.event_key AND json_type(original.metadata_json,'$.rawEvent.capture') IS NOT NULL AND NOT EXISTS(SELECT 1 FROM capture_consumptions consumed WHERE consumed.event_key=e.event_key)) AND NOT EXISTS(SELECT 1 FROM processing_jobs j WHERE j.event_key=e.event_key AND j.state NOT IN ('completed','filtered','terminated')) AND NOT EXISTS(SELECT 1 FROM delivery_outbox d JOIN processing_results r ON r.output_id=d.output_id JOIN processing_jobs j ON j.processing_id=r.processing_id WHERE j.event_key=e.event_key AND d.state NOT IN ('delivered','terminated')) LIMIT 100`, now)
 	if err != nil {
 		return err
 	}

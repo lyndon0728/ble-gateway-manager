@@ -26,6 +26,10 @@ jobs:
       - run: go vet ./...
       - run: go test ./... -count=1
       - run: go build ./cmd/...
+      - if: runner.os == 'Windows'
+        name: GW32 protocol process integration
+        shell: pwsh
+        run: ./scripts/e2e-v11.ps1
       - if: runner.os == 'Linux'
         run: go test -race ./...
   container:

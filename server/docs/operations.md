@@ -2,7 +2,7 @@
 
 ## 部署形态与容量依据
 
-`all` 是单进程本机验证入口。生产参考 Compose 使用 manager、pipeline、Mosquitto 三个长期进程：manager 执行任务调度、设备状态、管理 API 和网关 MQTT 接入；pipeline 执行解析、隔离、重处理、目标 outbox 和客户 ACK。网关 MQTT 的遥测、任务结果与状态使用独立有界队列，客户投递使用独立客户端。SQLite WAL 数据目录共享在同一 Linux 主机本地磁盘上，不能跨主机或 NFS/SMB 共享。
+`all` 是单进程本机验证入口。生产参考 Compose 使用 manager、pipeline、Mosquitto 三个长期进程：manager 执行 capture 控制消费、自动连接评估、任务调度、设备状态、管理 API 和网关 MQTT 接入；pipeline 执行解析、隔离、重处理、目标 outbox 和客户 ACK。网关 MQTT 的遥测、任务结果与状态使用独立有界队列，客户投递使用独立客户端。SQLite WAL 数据目录共享在同一 Linux 主机本地磁盘上，不能跨主机或 NFS/SMB 共享。
 
 资源默认上限：manager 1 CPU/512 MiB，pipeline 2 CPU/1024 MiB，Broker 0.5 CPU/256 MiB；这些是便于隔离压力的初始配置，不是已测出的容量承诺。安装预检至少需要 5 GiB 可用磁盘；实际保留数据远大于此时应提前扩大空间。
 
@@ -99,3 +99,7 @@ bin/gatewayctl reconcile-revisions --data-dir restored --namespace ns_local --fi
 健康探针用于进程/数据库就绪；系统状态与指标用于队列字节、最旧待投递年龄、磁盘余量、任务结果与解析隔离。客户不可用时应观察 outbox 积压增长和重试，恢复后观察清空速度；不要仅以网关在线数量判定业务链路正常。
 
 验收至少包含：错误设备令牌拒绝、namespace 越权拒绝、重复事件、内容冲突、丢原始 ACK、丢结果 ACK、客户提交后丢 ACK、网关/服务进程重启、命令过期/未知结果、规则版本切换、解析异常隔离、客户长时间断开、磁盘额度耗尽、备份损坏拒绝、恢复 revision 对账。真实硬件验收另外覆盖 BLE 丢包边界、Flash 断电恢复、实际配置/重启、固件签名与回滚。仓库测试和模拟器不会代替这些硬件证据。
+
+## GW32 1.1 升级
+
+升级/回退操作遵循 `implementation-status.md` 的 0.2.0 数据与升级说明。两进程必须使用同一版本。`capture_consumptions` 确认之前不清理 1.1 原文；manager 停机期间观察原文积压与磁盘额度。观察 `auto_connect_triggers`、任务状态和 GATT 连接 API 可追溯规则触发，UNKNOWN 不以时间流逝自动释放对端占用。

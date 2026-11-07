@@ -1,0 +1,23 @@
+{
+  "description": "Software fixtures derived from gateway-protocol.md and gateway-uart-protocol.md; no hardware observation is claimed.",
+  "connectionReferences": [
+    {"radio":"NRF54","controllerBootId":"000102030405060708090a0b0c0d0e0f","connectionNumber":1,"connectionRef":"48c3dbbf03fada501d681ab8058ce6cf"},
+    {"radio":"ESP32","controllerBootId":"000102030405060708090a0b0c0d0e0f","connectionNumber":1,"connectionRef":"22c6d10ede02762beaecc646455e14c1"}
+  ],
+  "serviceUUIDVectors": [
+    {"wireBits":16,"adType":3,"hex":"03030f18","serviceUuid":"0000180f-0000-1000-8000-00805f9b34fb"},
+    {"wireBits":32,"adType":5,"hex":"050578563412","serviceUuid":"12345678-0000-1000-8000-00805f9b34fb"},
+    {"wireBits":128,"adType":7,"hex":"110778563412f0debc9a7856341278563412","serviceUuid":"12345678-1234-5678-9abc-def012345678"}
+  ],
+  "uartFrames": [
+    {"type":1,"name":"HELLO_REQ","hex":"00054757010101090807060504030201010101054f42a1e800"},
+    {"type":160,"name":"BLE_ACK_CUSTODY","hex":"0006475701a0030a0807060504030201010101010101056c955da100"}
+  ],
+  "ingress11": {
+    "schemaVersion":"1.1","namespaceId":"ns_local","gatewayId":"gw32_sim","batchId":"fixture_batch_1",
+    "events":[
+      {"eventId":"000102030405060708090a0b0c0d0e0f-1","sequence":1,"timeQuality":"SYNCED","capturedAt":"2026-11-07T10:00:00Z","sourceDeviceId":"ble:public:AABBCCDDEEFF","protocolHint":"ble-ad-v1","payloadBase64":"AgEG","capture":{"radio":"NRF54","kind":"ADV","addressType":"PUBLIC","address":"AABBCCDDEEFF","legacy":true,"connectable":true,"observedBy":["NRF54","ESP32"],"rssiDbm":-50,"primaryPhy":"LE_1M"}},
+      {"eventId":"000102030405060708090a0b0c0d0e0f-2","sequence":2,"timeQuality":"SYNCED","capturedAt":"2026-11-07T10:00:00.1Z","sourceDeviceId":"ble:public:AABBCCDDEEFF","protocolHint":"ble-ad-v1","payloadBase64":"EQd4VjQS8N68mnhWNBJ4VjQS","capture":{"radio":"ESP32","kind":"SCAN_RSP","addressType":"PUBLIC","address":"AABBCCDDEEFF","legacy":true,"rssiDbm":-57,"primaryPhy":"LE_1M"}}
+    ]
+  }
+}

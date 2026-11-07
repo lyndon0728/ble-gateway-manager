@@ -41,10 +41,10 @@ var roleToDB = map[string]string{"ADMIN": "instance_admin", "DEVICE_ADMIN": "dev
 var dbToRole = map[string]string{"instance_admin": "ADMIN", "device_admin": "DEVICE_ADMIN", "operator": "OPERATOR", "developer": "DEVELOPER", "auditor": "AUDITOR"}
 var rolePermissions = map[string][]string{
 	"ADMIN":        {"*"},
-	"DEVICE_ADMIN": {"scope:read", "gateway:read", "gateway:write", "gateway:configure", "gateway:reboot", "diagnostics:run", "gatt:execute", "firmware:deploy", "task:read", "task:create", "task:cancel", "artifact:read", "artifact:write", "operation:read", "system:read", "parser:read", "target:read"},
-	"OPERATOR":     {"scope:read", "gateway:read", "gateway:configure", "gateway:reboot", "diagnostics:run", "task:read", "task:create", "task:cancel", "data:read", "delivery:read", "delivery:retry", "operation:read", "system:read", "artifact:read"},
-	"DEVELOPER":    {"scope:read", "gateway:read", "task:read", "data:read", "data:raw", "data:reprocess", "delivery:read", "delivery:retry", "parser:read", "parser:test", "rule:read", "target:read", "operation:read"},
-	"AUDITOR":      {"scope:read", "gateway:read", "task:read", "audit:read", "operation:read", "system:read", "rule:read", "target:read", "parser:read"},
+	"DEVICE_ADMIN": {"scope:read", "gateway:read", "gateway:write", "gateway:configure", "gateway:reboot", "diagnostics:run", "gatt:read", "gatt:manage", "gatt:execute", "firmware:deploy", "task:read", "task:create", "task:cancel", "artifact:read", "artifact:write", "operation:read", "system:read", "parser:read", "target:read"},
+	"OPERATOR":     {"scope:read", "gateway:read", "gatt:read", "gateway:configure", "gateway:reboot", "diagnostics:run", "task:read", "task:create", "task:cancel", "data:read", "delivery:read", "delivery:retry", "operation:read", "system:read", "artifact:read"},
+	"DEVELOPER":    {"scope:read", "gateway:read", "gatt:read", "task:read", "data:read", "data:raw", "data:reprocess", "delivery:read", "delivery:retry", "parser:read", "parser:test", "rule:read", "target:read", "operation:read"},
+	"AUDITOR":      {"scope:read", "gateway:read", "gatt:read", "task:read", "audit:read", "operation:read", "system:read", "rule:read", "target:read", "parser:read"},
 }
 
 func TokenHash(token string) string {
@@ -89,15 +89,24 @@ func (p *Principal) View() map[string]any {
 	return map[string]any{"principalId": p.ID, "type": p.Type, "name": p.Name, "roleBindings": p.Bindings, "scopes": p.Scopes, "state": p.State, "revision": p.Revision}
 }
 func (a *App) principal(ctx context.Context, id string) (*Principal, error) {
+	return a.principalWithQuery(ctx, a.Management, id)
+}
+
+type authQuery interface {
+	ctlQuery
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+func (a *App) principalWithQuery(ctx context.Context, q authQuery, id string) (*Principal, error) {
 	p := &Principal{ID: id, Bindings: []Binding{}, Scopes: []string{}}
 	var kind, state string
-	e := a.Management.QueryRowContext(ctx, "SELECT kind,name,status,auth_epoch FROM principals WHERE principal_id=?", id).Scan(&kind, &p.Name, &state, &p.Revision)
+	e := q.QueryRowContext(ctx, "SELECT kind,name,status,auth_epoch FROM principals WHERE principal_id=?", id).Scan(&kind, &p.Name, &state, &p.Revision)
 	if e != nil {
 		return nil, e
 	}
 	p.Type = map[string]string{"human": "USER", "application": "APPLICATION", "service": "SERVICE"}[kind]
 	p.State = strings.ToUpper(state)
-	rows, e := a.Management.QueryContext(ctx, "SELECT role,scope_id FROM role_bindings WHERE principal_id=? ORDER BY role,scope_id", id)
+	rows, e := q.QueryContext(ctx, "SELECT role,scope_id FROM role_bindings WHERE principal_id=? ORDER BY role,scope_id", id)
 	if e != nil {
 		return nil, e
 	}
@@ -214,6 +223,9 @@ func (a *App) Require(w http.ResponseWriter, r *http.Request, permission string)
 	return p, true
 }
 func (a *App) Can(p *Principal, permission, scopeID string) bool {
+	return canQuery(context.Background(), a.Management, p, permission, scopeID)
+}
+func canQuery(ctx context.Context, q ctlQuery, p *Principal, permission, scopeID string) bool {
 	if p == nil {
 		return false
 	}
@@ -231,10 +243,10 @@ func (a *App) Can(p *Principal, permission, scopeID string) bool {
 			continue
 		}
 		var n int
-		err := a.Management.QueryRow("WITH RECURSIVE ancestors(scope_id,parent_scope_id,status) AS (SELECT scope_id,parent_scope_id,status FROM resource_scopes WHERE scope_id=? UNION ALL SELECT s.scope_id,s.parent_scope_id,s.status FROM resource_scopes s JOIN ancestors a ON s.scope_id=a.parent_scope_id) SELECT count(*) FROM ancestors WHERE scope_id=? AND status='active' AND NOT EXISTS(SELECT 1 FROM ancestors WHERE status<>'active')", scopeID, b.ScopeID).Scan(&n)
+		err := q.QueryRowContext(ctx, "WITH RECURSIVE ancestors(scope_id,parent_scope_id,status) AS (SELECT scope_id,parent_scope_id,status FROM resource_scopes WHERE scope_id=? UNION ALL SELECT s.scope_id,s.parent_scope_id,s.status FROM resource_scopes s JOIN ancestors a ON s.scope_id=a.parent_scope_id) SELECT count(*) FROM ancestors WHERE scope_id=? AND status='active' AND NOT EXISTS(SELECT 1 FROM ancestors WHERE status<>'active')", scopeID, b.ScopeID).Scan(&n)
 		if err == nil && n > 0 {
 			var active int
-			if a.Management.QueryRow("SELECT count(*) FROM resource_scopes WHERE scope_id=? AND status='active'", scopeID).Scan(&active) == nil && active == 1 {
+			if q.QueryRowContext(ctx, "SELECT count(*) FROM resource_scopes WHERE scope_id=? AND status='active'", scopeID).Scan(&active) == nil && active == 1 {
 				return true
 			}
 		}

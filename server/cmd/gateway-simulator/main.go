@@ -31,6 +31,10 @@ func run() error {
 	db := flag.String("db", "sim-data/gateway.db", "durable spool and task journal")
 	ns := flag.String("namespace", "ns_local", "namespace")
 	gateway := flag.String("gateway", "gw_demo", "gateway ID")
+	profile := flag.String("profile", "reference-1", "reference-1 or gw32-profile-1; protocol simulation, not physical hardware")
+	notifications := flag.Int("notifications", 1, "GW32 synthetic values per successful subscription (0..100)")
+	linkDownAfter := flag.Duration("link-down-after", 0, "GW32 inject one disconnection after this run duration")
+	ignoreResultACKs := flag.Int("ignore-result-acks", 0, "ignore first N successful result ACKs, including network probes")
 	secret := flag.String("token-file", "", "provisioned token file")
 	ca := flag.String("ca", "", "server CA PEM")
 	cert := flag.String("cert", "", "client certificate PEM")
@@ -63,11 +67,15 @@ func run() error {
 	if e != nil {
 		return e
 	}
-	g, e := simkit.OpenGateway(*db, *ns, *gateway)
+	if *notifications < 0 || *notifications > 100 {
+		return errors.New("notifications must be 0..100")
+	}
+	g, e := simkit.OpenGatewayProfile(*db, *ns, *gateway, *profile)
 	if e != nil {
 		return e
 	}
 	defer g.DB.Close()
+	g.NotificationsPerSubscription = *notifications
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if *duration > 0 {
@@ -113,10 +121,17 @@ func run() error {
 		return result, e
 	}
 	start := time.Now()
+	linkDownInjected := false
 	ticker := time.NewTicker(*interval)
 	defer ticker.Stop()
 	for {
 		if time.Since(start) >= *offline {
+			if *profile == "gw32-profile-1" && *linkDownAfter > 0 && !linkDownInjected && time.Since(start) >= *linkDownAfter {
+				if e = g.LinkDownAll(ctx, "DISCONNECTED"); e != nil {
+					return e
+				}
+				linkDownInjected = true
+			}
 			batch, e := g.Batch(ctx)
 			if e != nil {
 				return e
@@ -154,6 +169,9 @@ func run() error {
 				ack, e := request("POST", "/api/v1/gateway-ingress/results", results)
 				if e != nil {
 					log.Printf("result retained: %v", e)
+				} else if *ignoreResultACKs > 0 {
+					*ignoreResultACKs--
+					log.Print("fault injection: ignored result ACK")
 				} else if e = g.AckResults(ctx, results, ack); e != nil {
 					log.Printf("result retained: %v", e)
 				}

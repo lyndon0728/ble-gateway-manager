@@ -272,7 +272,7 @@ func (a *App) putConfiguration(w http.ResponseWriter, r *http.Request) {
 	JSON(w, status, v)
 }
 
-var taskPermission = map[string]string{"CONFIGURE": "gateway:configure", "REBOOT": "gateway:reboot", "DIAGNOSTICS": "diagnostics:run", "FIRMWARE_UPGRADE": "firmware:deploy", "GATT_READ": "gatt:execute", "GATT_WRITE": "gatt:execute"}
+var taskPermission = map[string]string{"CONFIGURE": "gateway:configure", "REBOOT": "gateway:reboot", "DIAGNOSTICS": "diagnostics:run", "FIRMWARE_UPGRADE": "firmware:deploy", "GATT_READ": "gatt:execute", "GATT_WRITE": "gatt:execute", "GATT_CONNECT": "gatt:execute", "GATT_DISCONNECT": "gatt:execute", "GATT_SUBSCRIBE": "gatt:execute", "GATT_UNSUBSCRIBE": "gatt:execute"}
 
 func (a *App) createTask(w http.ResponseWriter, r *http.Request) {
 	p, ok := a.Require(w, r, "task:create")
@@ -281,6 +281,10 @@ func (a *App) createTask(w http.ResponseWriter, r *http.Request) {
 	}
 	body, ok := a.Decode(w, r, "TaskRequest")
 	if !ok {
+		return
+	}
+	if _, present := Obj(body, "parameters")["autoTrigger"]; present {
+		Fail(w, r, 422, "AUTO_TRIGGER_RESERVED", "autoTrigger is reserved for authorized server rules")
 		return
 	}
 	id := Str(body, "gatewayId")
@@ -321,8 +325,11 @@ func (a *App) newTask(ctx context.Context, tx *sql.Tx, actor, key string, req ma
 	if !supported {
 		return 0, "", nil, Problem(422, "CAPABILITY_UNSUPPORTED", "signed gateway capability does not support this operation")
 	}
+	if e = a.validateGW32Task(ctx, tx, g, op, params); e != nil {
+		return 0, "", nil, e
+	}
 	var active int
-	e = tx.QueryRowContext(ctx, "SELECT count(*) FROM command_tasks WHERE gateway_id=? AND state IN ('queued','sent','device_accepted','executing','applied','unknown')", gateway).Scan(&active)
+	e = tx.QueryRowContext(ctx, "SELECT count(*) FROM command_tasks WHERE gateway_id=? AND (state IN ('queued','sent','device_accepted','executing','applied') OR (state='unknown' AND ?<>'DIAGNOSTICS'))", gateway, op).Scan(&active)
 	if e != nil {
 		return 0, "", nil, e
 	}
@@ -332,7 +339,7 @@ func (a *App) newTask(ctx context.Context, tx *sql.Tx, actor, key string, req ma
 	var configID, artifactID any
 	risk := "idempotent"
 	if op == "CONFIGURE" {
-		if e = ValidateGatewayConfiguration(Obj(params, "configuration")); e != nil {
+		if e = a.validateGatewayConfiguration(ctx, tx, g, Obj(params, "configuration")); e != nil {
 			return 0, "", nil, e
 		}
 		c, e := a.configurationView(ctx, tx, gateway)
@@ -367,6 +374,9 @@ func (a *App) newTask(ctx context.Context, tx *sql.Tx, actor, key string, req ma
 	if e != nil {
 		return 0, "", nil, e
 	}
+	if e = a.reserveGW32Connection(ctx, tx, g, id, op, params); e != nil {
+		return 0, "", nil, e
+	}
 	_, e = tx.ExecContext(ctx, "INSERT INTO command_outbox(message_id,task_id,kind,payload_json,state,next_attempt_at_ms,created_at_ms) VALUES(?,?,'command',?,'pending',?,?)", ID("msg"), id, encode(command), now, now)
 	if e == nil {
 		e = a.Audit(ctx, tx, actor, "task.create", "task", id, map[string]any{"gatewayId": gateway, "type": op})
@@ -381,6 +391,12 @@ func (a *App) newTask(ctx context.Context, tx *sql.Tx, actor, key string, req ma
 // Firmware accepts this versioned, deliberately small configuration surface.
 // Unknown keys fail closed so an incompatible setting never appears applied.
 func ValidateGatewayConfiguration(c map[string]any) error {
+	if _, ok := c["network"]; ok {
+		return validateGW32ConfigurationShape(c)
+	}
+	if _, ok := c["radios"]; ok {
+		return validateGW32ConfigurationShape(c)
+	}
 	allowed := map[string]map[string][2]int64{"scan": {"intervalMs": {10, 10240}, "windowMs": {10, 10240}}, "upload": {"batchMaxRecords": {1, 1000}, "flushIntervalMs": {100, 60000}}, "filters": {"minRssi": {-127, 20}}}
 	for section, v := range c {
 		fields, ok := allowed[section]
@@ -406,7 +422,7 @@ func ValidateGatewayConfiguration(c map[string]any) error {
 				for _, item := range list {
 					if k == "serviceUuids" {
 						s, ok := item.(string)
-						if !ok || len(s) < 4 || len(s) > 36 {
+						if !ok || gw32CanonicalUUID(s) == "" {
 							return Problem(422, "INVALID_CONFIGURATION", "invalid service UUID")
 						}
 					} else {
@@ -586,6 +602,9 @@ func (a *App) cancelTask(w http.ResponseWriter, r *http.Request) {
 			_, e = tx.ExecContext(r.Context(), "UPDATE command_outbox SET state='cancelled' WHERE task_id=? AND kind='command'", id)
 		}
 		if e == nil {
+			e = a.reconcileGW32Expiries(r.Context(), tx)
+		}
+		if e == nil {
 			e = a.Audit(r.Context(), tx, p.ID, "task.cancel", "task", id, body)
 		}
 		if e != nil {
@@ -675,6 +694,10 @@ func (a *App) AcceptTaskResults(ctx context.Context, gateway string, batch map[s
 		return nil, Problem(403, "GATEWAY_INACTIVE", "gateway inactive")
 	}
 	items := []any{}
+	ctx, e = a.gw32BatchContext(ctx, tx, batch)
+	if e != nil {
+		return nil, e
+	}
 	for _, raw := range List(batch, "results") {
 		result := raw.(map[string]any)
 		item, e := a.acceptTaskResult(ctx, tx, gateway, result)
@@ -731,6 +754,11 @@ func (a *App) acceptTaskResult(ctx context.Context, tx *sql.Tx, g string, v map[
 		state = "device_accepted"
 	}
 	details := Obj(v, "details")
+	if code, e := a.validateGW32Result(ctx, tx, g, command, v); e != nil {
+		return nil, e
+	} else if code != "" {
+		return reject(code)
+	}
 	if state == "succeeded" {
 		if operation == "REBOOT" && (Str(v, "verification") != "VERIFIED" || Str(details, "bootId") == "") {
 			return reject("REBOOT_NOT_VERIFIED")
@@ -764,6 +792,9 @@ func (a *App) acceptTaskResult(ctx context.Context, tx *sql.Tx, g string, v map[
 	}
 	terminal := current == "succeeded" || current == "failed" || current == "cancelled" || current == "expired"
 	if (!maxSequence.Valid || sequence > maxSequence.Int64) && !terminal {
+		if e = a.applyGW32Result(ctx, tx, command, v, state); e != nil {
+			return nil, e
+		}
 		projection := state
 		if state == "executing" && Str(v, "verification") == "APPLIED" {
 			projection = "applied"
@@ -859,6 +890,9 @@ func (a *App) expireCommands(ctx context.Context) error {
 		_, e = tx.ExecContext(ctx, "UPDATE command_outbox SET state='expired' WHERE kind='command' AND state NOT IN ('done','cancelled','expired') AND task_id IN (SELECT task_id FROM command_tasks WHERE expires_at_ms<=?)", Now())
 	}
 	if e != nil {
+		return e
+	}
+	if e = a.reconcileGW32Expiries(ctx, tx); e != nil {
 		return e
 	}
 	return tx.Commit()

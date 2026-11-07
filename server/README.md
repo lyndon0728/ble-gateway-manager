@@ -2,7 +2,7 @@
 
 这是服务于自有网关、由客户开发业务应用的服务器实现。软件运行在客户服务器上，提供设备管理、可靠上下行、按规则解析或原样转发、持久投递与应用确认；不包含定位功能，也不内置客户业务系统。
 
-当前版本为 `0.1.0`。模块实现及运行边界见 [实现范围](docs/implementation-status.md)，实际检查结果见 [验证报告](docs/validation-report.md)。`REFERENCE_GW` 与 `reference_sensor` 是本项目新设计的参考协议，不代表任何实际型号已完成兼容认证。真实固件需要按 [网关协议](docs/gateway-protocol.md) 实现并联调。
+当前软件版本计划为 `0.2.0`，API 契约 `1.8.0`，兼容原 1.0 数据并增加 GW32 1.1 采集与控制扩展。模块实现及运行边界见 [实现范围](docs/implementation-status.md)，实际检查结果见 [验证报告](docs/validation-report.md)。`REFERENCE_GW`、`reference_sensor` 和 GW32 模拟 profile 均不代表实机已验证。真实固件需要按 [网关协议](docs/gateway-protocol.md) 及 [UART 协议](docs/gateway-uart-protocol.md) 实现并联调；新增软件联调方式见 [1.1 对接说明](docs/protocol-v11-integration.md)。
 
 ## 当前可执行入口
 
@@ -12,6 +12,8 @@
 | `gatewayctl` | 初始化、设备令牌登记、签名密钥与签名、加密停机备份、恢复与 revision 对账 |
 | `gateway-simulator` | 持久事件 spool、命令 journal、结果重传；模拟断网和丢 ACK |
 | `customer-simulator` | 持久客户 inbox、业务幂等与 revision 防回退，提交后故意丢 ACK |
+
+`gateway-simulator --profile gw32-profile-1` 增加 ADV/SCAN_RSP 与双射频 capture 样本、GATT 连接/订阅/通知/断链，以及依赖应用 ACK 才提交的网络配置模拟；默认 `reference-1` 保留原 1.0 行为。服务器端不替代 ESP 的 UART 接管和双路采集去重。`scripts/e2e-v11.ps1` 使用独立临时数据目录和空闲端口验证新旧协议共存及扩展闭环。
 
 服务器包含独立的 `management.db`、`pipeline.db` 和加密密钥 `master.key`。默认 `all` 适合本机验证；Compose 将管理和解析投递 worker 分为两个进程，共享**同一 Linux 主机的本地磁盘目录**。当前实现不是跨主机数据库集群，不能将 SQLite 数据目录放在 NFS/SMB 上。
 

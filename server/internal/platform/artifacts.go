@@ -400,9 +400,13 @@ func (a *App) importGateways(w http.ResponseWriter, r *http.Request) {
 			d.Capabilities = []string{}
 		}
 		caps := map[string]bool{}
+		if len(d.Capabilities) > 128 {
+			Fail(w, r, 422, "INVALID_DEVICE_CAPABILITY", "at most 128 capability names are supported")
+			return
+		}
 		for _, cap := range d.Capabilities {
-			if _, ok := taskPermission[cap]; !ok || caps[cap] {
-				Fail(w, r, 422, "INVALID_DEVICE_CAPABILITY", "capabilities must be unique supported task types")
+			if !gw32CapabilityPattern.MatchString(cap) || caps[cap] {
+				Fail(w, r, 422, "INVALID_DEVICE_CAPABILITY", "capabilities must be unique uppercase identifiers")
 				return
 			}
 			caps[cap] = true

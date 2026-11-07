@@ -34,7 +34,7 @@ func TestGatewayRestartAndStrictACK(t *testing.T) {
 	if Str(batch["events"].([]any)[0].(map[string]any), "eventId") != id {
 		t.Fatal("event identity changed on restart")
 	}
-	ack := map[string]any{"namespaceId": "ns_test", "gatewayId": "wrong", "batchId": batch["batchId"], "durability": "RAW_PERSISTED", "items": []any{map[string]any{"eventId": id, "status": "ACCEPTED"}}}
+	ack := map[string]any{"schemaVersion": "1.0", "namespaceId": "ns_test", "gatewayId": "wrong", "batchId": batch["batchId"], "durability": "RAW_PERSISTED", "items": []any{map[string]any{"eventId": id, "status": "ACCEPTED"}}}
 	if g.Ack(ctx, batch, ack) == nil {
 		t.Fatal("accepted mismatched ACK")
 	}

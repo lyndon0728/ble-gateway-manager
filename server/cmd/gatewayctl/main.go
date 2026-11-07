@@ -71,12 +71,16 @@ func run(args []string) error {
 		return nil
 	case "provision-gateway":
 		id := fs.String("gateway", "gw_demo", "reference gateway ID")
+		profile := fs.String("profile", "reference-1", "reference-1 or gw32-profile-1 local simulation profile")
 		token := fs.String("token-file", "", "existing/new device token file")
 		if e := fs.Parse(args[1:]); e != nil {
 			return e
 		}
 		if *token == "" {
 			return errors.New("--token-file required")
+		}
+		if *profile != "reference-1" && *profile != "gw32-profile-1" {
+			return errors.New("unknown simulation profile")
 		}
 		if e := ensureToken(*token); e != nil {
 			return e
@@ -92,6 +96,13 @@ func run(args []string) error {
 		defer app.Close()
 		if e = app.ProvisionGateway(context.Background(), *id, secret); e != nil {
 			return e
+		}
+		if *profile == "gw32-profile-1" {
+			caps := []string{"CONFIGURE", "REBOOT", "DIAGNOSTICS", "GATT_CONNECT", "GATT_DISCONNECT", "GATT_READ", "GATT_WRITE", "GATT_SUBSCRIBE", "GATT_UNSUBSCRIBE", "GW32_CONTROL_PROFILE_1", "GW32_CAPTURE_CONTEXT_1", "NETWORK_ETHERNET", "NETWORK_WIFI_STA", "NRF54_BLE_SCAN", "NRF54_BLE_BEACON_FILTER", "NRF54_BLE_ADV", "NRF54_BLE_GATT_CENTRAL", "NRF54_BLE_GATT_NOTIFY", "NRF54_BLE_GATT_SERVICE_DISCOVERY", "ESP32_BLE_SCAN", "ESP32_BLE_BEACON_FILTER", "ESP32_BLE_ADV", "ESP32_BLE_GATT_CENTRAL", "ESP32_BLE_GATT_NOTIFY"}
+			raw, _ := json.Marshal(caps)
+			if _, e = app.Management.Exec("UPDATE gateways SET model='GW32I33V2',hardware_version='SIMULATION_ONLY',firmware_version='simulator-1.1',display_name='GW32 protocol simulator',capabilities_json=?,version=version+1 WHERE gateway_id=?", string(raw), *id); e != nil {
+				return e
+			}
 		}
 		fmt.Println("Provisioned gateway credential; this does not certify physical hardware compatibility.")
 		return nil

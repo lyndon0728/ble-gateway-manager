@@ -3,7 +3,7 @@
 set -euo pipefail
 server_root=$(cd "$(dirname "$0")/.." && pwd)
 output=${1:?Usage: package-offline.sh NEW_OUTPUT_DIRECTORY}
-image=${GW_IMAGE:-ble-gateway-server:0.1.0}
+image=${GW_IMAGE:-ble-gateway-server:0.2.0}
 broker=${MOSQUITTO_IMAGE:-eclipse-mosquitto:2.0.22}
 [[ ! -e "$output" ]] || { echo 'Output directory must not exist.' >&2; exit 1; }
 mkdir -p "$output/deploy/mosquitto" "$output/scripts" "$output/docs" "$output/contracts"

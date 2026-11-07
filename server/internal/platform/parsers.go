@@ -25,6 +25,7 @@ func parserCatalog() []map[string]any {
 		{"parserId": "demo_sensor", "version": "1.0.0", "schemaVersions": []string{"temperature-1"}, "description": "Reference example: signed BE temperature/100, unsigned BE humidity/100; exactly four bytes."},
 		{"parserId": "reference_sensor", "version": "1.0.0", "schemaVersions": []string{"reference-sensor-1"}, "description": "BG reference frame v1: 18 bytes, sequence, temperature, humidity, battery, flags and CRC16-CCITT-FALSE."},
 		{"parserId": "ble_ad", "version": "1.0.0", "schemaVersions": []string{"ble-ad-1"}, "description": "Bluetooth advertising data structures. Preserves each AD type and raw value; does not guess vendor protocols."},
+		{"parserId": "ble_ad", "version": "1.1.0", "schemaVersions": []string{"ble-ad-2"}, "description": "Complete BLE advertising structures and normalized 16/32/128-bit service UUIDs with original field provenance."},
 	}
 }
 
@@ -59,6 +60,9 @@ func ReferenceCRC16(data []byte) uint16 {
 
 func ParsePayload(id, version string, data []byte) ([]ParsedRecord, error) {
 	bad := func(code, detail string) ([]ParsedRecord, error) { return nil, &ParserFailure{code, detail} }
+	if id == "ble_ad" && version == "1.1.0" {
+		return parseBLEAD11(data)
+	}
 	if len(data) > 65536 {
 		return bad("PAYLOAD_TOO_LARGE", "raw payload exceeds 64 KiB")
 	}

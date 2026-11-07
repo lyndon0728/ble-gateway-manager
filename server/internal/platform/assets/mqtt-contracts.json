@@ -1,5 +1,5 @@
 {
-  "version": "1.7.0-draft",
+  "version": "1.8.0",
   "topics": [
     {
       "topic": "gw/v1/{namespaceId}/{gatewayId}/telemetry",
@@ -271,5 +271,11 @@
     "MQTT5 session/message expiry and in-flight limits depend on verified SKU; application TTL remains required.",
     "Dual MQTT connections use different client IDs where supported; shared CPU/network still measured.",
     "Customer envelope is reference; exact mapping must preserve dedup/correction information."
-  ]
+  ],
+  "ingressSchemaVersions": [
+    "1.0",
+    "1.1"
+  ],
+  "controlSchemaVersion": "1.0",
+  "compatibility": "Topics stay at gw/v1. IngressAck echoes the accepted batch version. GW32 extensions require signed model and capability profiles."
 }
