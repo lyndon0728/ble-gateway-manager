@@ -2,7 +2,9 @@
 
 这是服务于自有网关、由客户开发业务应用的服务器实现。软件运行在客户服务器上，提供设备管理、可靠上下行、按规则解析或原样转发、持久投递与应用确认；不包含定位功能，也不内置客户业务系统。
 
-当前软件版本计划为 `0.2.0`，API 契约 `1.8.0`，兼容原 1.0 数据并增加 GW32 1.1 采集与控制扩展。模块实现及运行边界见 [实现范围](docs/implementation-status.md)，实际检查结果见 [验证报告](docs/validation-report.md)。`REFERENCE_GW`、`reference_sensor` 和 GW32 模拟 profile 均不代表实机已验证。真实固件需要按 [网关协议](docs/gateway-protocol.md) 及 [UART 协议](docs/gateway-uart-protocol.md) 实现并联调；新增软件联调方式见 [1.1 对接说明](docs/protocol-v11-integration.md)。
+当前软件版本为 `0.2.0`，API 契约 `1.8.0`，兼容原 1.0 数据并增加 GW32 1.1 采集与控制扩展。模块实现及运行边界见 [实现范围](docs/implementation-status.md)，实际检查结果见 [验证报告](docs/validation-report.md)。`REFERENCE_GW`、`reference_sensor` 和 GW32 模拟 profile 均不代表实机已验证。真实固件需要按 [网关协议](docs/gateway-protocol.md) 及 [UART 协议](docs/gateway-uart-protocol.md) 实现并联调；新增软件联调方式见 [1.1 对接说明](docs/protocol-v11-integration.md)。
+
+完整管理前端采用 [前端总体规划](docs/frontend-plan.md)：7 个功能大类、23 个业务页面加 1 个登录页，共 24 页；逐页布局、权限、接口与开发顺序均已列出。该规划尚未替换现有基础管理页，结构化页面目录见 [frontend-pages.json](docs/frontend-pages.json)。
 
 ## 当前可执行入口
 

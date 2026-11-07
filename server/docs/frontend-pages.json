@@ -1,0 +1,233 @@
+{
+  "planVersion": "1.0",
+  "baseline": {"serverVersion": "0.2.0", "apiVersion": "1.8.0", "sourceCommit": "fa2174a6d83a7cc63b4168f4c182fd4831725602"},
+  "counts": {"categories": 7, "businessPages": 23, "loginPages": 1, "totalPages": 24, "menuEntries": 18, "contextualPages": 5},
+  "groups": [
+    {"id":"overview","name":"运行概览","pages":1},
+    {"id":"gateways","name":"网关设备","pages":3},
+    {"id":"bluetooth","name":"蓝牙连接","pages":3},
+    {"id":"processing","name":"数据处理","pages":5},
+    {"id":"forwarding","name":"客户转发","pages":3},
+    {"id":"tasks","name":"任务与升级","pages":3},
+    {"id":"system","name":"系统管理","pages":5}
+  ],
+  "pages": [
+    {
+      "id":"P00","title":"登录","group":"access","route":"/ui/login","menu":false,"phase":1,"template":"login",
+      "purpose":"登录客户本地安装实例，并恢复上次有权限访问的页面。",
+      "layout":[{"zone":"上","content":"产品名称、客户本地部署标识"},{"zone":"主","content":"居中的账号、密码、登录按钮；保留首次初始化说明入口"},{"zone":"下","content":"登录错误与重试提示；部署文档入口"}],
+      "tabs":[],"fields":["账号","密码"],"actions":["登录","查看初始化说明"],
+      "api":["POST /api/v1/auth/sessions","GET /api/v1/auth/me","DELETE /api/v1/auth/sessions/current"],
+      "access":"登录入口无需账号权限；会话信息仅本人。",
+      "constraints":["不提供不存在的自助注册、短信验证或邮件找回密码。","不持久保存密码或应用令牌；会话使用同源 Cookie，变更请求携带 CSRF Token。","开发者无 system:read，登录后按权限进入数据事件等首个可访问页面。"],
+      "acceptance":"错误口令、429、会话失效均有明确提示；刷新页面恢复会话；无权限入口不反复请求系统状态。"
+    },
+    {
+      "id":"P01","title":"运行概览","group":"overview","route":"/ui/overview","menu":true,"phase":1,"template":"overview",
+      "purpose":"让运维人员判断当前服务是否就绪、存储是否接近额度、投递是否积压。",
+      "layout":[{"zone":"上","content":"实例ID、软件版本、最近刷新时间和手动刷新"},{"zone":"主","content":"服务就绪、已用存储/额度、原文与未完成投递载荷字节、最老待投递时长四个摘要区"},{"zone":"左","content":"管理库、数据管线等组件状态列表"},{"zone":"右","content":"当前数据节点与激活规则包；进入任务、投递、运维的权限内快捷入口"},{"zone":"下","content":"磁盘可用空间与预留空间说明；当前状态采样时间"}],
+      "tabs":[],"fields":["ready","storageBytes / storageLimitBytes","queueBytes","oldestPendingAgeSeconds","diskFreeBytes","activeBundleId"],"actions":["刷新","查看投递","查看系统运维"],
+      "api":["GET /api/v1/system/status"],"access":"system:read 且实例作用域。",
+      "constraints":["不展示无数据源的CPU/内存曲线、全局设备总数、今日流量、成功率或告警数量。","queueBytes 包含全部现存原文和未完成投递的载荷字节，不等于未确认事件总数；storageBytes 包含数据库及WAL等存储占用。","无实例权限时隐藏该入口，不用部分列表条数替代全局统计。"],
+      "acceptance":"所有数字可追溯到一次系统状态响应；接口失败显示最近采样时间和数据过期状态，而不是清零。"
+    },
+    {
+      "id":"P02","title":"网关列表","group":"gateways","route":"/ui/gateways","menu":true,"phase":1,"template":"tree-table",
+      "purpose":"查看和管理自有网关的分组、生命周期及接入状态。",
+      "layout":[{"zone":"上","content":"标题、导入签名清单按钮、刷新"},{"zone":"左","content":"实例/项目/分组树；选择分组形成服务端groupId查询"},{"zone":"主","content":"生命周期筛选及网关表格；行点击进入网关详情"},{"zone":"右","content":"导入向导或修改名称/分组/状态抽屉，按操作打开"},{"zone":"下","content":"游标翻页、当前已加载条数、snapshotAt"}],
+      "tabs":[],"fields":["名称 / gatewayId","SN","型号","硬件/固件版本","分组","生命周期","在线状态","最近上报时间"],"actions":["导入签名设备清单","查看详情","修改名称/分组","停用/退役"],
+      "api":["GET /api/v1/gateways","GET /api/v1/resource-scopes","POST /api/v1/gateway-imports","PATCH /api/v1/gateways/{gatewayId}","POST /api/v1/artifacts"],"access":"gateway:read；导入/修改需gateway:write，上传清单制品还需实例artifact:write；检查源/目标分组。",
+      "constraints":["服务端仅支持groupId和生命周期state筛选；名称/型号检索若先做只能明确标注本页筛选。","不把online当成生命周期state，不显示定位地图。","没有删除实体或匿名批量发现；设备清单导入不等于生产Broker开户。"],
+      "acceptance":"筛选变化清空旧cursor；跨组移动被拒时保留原分组；导入设备身份和制品签名结果明确显示。"
+    },
+    {
+      "id":"P03","title":"网关详情","group":"gateways","route":"/ui/gateways/:gatewayId","menu":false,"phase":1,"template":"detail",
+      "purpose":"以单个网关为入口关联配置、诊断、任务和数据。",
+      "layout":[{"zone":"上","content":"返回网关列表、名称/SN、在线/生命周期、进入配置与创建诊断任务"},{"zone":"主","content":"概况、能力、诊断、关联任务四个页签；有数据权限时增加数据入口"},{"zone":"右","content":"操作面板：配置、重启、固件升级、进入蓝牙连接，按实际capability及权限启用"},{"zone":"下","content":"当前configuration revision、lastTaskId、最近已知状态与更新时间"}],
+      "tabs":["概况","声明能力","诊断结果","关联任务"],"fields":["网关身份和版本","capabilities","desiredRevision","reportedRevision","lastTaskId","诊断result.details"],"actions":["进入配置","创建诊断任务","重启","关联任务","关联数据"],
+      "api":["GET /api/v1/gateways/{gatewayId}","GET /api/v1/gateways/{gatewayId}/configuration","GET /api/v1/tasks","POST /api/v1/tasks","GET /api/v1/tasks/{taskId}"],"access":"gateway:read；动作需task:create及gateway:configure/gateway:reboot/diagnostics:run等对应权限。",
+      "constraints":["设备诊断是持久任务，界面显示已知结果及采样时间，不假装持续在线仪表。","capabilities来源于已授权设备档案；不只按GW32型号打开全部操作。","不展示当前无接口的CPU、连接设备总数、温度和无线覆盖图。"],
+      "acceptance":"从任务或网关列表深链接进入后均能重载；禁止操作给出能力/权限/状态方面的具体原因。"
+    },
+    {
+      "id":"P04","title":"网关配置","group":"gateways","route":"/ui/gateways/:gatewayId/configuration","menu":false,"phase":1,"template":"configuration",
+      "purpose":"按配置组提交可审查的变更，并追踪设备验证结果。",
+      "layout":[{"zone":"上","content":"网关身份、desired/reported revision、诊断快照时间"},{"zone":"左","content":"网络、nRF扫描、nRF广播、ESP扫描、ESP广播、上传参数六个分区"},{"zone":"主","content":"当前分区的表单；每字段区分已知值、未知值和本次修改"},{"zone":"右","content":"本次差异、配置组范围、能力校验提示；窄屏移到表单下方"},{"zone":"下","content":"取消草稿、检查变更、提交任务；显示新任务链接和当前阶段"}],
+      "tabs":["网络","nRF扫描/过滤","nRF广播","ESP扫描/过滤","ESP广播","上传参数"],"fields":["上行顺序 / DHCP或静态IPv4","Wi-Fi SSID / security / credentialRef","扫描间隔/窗口/过滤条件","Beacon规则","广播AD/扫描响应","批量记录数/刷新间隔"],"actions":["读取诊断快照","修改本组","预览差异","提交配置任务"],
+      "api":["GET /api/v1/gateways/{gatewayId}","GET /api/v1/gateways/{gatewayId}/configuration","PUT /api/v1/gateways/{gatewayId}/configuration","POST /api/v1/tasks","GET /api/v1/tasks/{taskId}"],"access":"gateway:read、gateway:configure、task:create；诊断需diagnostics:run。",
+      "constraints":["GET desired/reported只代表最近patch，不能据此预填完整配置；未知值留空并明确标注，首期只发送用户显式改动。","一次只提交network，或一个radio的扫描组，或一个radio的广播组，或legacy scan/upload/filters；不得混组。","Wi-Fi credentialRef是设备本地引用，不是平台secretRef；没有远程写入Wi-Fi密码接口。","数组、IPv4对象、AD原文整体替换；只改部分时必须展示完整替换范围。","网络提交成功不等于已生效；以设备结果和VERIFIED判断，UNKNOWN需诊断对账。"],
+      "acceptance":"不改动的字段不进入patch；412/409保留草稿并显示冲突；窗口大于间隔、UTF-8超长SSID、非法AD、混组请求在提交前可定位到字段。"
+    },
+    {
+      "id":"P05","title":"蓝牙对端","group":"bluetooth","route":"/ui/ble-peers","menu":true,"phase":3,"template":"table-drawer",
+      "purpose":"登记允许参与自动连接的蓝牙对端及管理范围。",
+      "layout":[{"zone":"上","content":"登记对端、刷新、本页搜索"},{"zone":"主","content":"对端名称、规范地址、地址类型、范围、状态、版本表格"},{"zone":"右","content":"登记/修改抽屉，地址与类型只在登记时可编辑"},{"zone":"下","content":"游标翻页；从所选对端进入自动规则或连接页"}],
+      "tabs":[],"fields":["displayName","deviceAddress","addressType","scopeId","state","revision"],"actions":["登记对端","修改名称","启用/停用","查看相关规则"],
+      "api":["GET /api/v1/ble-peers","POST /api/v1/ble-peers","PATCH /api/v1/ble-peers/{peerId}","GET /api/v1/resource-scopes"],"access":"gatt:read；登记和修改需gatt:manage及对端作用域。",
+      "constraints":["登记只接受PUBLIC或random-static；UI可接受带冒号输入，提交前规范化为12位大写十六进制。","PATCH仅名称与状态，不能原地改地址、地址类型或范围；无删除接口。","暂无peerId详情接口，深链接编辑必须从有权限的分页列表重新定位，不能依赖浏览器旧缓存。"],
+      "acceptance":"重复登记、非静态随机地址、版本冲突提示准确；停用不被描述为已断开现有连接。"
+    },
+    {
+      "id":"P06","title":"GATT连接与操作","group":"bluetooth","route":"/ui/gatt-connections","menu":true,"phase":3,"template":"connection-console",
+      "purpose":"查看连接引用并创建受控的读写、订阅和断开任务。",
+      "layout":[{"zone":"上","content":"网关选择、刷新、新建连接"},{"zone":"主","content":"连接表：对端、radio、connectionRef、安全状态、MTU、ACTIVE/CLOSED/UNKNOWN"},{"zone":"右","content":"所选活连接操作区：读、写、订阅、取消订阅、断开；服务与特征UUID手动输入"},{"zone":"下","content":"本次操作任务链接、结果和错误；订阅通知跳到事件页查看"}],
+      "tabs":["连接摘要","执行操作"],"fields":["gatewayId","radio","connectionRef","deviceAddress","securityState","attMtu","serviceUuid","characteristicUuid"],"actions":["连接","读","写","订阅","取消订阅","断开","查看任务"],
+      "api":["GET /api/v1/gatt-connections","GET /api/v1/gateways/{gatewayId}","POST /api/v1/tasks","GET /api/v1/tasks/{taskId}"],"access":"gatt:read；操作需gatt:execute、task:create和对应网关能力。",
+      "constraints":["没有服务树/订阅清单查询接口，首期采用UUID输入，不能画自动发现树或伪造已订阅列表。","未知引用状态不补成ACTIVE；CLOSED/UNKNOWN禁用依赖活连接的操作，保留诊断与任务查询入口。","GW32写使用WITH_RESPONSE；校验实际MTU−3及512字节约束，结果不明不自动重发物理写。"],
+      "acceptance":"失效引用、跨radio引用、MTU超长写入、权限不足均不能被UI误认为执行成功；命令发送与设备验证分开显示。"
+    },
+    {
+      "id":"P07","title":"自动连接规则","group":"bluetooth","route":"/ui/auto-connect-rules","menu":true,"phase":3,"template":"table-drawer",
+      "purpose":"明确授权哪些网关可依据服务UUID连接哪个已登记对端。",
+      "layout":[{"zone":"上","content":"新建规则、刷新、本页名称/启停筛选"},{"zone":"主","content":"规则表：名称、对端、网关范围、UUID、优先级、启停、revision"},{"zone":"右","content":"分步抽屉：对端与网关→匹配条件→安全与时效→启用确认"},{"zone":"下","content":"规则解释摘要、版本冲突提示和关联任务入口"}],
+      "tabs":[],"fields":["name / peerId / gatewayIds","serviceUuid / wireBits / characteristicUuid","minRssi / priority","security","maxAgeMs / cooldownMs","enabled / revision"],"actions":["创建规则","修改规则","启用/停用","进入相关网关任务"],
+      "api":["GET /api/v1/auto-connect-rules","POST /api/v1/auto-connect-rules","PATCH /api/v1/auto-connect-rules/{ruleId}","GET /api/v1/ble-peers","GET /api/v1/gateways"],"access":"gatt:read；修改需gatt:manage及对端范围、目标网关gatt:execute；运行还检查task:create。",
+      "constraints":["默认新建关闭，由用户显式启用；UUID规范化为小写128位表达，wireBits保持独立。","停用只阻止后续触发，不取消已有任务。","无触发记录查询接口，不显示命中次数、最近命中时间或假关联任务列表；autoTrigger不进入用户表单。"],
+      "acceptance":"不支持能力的网关不可勾选；revision冲突后不覆盖；时效1–30秒、冷却至少30秒及作用域均检查。"
+    },
+    {
+      "id":"P08","title":"数据事件","group":"processing","route":"/ui/events","menu":true,"phase":2,"template":"table",
+      "purpose":"检索服务器已经接管的事件，判断解析和投递阶段。",
+      "layout":[{"zone":"上","content":"网关、接管时间区间、查询、刷新"},{"zone":"主","content":"事件列表：eventId、网关、acceptedAt、当前状态、处理revision、原文是否可用"},{"zone":"右","content":"不常驻；点击行进入独立事件详情"},{"zone":"下","content":"游标翻页、已加载条数、查询快照时间"}],
+      "tabs":[],"fields":["eventId","gatewayId","acceptedAt","state","latestProcessingRevision","rawAvailable"],"actions":["查询","查看事件","进入隔离处理"],
+      "api":["GET /api/v1/events","GET /api/v1/gateways"],"access":"data:read及网关作用域。",
+      "constraints":["时间筛选基于acceptedAt接管时间，不混用无线采集时间。","目前没有状态、MAC、UUID、payload搜索等服务端筛选；不要用第一页搜索冒充全量检索。","不能将T1已接管显示为客户已确认。"],
+      "acceptance":"事件标识链接同时携带gatewayId；分页和深链接可恢复查询条件；数据过期状态与空结果分开。"
+    },
+    {
+      "id":"P09","title":"事件详情","group":"processing","route":"/ui/gateways/:gatewayId/events/:eventId","menu":false,"phase":2,"template":"event-detail",
+      "purpose":"核查一条事件的原文、采集上下文与处理修订。",
+      "layout":[{"zone":"上","content":"gatewayId/eventId、当前状态、接管时间、原文可用性"},{"zone":"主","content":"原始报文、capture、处理修订三个页签；原文区支持Hex/Base64两种本地展示"},{"zone":"右","content":"protocolHint、radio、kind、timeQuality、连接引用等身份字段摘要"},{"zone":"下","content":"处理revision表：规则包、状态、outputIds、错误码；进入解析试算或重解析向导"}],
+      "tabs":["原始报文","采集上下文","处理修订"],"fields":["raw / capture","processingRevision","bundleId","outputIds","errorCode","rawAvailable"],"actions":["查看原文","复制事件身份","用原文试算","重解析入口"],
+      "api":["GET /api/v1/gateways/{gatewayId}/events/{eventId}"],"access":"data:read；includeRaw=true需要data:raw；试算/重解析再检查各自权限。",
+      "constraints":["当前返回outputIds但不返回已持久化解析记录或投递载荷，首期不显示虚构的解析后数据。","解析器试算结果必须标为当前试算，不能当作历史解析结果。","1.0没有capture时显示未提供，不显示异常；原文已回收时保留身份和处理锚点。"],
+      "acceptance":"没有data:raw时不请求或渲染原文；恶意报文字节按文本转义；失效原文不再提供可执行重解析选项。"
+    },
+    {
+      "id":"P10","title":"解析器与试算","group":"processing","route":"/ui/parsers","menu":true,"phase":2,"template":"split-editor",
+      "purpose":"查看已安装可信解析器并用样例报文检查字段解析。",
+      "layout":[{"zone":"上","content":"解析器目录、版本选择、运行试算"},{"zone":"左","content":"已安装解析器/版本及协议、模型、输入限制"},{"zone":"主","content":"样例输入和测试上下文；Hex输入先本地转换为契约所需Base64"},{"zone":"右","content":"结构化outputs、错误定位、实现摘要和耗时"},{"zone":"下","content":"预期值对比；进入规则包配置入口"}],
+      "tabs":["输入样例","预期输出"],"fields":["parserId / version","schemaVersion","modelIds / protocolVersions","maxInputBytes","payloadBase64","outputs / errors"],"actions":["选择版本","运行试算","复制输出"],
+      "api":["GET /api/v1/parsers","POST /api/v1/parsers/{parserId}/versions/{parserVersion}/tests"],"access":"parser:read；试算需parser:test；当前目录和试算处理器不要求实例范围。",
+      "constraints":["不是任意脚本编辑/上传执行平台；新厂商解析器需发布可信代码。","ble_ad 1.0与1.1版本分开选择，不静默升级旧规则。","试算不写客户业务，也不构成实际投递成功。"],
+      "acceptance":"支持16/32/128位UUID样例与非法AD错误；超限输入在客户端提示且服务端再次裁定。"
+    },
+    {
+      "id":"P11","title":"解析规则包","group":"processing","route":"/ui/rule-bundles","menu":true,"phase":2,"template":"master-detail",
+      "purpose":"按不可变版本管理透传、解析、隔离规则及目标引用。",
+      "layout":[{"zone":"上","content":"新建规则包、刷新、当前节点激活信息"},{"zone":"左","content":"包ID、状态、摘要、规则数量列表"},{"zone":"主","content":"选中包的优先级规则表与默认动作"},{"zone":"右","content":"新包/复制包编辑抽屉：匹配范围、动作、解析器版本、目标版本"},{"zone":"下","content":"校验结果、激活确认、当前activationRevision；显示激活操作结果"}],
+      "tabs":["规则","校验结果","激活信息"],"fields":["bundleId / contentDigest / state","priority / match","action","parserId / parserVersion / schemaVersion","targetVersions","defaultAction"],"actions":["创建新包","复制为新包","校验","激活"],
+      "api":["GET /api/v1/rule-bundles","GET /api/v1/rule-bundles/{bundleId}","POST /api/v1/rule-bundles","POST /api/v1/rule-bundles/{bundleId}/validations","POST /api/v1/rule-bundles/{bundleId}/activations","GET /api/v1/system/status","GET /api/v1/operations/{operationId}"],"access":"rule:read/write/validate/activate分别控制；当前写入与激活仅ADMIN；数据管线全局接口需实例作用域。",
+      "constraints":["发布后的包不原地编辑；修改创建新包，先验证再CAS激活。","当前返回模型没有包名称，首期以bundleId/摘要标识，不能假装名称已持久保存。","每条规则至多8个目标，target version与mappingVersion需匹配；当前只部署本地节点；仅有实例system:read的用户请求节点激活状态，DEVELOPER只读页不请求该接口。"],
+      "acceptance":"DEVELOPER仅查看，不能出现可提交的激活按钮；激活冲突保留新包，不覆盖当前节点修订。"
+    },
+    {
+      "id":"P12","title":"隔离与重解析","group":"processing","route":"/ui/quarantine","menu":true,"phase":2,"template":"table-wizard",
+      "purpose":"定位解析错误，预览影响范围后创建有界重解析作业。",
+      "layout":[{"zone":"上","content":"隔离记录/重解析作业两个页签；错误码筛选或按jobId查询"},{"zone":"主","content":"隔离列表与事件入口；重解析页签展示当前已知作业状态"},{"zone":"右","content":"向导：网关及接管时间范围→目标规则包→预览→确认提交"},{"zone":"下","content":"预览有效期、选中数量、缺原文数量、选择摘要；提交后按jobId跟踪"}],
+      "tabs":["隔离记录","重解析作业"],"fields":["errorCode / eventId / gatewayId","selector","bundleId","selectionDigest","expiresAt","jobId / state"],"actions":["查看原事件","生成预览","提交重解析","按作业ID查询"],
+      "api":["GET /api/v1/quarantine","POST /api/v1/reprocess-previews","POST /api/v1/reprocess-jobs","GET /api/v1/reprocess-jobs/{jobId}"],"access":"隔离记录需data:read；预览/提交需data:reprocess及网关范围；按jobId查询另要求data:reprocess且作业为本人创建。",
+      "constraints":["一期通过范围选择实现，不承诺任意跨页勾选单事件提交；以EventSelector实际字段为准。","区间最多31天、最多10000事件、预览15分钟；过期或选择变化需重做预览。","没有作业历史列表接口，首期显示本次作业和按ID查询，不把localStorage当服务器历史。"],
+      "acceptance":"提交前明确新增processing revision并可能再次投递；缺原文及恢复对账锁定能解释，不提供绕过按钮。"
+    },
+    {
+      "id":"P13","title":"转发目标","group":"forwarding","route":"/ui/targets","menu":true,"phase":2,"template":"table-drawer",
+      "purpose":"管理客户系统接收端及其不可变配置版本。",
+      "layout":[{"zone":"上","content":"新建目标、刷新、本页名称搜索"},{"zone":"主","content":"目标ID、名称、已存在版本和协议列表"},{"zone":"右","content":"新建目标抽屉，引导填写首个版本"},{"zone":"下","content":"游标翻页；进入版本与映射或目标投递记录"}],
+      "tabs":[],"fields":["targetId","name","versions","protocol","endpoint（脱敏展示）"],"actions":["创建目标","查看版本与映射","查看投递"],
+      "api":["GET /api/v1/targets","POST /api/v1/targets"],"access":"target:read/write；当前写入仅ADMIN，读取也要求实例作用域。",
+      "constraints":["无目标暂停、删除、即时连通性测试接口，不画可点击的伪操作。","最新创建版本不一定是正在被规则引用的版本；不能标成当前生效。","不从浏览器直接请求客户URL以代替服务器投递测试。"],
+      "acceptance":"目标创建成功后可刷新重新查询；显示immutable版本而不覆盖既有配置。"
+    },
+    {
+      "id":"P14","title":"目标版本与字段映射","group":"forwarding","route":"/ui/targets/:targetId","menu":false,"phase":2,"template":"mapping-editor",
+      "purpose":"配置HTTP/MQTT、应用确认与确定性字段映射，形成新目标版本。",
+      "layout":[{"zone":"上","content":"目标名称、只读版本选择、复制为新版本"},{"zone":"左","content":"连接与确认、容量、字段映射三个分区"},{"zone":"主","content":"连接参数表单或source→target映射表，支持scale/offset/unit及常量"},{"zone":"右","content":"新版本差异和示例映射预览；明确标注本地示例计算"},{"zone":"下","content":"创建新版本、查看摘要、转到规则包引用该版本"}],
+      "tabs":["连接与确认","容量限制","字段映射"],"fields":["endpoint / protocol / ackMode","payloadTopic / ackTopic","secretRef / tlsTrustRef","maxBatchEvents / maxInflightEvents / maxQueueBytes","mappingVersion / fields / constants / wrapKey"],"actions":["复制为新版本","创建秘密引用","预览映射样例","创建版本"],
+      "api":["GET /api/v1/targets/{targetId}","POST /api/v1/targets/{targetId}/versions","POST /api/v1/secrets"],"access":"target:read/write；创建秘密需secret:write，均按实例权限。",
+      "constraints":["secretRef只可新建或手动引用，暂无秘密列表/读取/删除；明文不回填、不写浏览器存储。","tlsTrustRef可引用服务器已保存的CA秘密；首期以新建或手动引用输入，不提供不存在的证书仓库列表或证书轮换按钮。","字段映射仅data内顶层字段，不能改deliveryId/eventId/revision等身份字段。","当前没有服务端映射试算接口；本地预览不作为实际投递或后台验证结果。"],
+      "acceptance":"HTTP与MQTT字段联动准确，MQTT必须应用ACK；新版本不修改历史outbox的目标和mapping引用。"
+    },
+    {
+      "id":"P15","title":"投递记录","group":"forwarding","route":"/ui/deliveries","menu":true,"phase":2,"template":"table-drawer",
+      "purpose":"核对数据是否被客户平台持久接管，并处理可重试失败。",
+      "layout":[{"zone":"上","content":"目标、投递状态筛选，查询和刷新"},{"zone":"主","content":"deliveryId、目标/版本、来源事件、状态、attempts、下次尝试、错误码表格"},{"zone":"右","content":"投递详情抽屉，展示固定身份、处理revision、mappingVersion和confirmedAt"},{"zone":"下","content":"游标分页；有权限且符合状态时显示人工重试与原因输入"}],
+      "tabs":[],"fields":["deliveryId","targetId / targetVersion","sourceEventId","processingRevision","mappingVersion","state / attempts","nextAttemptAt / lastErrorCode / confirmedAt"],"actions":["查看详情","跳转来源事件","人工重试"],
+      "api":["GET /api/v1/deliveries","GET /api/v1/deliveries/{deliveryId}","POST /api/v1/deliveries/{deliveryId}/retries"],"access":"delivery:read/retry及来源网关范围。",
+      "constraints":["只有客户应用确认才显示DELIVERED；HTTP响应或MQTT PUBACK不等于业务接管。","无逐次attempt日志、完整wirePayload查询或全局成功率接口；首期仅显示摘要。","仅支持targetId和state服务端筛选；不提供虚假的eventId/日期全量筛选。"],
+      "acceptance":"人工重试复用原身份，不变成重解析；已完成/不可重试记录不出现误导操作。"
+    },
+    {
+      "id":"P16","title":"命令任务","group":"tasks","route":"/ui/tasks","menu":true,"phase":1,"template":"table-wizard",
+      "purpose":"统一查询网关下行命令，区分排队、已执行和已验证。",
+      "layout":[{"zone":"上","content":"网关、任务状态筛选；新建任务"},{"zone":"主","content":"任务类型、网关、state、executionStage、创建/到期时间表格"},{"zone":"右","content":"新建任务向导，优先链接到配置/GATT专用表单；诊断与重启可在此发起"},{"zone":"下","content":"游标翻页；点击任务进入详情"}],
+      "tabs":[],"fields":["taskId / gatewayId","type","state","executionStage","createdAt / expiresAt","errorCode"],"actions":["创建诊断/重启任务","进入专用操作表单","查看任务"],
+      "api":["GET /api/v1/tasks","POST /api/v1/tasks","GET /api/v1/gateways"],"access":"task:read/create以及具体动作权限、网关作用域和capability。",
+      "constraints":["网关已有未决任务时服务端可能拒绝新操作；不宣称支持任意并行控制。","不提供无对应批量接口的全选批量升级、重启或写入。","当前没有服务端按类型、日期筛选；本页筛选需标明范围。"],
+      "acceptance":"每个发起入口使用同一任务表单/请求层；网络超时重试保留原幂等键，避免重复创建动作。"
+    },
+    {
+      "id":"P17","title":"任务详情","group":"tasks","route":"/ui/tasks/:taskId","menu":false,"phase":1,"template":"task-detail",
+      "purpose":"显示当前任务阶段、最近执行证据及下一步处理。",
+      "layout":[{"zone":"上","content":"任务ID、类型、网关、终态/未决状态及刷新时间"},{"zone":"主","content":"当前阶段指示：排队、派发、设备接收、执行、结果验证；不绘制无来源百分比"},{"zone":"右","content":"有效期、requestDigest、revision、关联网关与配置入口"},{"zone":"下","content":"最新结果、verification、errorCode、details；符合条件时尝试取消"}],
+      "tabs":["当前执行证据","结果原文"],"fields":["state / executionStage","createdAt / expiresAt","requestDigest / revision","result / verification / errorCode"],"actions":["刷新","返回网关","尝试取消未派发任务","创建诊断任务"],
+      "api":["GET /api/v1/tasks/{taskId}","POST /api/v1/tasks/{taskId}/cancellation"],"access":"task:read/cancel及网关范围；诊断按独立权限检查。",
+      "constraints":["接口没有原始请求参数、完整结果历史、各阶段时间；刷新后不能用浏览器草稿补成服务端证据。","UNKNOWN显示执行结果待核实，不提供强制成功/一键重试写入/释放占用。","仅QUEUED可尝试取消，最终以服务器判定为准；409已派发需清晰解释。"],
+      "acceptance":"轮询遇到终态停止，后台页降频；UNKNOWN不被倒计时自动改为失败或成功。"
+    },
+    {
+      "id":"P18","title":"固件与签名制品","group":"tasks","route":"/ui/artifacts","menu":true,"phase":3,"template":"artifact-workbench",
+      "purpose":"上传签名制品、按ID查验，并为兼容网关创建固件升级任务。",
+      "layout":[{"zone":"上","content":"上传制品、输入artifactId查验"},{"zone":"左","content":"文件/清单与签名信息输入；限制和支持类型说明"},{"zone":"主","content":"选中制品的摘要、大小、类型、签名状态、兼容型号、版本"},{"zone":"右","content":"固件目标网关选择与能力/型号/版本检查"},{"zone":"下","content":"创建FIRMWARE_UPGRADE任务；上传结果或查询结果可复制ID"}],
+      "tabs":["上传与查验","创建固件任务"],"fields":["artifactId","kind","sha256 / sizeBytes","signatureState","compatibleModels / version"],"actions":["上传签名制品","按ID查询","下载有权限的制品","创建固件升级任务"],
+      "api":["POST /api/v1/artifacts","GET /api/v1/artifacts/{artifactId}","GET /api/v1/artifacts/{artifactId}/content","GET /api/v1/artifacts/{artifactId}/verification","POST /api/v1/tasks"],"access":"实例artifact:read/write；升级还需firmware:deploy、task:create、目标网关范围及能力。",
+      "constraints":["没有制品列表/删除接口；首期是上传查验工作台，不展示伪造的完整固件仓库。","PLATFORM_PACKAGE上传不等于在线升级服务器；服务端程序升级仍按停机运维流程。","型号适配与签名验证不等于实板刷写成功，升级结果看任务实际验证。"],
+      "acceptance":"无效签名和不兼容型号不能发起任务；重复刷新可凭artifactId查询，不依赖临时上传记录。"
+    },
+    {
+      "id":"P19","title":"项目与分组","group":"system","route":"/ui/scopes","menu":true,"phase":1,"template":"tree-detail",
+      "purpose":"配置实例下项目和分组，并建立资源权限范围。",
+      "layout":[{"zone":"上","content":"新建项目/分组、刷新"},{"zone":"左","content":"实例→项目→分组树，逐层加载子节点"},{"zone":"主","content":"选中范围名称、类型、父范围、状态与revision"},{"zone":"右","content":"新建/修改抽屉及归档说明"},{"zone":"下","content":"关联网关入口与权限范围解释"}],
+      "tabs":[],"fields":["scopeId","kind","parentScopeId","name","state / revision"],"actions":["新建项目/分组","修改名称","按契约归档","查看分组网关"],
+      "api":["GET /api/v1/resource-scopes","POST /api/v1/resource-scopes","PATCH /api/v1/resource-scopes/{scopeId}"],"access":"scope:read/write及层级范围；当前写入仅ADMIN。",
+      "constraints":["本地实例的资源分组，不是SaaS租户、套餐或计费账户。","没有实体删除与任意拖拽移动接口；按实际Patch字段提供操作。","不能把分页中缺少的节点当作已删除；按parentScopeId展开读取。"],
+      "acceptance":"归档影响与服务器拒绝原因明确；跨层级权限查询不会泄漏其他分组。"
+    },
+    {
+      "id":"P20","title":"账号与应用凭据","group":"system","route":"/ui/principals","menu":true,"phase":1,"template":"master-detail",
+      "purpose":"管理人员账号、客户应用账号、固定角色及应用访问令牌。",
+      "layout":[{"zone":"上","content":"人员/应用页签、新建账号、刷新"},{"zone":"主","content":"账号列表：类型、名称、状态、角色绑定与revision"},{"zone":"右","content":"账号编辑抽屉；应用账号的凭据子页签显示元数据与撤销"},{"zone":"下","content":"新凭据一次性展示区和复制确认，离开即清除明文"}],
+      "tabs":["人员账号","应用账号","选中应用的凭据"],"fields":["principalId / name / type / state","roleBindings","credentialId / label / expiresAt / state","新签发token（仅一次）"],"actions":["创建账号","修改状态/角色","按契约修改用户密码","签发应用令牌","撤销令牌"],
+      "api":["GET /api/v1/principals","POST /api/v1/principals","PATCH /api/v1/principals/{principalId}","GET /api/v1/principals/{principalId}/credentials","POST /api/v1/principals/{principalId}/credentials","DELETE /api/v1/principals/{principalId}/credentials/{credentialId}"],"access":"实例identity:write；当前账号与凭据的读取和修改均要求ADMIN的实例授权。",
+      "constraints":["只有活动APPLICATION账号可签发应用令牌；固定5类角色，无自定义角色编辑器。","令牌明文只在签发响应展示，不进URL、日志、localStorage或导出。","签发接口没有通用幂等包装，网络不确定时不自动重复签发；查元数据并由用户决定。"],
+      "acceptance":"刷新不能恢复旧token；撤销后列表状态更新；角色和scope绑定修改携带If-Match。"
+    },
+    {
+      "id":"P21","title":"系统运维","group":"system","route":"/ui/system","menu":true,"phase":1,"template":"operations",
+      "purpose":"查看实例版本和容量，导出诊断，并指导可靠备份与升级。",
+      "layout":[{"zone":"上","content":"版本、实例ID、就绪状态和刷新"},{"zone":"主","content":"存储与组件、诊断导出、备份恢复指引、升级说明四个页签"},{"zone":"右","content":"诊断原因输入、当前operationId及按ID查询"},{"zone":"下","content":"诊断结果下载；停机维护命令示例及完成后的验证步骤"}],
+      "tabs":["实例状态","诊断导出","备份与恢复","升级说明"],"fields":["softwareVersion / instanceId","storageBytes / storageLimitBytes","diskFreeBytes","operationId / state / progress","result / errorCode"],"actions":["刷新状态","导出脱敏诊断","查询作业","下载诊断结果","查看停机操作说明"],
+      "api":["GET /api/v1/system/status","POST /api/v1/maintenance/jobs","GET /api/v1/operations/{operationId}","GET /api/v1/operations/{operationId}/content"],"access":"system:read需实例范围；导出需system:maintain；作业受所有者/实例维护权限限制。",
+      "constraints":["BACKUP API返回MAINTENANCE_OFFLINE_REQUIRED，备份/恢复/程序升级采用停机CLI指引，不做假的在线一键按钮。","诊断导出includeRawPayload=false；不泄露报文和凭据。","无全部维护作业列表、在线证书管理或服务器参数保存API；首期按作业ID查询。"],
+      "acceptance":"诊断完成可受权下载；停机恢复指引及遇到RESTORE_RECONCILIATION_REQUIRED时的引导准确；服务无法访问时说明离线排查入口。"
+    },
+    {
+      "id":"P22","title":"审计日志","group":"system","route":"/ui/audit","menu":true,"phase":1,"template":"table-drawer",
+      "purpose":"查询系统已经记录的管理动作及对象变更。",
+      "layout":[{"zone":"上","content":"起止时间、查询、刷新"},{"zone":"主","content":"时间、执行者、动作、对象类型/ID、结果、traceId表格"},{"zone":"右","content":"审计详情抽屉，转义显示changes及关联对象入口"},{"zone":"下","content":"游标分页；当前权限范围和采样时间"}],
+      "tabs":[],"fields":["at","actorId","action","resourceType / resourceId","outcome","traceId","changes"],"actions":["查询","查看详情","复制追踪ID"],
+      "api":["GET /api/v1/audit-events"],"access":"audit:read及可见对象范围；ADMIN和AUDITOR。",
+      "constraints":["仅from/to是服务端筛选；操作者、动作等本页筛选必须标范围。","不等同于所有HTTP访问或所有失败登录日志；只展示后端实际记录。","无删除审计接口，也没有全量导出接口。"],
+      "acceptance":"日志内容作为文本显示，不能执行报文中的HTML；无权限对象不在搜索结果中出现。"
+    },
+    {
+      "id":"P23","title":"接口与对接指南","group":"system","route":"/ui/integration","menu":true,"phase":1,"template":"documentation",
+      "purpose":"让客户开发者找到当前版本的接入、应用确认和认证资料。",
+      "layout":[{"zone":"上","content":"服务器/API/嵌入式协议版本和契约下载"},{"zone":"左","content":"认证、网关接入、客户HTTP/MQTT接收、GATT、错误码、模拟验证目录"},{"zone":"主","content":"带示例的本地文档与流程图，默认离线可读"},{"zone":"右","content":"本节相关页面和API，复制脱敏示例"},{"zone":"下","content":"示例版本及模拟验证边界"}],
+      "tabs":[],"fields":["OpenAPI版本","协议版本","Topic模板","CustomerBatch / CustomerAck示例","错误码说明"],"actions":["下载OpenAPI","复制示例","跳到应用账号或目标页面"],
+      "api":["GET /openapi.json"],"access":"已登录；相关动作跳转后分别检查权限。",
+      "constraints":["文档和组件资源随安装包离线提供，不依赖外网CDN。","示例不填真实令牌；不内置可向任意客户地址发请求的浏览器调试代理。","设备上报API是协议资料，不是管理页面向设备身份接口发假数据的按钮。"],
+      "acceptance":"断网环境仍可阅读与下载契约；文档使用当前1.8.0 API并区分上行1.0/1.1和控制1.0。"
+    }
+  ]
+}
