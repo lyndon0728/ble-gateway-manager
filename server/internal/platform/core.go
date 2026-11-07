@@ -31,10 +31,10 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-//go:embed assets/*
+//go:embed all:assets/*
 var Assets embed.FS
 
-const Version = "0.2.0"
+const Version = "0.3.0"
 
 type Config struct {
 	DataDir, ListenAddr, Role, NamespaceID, InstanceID, NodeID, PublicURL string
@@ -360,9 +360,13 @@ func (a *App) Handler() http.Handler {
 	})
 	a.RegisterCore(r)
 	a.RegisterAutoConnect(r)
+	a.RegisterFrontendAPI(r)
 	a.RegisterControl(r)
 	a.RegisterPipeline(r)
 	r.Get("/", a.console)
+	r.Get("/ui", a.console)
+	r.Get("/ui/*", a.frontend)
+	r.Head("/ui/*", a.frontend)
 	return r
 }
 func requestTrace(next http.Handler) http.Handler {

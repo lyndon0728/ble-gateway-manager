@@ -1,0 +1,27 @@
+{
+  "name": "ble-gateway-console",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "typecheck": "vue-tsc --noEmit",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "node --test tests/*.test.mjs && node scripts/test-gateway-inputs.cjs",
+    "test:e2e": "node tests/smoke.e2e.mjs && node tests/gateway.e2e.mjs && node tests/pipeline.e2e.mjs && node tests/system.e2e.mjs"
+  },
+  "dependencies": {
+    "element-plus": "2.14.8",
+    "vue": "3.5.45",
+    "vue-router": "5.4.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "@types/node": "^24.0.0",
+    "@vitejs/plugin-vue": "6.0.10",
+    "typescript": "~5.9.3",
+    "vite": "8.3.6",
+    "vue-tsc": "^3.3.0"
+  }
+}

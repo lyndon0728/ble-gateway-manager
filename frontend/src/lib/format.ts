@@ -1,0 +1,5 @@
+export const pretty=(value:any)=>JSON.stringify(value,null,2)
+export const dateTime=(value:any)=>value?new Date(value).toLocaleString('zh-CN',{hour12:false}):'—'
+export function bytes(value:any){const n=Number(value);if(!Number.isFinite(n))return '—';if(n<1024)return n+' B';const i=Math.min(Math.floor(Math.log(n)/Math.log(1024)),4);return (n/1024**i).toFixed(1)+' '+['B','KiB','MiB','GiB','TiB'][i]}
+const labels:Record<string,string>={ACTIVE:'启用 / 活动',DISABLED:'停用',ARCHIVED:'已归档',RETIRED:'已退役',UNCLAIMED:'待认领',QUEUED:'排队中',DISPATCHED:'已派发',ACCEPTED:'设备已接收',EXECUTING:'执行中',SUCCEEDED:'成功',FAILED:'失败',UNKNOWN:'结果待核实',EXPIRED:'已到期',CANCELLED:'已取消',NONE:'无执行证据',DEVICE_ACCEPTED:'设备已接收',APPLIED:'已应用',VERIFIED:'已验证',CLOSED:'已关闭',PENDING:'等待处理',PROCESSING:'处理中',RETRY_WAIT:'等待重试',IN_FLIGHT:'等待应用确认',DELIVERED:'客户已确认',TERMINATED:'已终止',ACCEPTED_RAW:'原文已接管',PROCESSED:'解析完成',QUARANTINED:'已隔离',FILTERED:'已过滤',READY:'就绪',DEGRADED:'降级',NOT_READY:'未就绪',DRAFT:'已建立',VALIDATED:'已校验',RELEASED:'已发布',REVOKED:'已撤销'}
+export const statusLabel=(value:any)=>labels[String(value)]||String(value??'—')

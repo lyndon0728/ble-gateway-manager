@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.example.invalid/ble-gateway/1.8.0/contracts.json",
+  "$id": "https://schemas.example.invalid/ble-gateway/1.9.0/contracts.json",
   "title": "Gateway 1.0/1.1 message contracts",
   "$defs": {
     "Error": {
@@ -5778,6 +5778,618 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/GATTConnection"
+          },
+          "maxItems": 200
+        },
+        "nextCursor": {
+          "type": "string"
+        },
+        "snapshotAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "items",
+        "snapshotAt"
+      ],
+      "additionalProperties": false
+    },
+    "ConfigurationFieldSource": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source": {
+          "const": "DEVICE_VERIFIED_PATCH"
+        },
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "verifiedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "path",
+        "revision",
+        "source"
+      ],
+      "additionalProperties": false
+    },
+    "EffectiveConfiguration": {
+      "type": "object",
+      "properties": {
+        "gatewayId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "configuration": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "knownPaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConfigurationFieldSource"
+          }
+        },
+        "reportedRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "complete": {
+          "const": false
+        },
+        "valueSemantics": {
+          "const": "ACKNOWLEDGED_PATCH_NOT_RUNTIME_READBACK"
+        }
+      },
+      "required": [
+        "gatewayId",
+        "configuration",
+        "knownPaths",
+        "sources",
+        "reportedRevision",
+        "complete",
+        "valueSemantics"
+      ],
+      "additionalProperties": false
+    },
+    "TaskRequestView": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "gatewayId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "request": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "requestDigest": {
+          "type": "string"
+        },
+        "redacted": {
+          "const": true
+        }
+      },
+      "required": [
+        "taskId",
+        "gatewayId",
+        "request",
+        "requestDigest",
+        "redacted"
+      ],
+      "additionalProperties": false
+    },
+    "TaskResultHistoryItem": {
+      "type": "object",
+      "properties": {
+        "resultId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "receivedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "payloadAvailable": {
+          "type": "boolean"
+        },
+        "redacted": {
+          "const": true
+        }
+      },
+      "required": [
+        "resultId",
+        "taskId",
+        "sequence",
+        "receivedAt",
+        "payloadAvailable",
+        "redacted"
+      ],
+      "additionalProperties": false
+    },
+    "TaskResultHistoryPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TaskResultHistoryItem"
+          },
+          "maxItems": 200
+        },
+        "nextCursor": {
+          "type": "string"
+        },
+        "snapshotAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "items",
+        "snapshotAt"
+      ],
+      "additionalProperties": false
+    },
+    "OutputRecord": {
+      "type": "object",
+      "properties": {
+        "outputId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "namespaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "gatewayId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "sourceEventId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "processingRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "recordKey": {
+          "type": "string"
+        },
+        "schemaVersion": {
+          "type": "string"
+        },
+        "parserId": {
+          "type": "string"
+        },
+        "parserVersion": {
+          "type": "string"
+        },
+        "contentDigest": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payloadAvailable": {
+          "type": "boolean"
+        },
+        "record": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "outputId",
+        "namespaceId",
+        "gatewayId",
+        "sourceEventId",
+        "processingRevision",
+        "recordKey",
+        "schemaVersion",
+        "parserId",
+        "parserVersion",
+        "contentDigest",
+        "createdAt",
+        "payloadAvailable"
+      ],
+      "additionalProperties": false
+    },
+    "DeliveryPayload": {
+      "type": "object",
+      "properties": {
+        "deliveryId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "gatewayId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "contentDigest": {
+          "type": "string"
+        },
+        "payloadAvailable": {
+          "type": "boolean"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "deliveryId",
+        "gatewayId",
+        "contentDigest",
+        "payloadAvailable"
+      ],
+      "additionalProperties": false
+    },
+    "ArtifactListItem": {
+      "type": "object",
+      "properties": {
+        "artifactId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "DEVICE_MANIFEST",
+            "FIRMWARE",
+            "PLATFORM_PACKAGE"
+          ]
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "sizeBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "signatureState": {
+          "type": "string",
+          "enum": [
+            "PENDING",
+            "VERIFIED",
+            "REJECTED"
+          ]
+        },
+        "compatibleModels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "name": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "artifactId",
+        "kind",
+        "sha256",
+        "sizeBytes",
+        "signatureState",
+        "name",
+        "createdAt"
+      ],
+      "additionalProperties": false
+    },
+    "ArtifactPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ArtifactListItem"
+          },
+          "maxItems": 200
+        },
+        "nextCursor": {
+          "type": "string"
+        },
+        "snapshotAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "items",
+        "snapshotAt"
+      ],
+      "additionalProperties": false
+    },
+    "ReprocessJobPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ReprocessJob"
+          },
+          "maxItems": 200
+        },
+        "nextCursor": {
+          "type": "string"
+        },
+        "snapshotAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "items",
+        "snapshotAt"
+      ],
+      "additionalProperties": false
+    },
+    "OperationPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Operation"
+          },
+          "maxItems": 200
+        },
+        "nextCursor": {
+          "type": "string"
+        },
+        "snapshotAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "items",
+        "snapshotAt"
+      ],
+      "additionalProperties": false
+    },
+    "GATTSubscription": {
+      "type": "object",
+      "properties": {
+        "subscriptionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "namespaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "gatewayId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "connectionRef": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "serviceUuid": {
+          "type": "string"
+        },
+        "characteristicUuid": {
+          "type": "string"
+        },
+        "characteristicHandle": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "NOTIFY",
+            "INDICATE"
+          ]
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "ACTIVE",
+            "CLOSED"
+          ]
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "subscriptionId",
+        "namespaceId",
+        "gatewayId",
+        "connectionRef",
+        "serviceUuid",
+        "characteristicUuid",
+        "characteristicHandle",
+        "mode",
+        "state",
+        "updatedAt"
+      ],
+      "additionalProperties": false
+    },
+    "GATTSubscriptionPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/GATTSubscription"
+          },
+          "maxItems": 200
+        },
+        "nextCursor": {
+          "type": "string"
+        },
+        "snapshotAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "items",
+        "snapshotAt"
+      ],
+      "additionalProperties": false
+    },
+    "AutoConnectTrigger": {
+      "type": "object",
+      "properties": {
+        "triggerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "namespaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "gatewayId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "ruleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "ruleRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "advEventId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "uuidEventId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "serviceUuid": {
+          "type": "string"
+        },
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "triggerId",
+        "namespaceId",
+        "gatewayId",
+        "ruleId",
+        "ruleRevision",
+        "advEventId",
+        "uuidEventId",
+        "serviceUuid",
+        "taskId",
+        "createdAt"
+      ],
+      "additionalProperties": false
+    },
+    "AutoConnectTriggerPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AutoConnectTrigger"
           },
           "maxItems": 200
         },

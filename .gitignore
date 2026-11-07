@@ -17,6 +17,8 @@ dist/
 /bin/
 /build/
 coverage/
+/frontend/test-results/
+/frontend/playwright-report/
 *.log
 *.inspect.ndjson
 .DS_Store

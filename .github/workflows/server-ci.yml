@@ -1,9 +1,9 @@
 name: Server CI
 on:
   push:
-    paths: ["server/**", ".github/workflows/server-ci.yml"]
+    paths: ["server/**", "frontend/**", ".github/workflows/server-ci.yml"]
   pull_request:
-    paths: ["server/**", ".github/workflows/server-ci.yml"]
+    paths: ["server/**", "frontend/**", ".github/workflows/server-ci.yml"]
 permissions:
   contents: read
 jobs:
@@ -18,6 +18,15 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - name: Build embedded management console
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile && pnpm test && pnpm build
       - uses: actions/setup-go@v5
         with:
           go-version-file: server/go.mod
@@ -30,6 +39,25 @@ jobs:
         name: GW32 protocol process integration
         shell: pwsh
         run: ./scripts/e2e-v11.ps1
+      - if: runner.os == 'Windows'
+        name: Browser and real API integration
+        shell: pwsh
+        working-directory: frontend
+        run: |
+          try {
+            ./tests/fixture.ps1 -SkipBuild
+            pnpm test:e2e
+            if ($LASTEXITCODE -ne 0) { throw 'Browser integration failed.' }
+          } finally { ./tests/fixture.ps1 -Action Stop }
+      - if: runner.os == 'Windows' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-integration-evidence
+          path: |
+            frontend/test-results/*.json
+            frontend/test-results/*.png
+            server/.testdata/frontend-*-e2e/*.json
+            server/.testdata/frontend-*-e2e/*.png
       - if: runner.os == 'Linux'
         run: go test -race ./...
   container:

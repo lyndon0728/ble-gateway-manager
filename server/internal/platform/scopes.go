@@ -29,7 +29,7 @@ func (a *App) listScopes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer rows.Close()
-	items := []any{}
+	candidates := []map[string]any{}
 	for rows.Next() {
 		var id, kind, parent, name, state string
 		var revision int64
@@ -37,13 +37,24 @@ func (a *App) listScopes(w http.ResponseWriter, r *http.Request) {
 			RespondError(w, r, e)
 			return
 		}
-		if a.Can(p, "scope:read", id) || a.Can(p, "scope:read", "scope_instance") {
-			items = append(items, scopeView(id, kind, parent, name, state, revision))
-		}
+		candidates = append(candidates, scopeView(id, kind, parent, name, state, revision))
 	}
 	if e = rows.Err(); e != nil {
 		RespondError(w, r, e)
 		return
+	}
+	rows.Close()
+	// Authorization reads the same database. Release the cursor before asking
+	// for another connection, including when the configured pool has size one.
+	if !frontendCandidatesComplete(w, r, len(candidates)) {
+		return
+	}
+	global := canQuery(r.Context(), a.Management, p, "scope:read", "scope_instance")
+	items := []any{}
+	for _, candidate := range candidates {
+		if global || canQuery(r.Context(), a.Management, p, "scope:read", Str(candidate, "scopeId")) {
+			items = append(items, candidate)
+		}
 	}
 	a.Page(w, r, items)
 }
@@ -198,7 +209,7 @@ func (a *App) listAudit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer rows.Close()
-	items := []any{}
+	candidates := []map[string]any{}
 	for rows.Next() {
 		var id, actor, action, typ, resource, outcome, trace, details string
 		var at int64
@@ -206,22 +217,38 @@ func (a *App) listAudit(w http.ResponseWriter, r *http.Request) {
 			RespondError(w, r, e)
 			return
 		}
-		allowed := a.Can(p, "audit:read", "scope_instance")
-		if typ == "gateway" {
-			allowed = allowed || a.CanGateway(p, "audit:read", resource)
-		} else if typ == "scope" {
-			allowed = allowed || a.Can(p, "audit:read", resource)
-		}
-		if !allowed {
-			continue
-		}
 		var changes map[string]any
 		_ = json.Unmarshal([]byte(details), &changes)
-		items = append(items, map[string]any{"auditId": id, "actorId": actor, "action": action, "resourceType": typ, "resourceId": resource, "outcome": strings.ToUpper(outcome), "traceId": trace, "at": Timestamp(at), "changes": changes})
+		outcome = strings.ToUpper(outcome)
+		if outcome == "SUCCEEDED" {
+			outcome = "SUCCESS"
+		}
+		candidates = append(candidates, map[string]any{"auditId": id, "actorId": actor, "action": action, "resourceType": typ, "resourceId": resource, "outcome": outcome, "traceId": trace, "at": Timestamp(at), "changes": changes})
 	}
 	if e = rows.Err(); e != nil {
 		RespondError(w, r, e)
 		return
+	}
+	rows.Close()
+	if !frontendCandidatesComplete(w, r, len(candidates)) {
+		return
+	}
+	global := canQuery(r.Context(), a.Management, p, "audit:read", "scope_instance")
+	items := []any{}
+	for _, candidate := range candidates {
+		allowed := global
+		resource := Str(candidate, "resourceId")
+		if !allowed && Str(candidate, "resourceType") == "gateway" {
+			var scope string
+			if a.Management.QueryRowContext(r.Context(), "SELECT scope_id FROM gateways WHERE gateway_id=?", resource).Scan(&scope) == nil {
+				allowed = canQuery(r.Context(), a.Management, p, "audit:read", scope)
+			}
+		} else if !allowed && Str(candidate, "resourceType") == "scope" {
+			allowed = canQuery(r.Context(), a.Management, p, "audit:read", resource)
+		}
+		if allowed {
+			items = append(items, candidate)
+		}
 	}
 	a.Page(w, r, items)
 }

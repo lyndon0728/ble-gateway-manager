@@ -1,6 +1,6 @@
 name: ble-gateway
 x-app: &app
-  image: ${GW_IMAGE:-ble-gateway-server:0.2.0}
+  image: ${GW_IMAGE:-ble-gateway-server:0.3.0}
   build:
     context: ..
     dockerfile: deploy/Dockerfile

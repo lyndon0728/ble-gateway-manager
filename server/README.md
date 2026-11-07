@@ -2,15 +2,15 @@
 
 这是服务于自有网关、由客户开发业务应用的服务器实现。软件运行在客户服务器上，提供设备管理、可靠上下行、按规则解析或原样转发、持久投递与应用确认；不包含定位功能，也不内置客户业务系统。
 
-当前软件版本为 `0.2.0`，API 契约 `1.8.0`，兼容原 1.0 数据并增加 GW32 1.1 采集与控制扩展。模块实现及运行边界见 [实现范围](docs/implementation-status.md)，实际检查结果见 [验证报告](docs/validation-report.md)。`REFERENCE_GW`、`reference_sensor` 和 GW32 模拟 profile 均不代表实机已验证。真实固件需要按 [网关协议](docs/gateway-protocol.md) 及 [UART 协议](docs/gateway-uart-protocol.md) 实现并联调；新增软件联调方式见 [1.1 对接说明](docs/protocol-v11-integration.md)。
+当前软件版本为 `0.3.0`，API 契约 `1.9.0`，兼容原 1.0 数据及 GW32 1.1 采集与控制扩展，新增完整管理前端与 13 个只读接口。服务器原有实现及运行边界见 [实现范围](docs/implementation-status.md)，0.3.0 前端与联调记录见 [前端实现说明](docs/frontend-implementation.md)。`REFERENCE_GW`、`reference_sensor` 和 GW32 模拟 profile 均不代表实机已验证。真实固件需要按 [网关协议](docs/gateway-protocol.md) 及 [UART 协议](docs/gateway-uart-protocol.md) 实现并联调；软件联调方式见 [1.1 对接说明](docs/protocol-v11-integration.md)。
 
-完整管理前端采用 [前端总体规划](docs/frontend-plan.md)：7 个功能大类、23 个业务页面加 1 个登录页，共 24 页；逐页布局、权限、接口与开发顺序均已列出。该规划尚未替换现有基础管理页，结构化页面目录见 [frontend-pages.json](docs/frontend-pages.json)。
+完整管理前端已按 [前端总体规划](docs/frontend-plan.md) 实现：7 个功能大类、23 个业务页面加 1 个登录页，共 24 页；入口 `/ui/`，访问根目录自动进入控制台。Vue 构建产物随 Go 程序交付，客户运行时不需要 Node.js。结构化目录见 [frontend-pages.json](docs/frontend-pages.json)，开发与测试见 [前端 README](../frontend/README.md)。
 
 ## 当前可执行入口
 
 | 程序 | 用途 |
 | --- | --- |
-| `gateway-server` | HTTP/TLS API、基础管理页面、管理与数据后台任务；`--role all/manager/pipeline` |
+| `gateway-server` | HTTP/TLS API、完整管理控制台、管理与数据后台任务；`--role all/manager/pipeline` |
 | `gatewayctl` | 初始化、设备令牌登记、签名密钥与签名、加密停机备份、恢复与 revision 对账 |
 | `gateway-simulator` | 持久事件 spool、命令 journal、结果重传；模拟断网和丢 ACK |
 | `customer-simulator` | 持久客户 inbox、业务幂等与 revision 防回退，提交后故意丢 ACK |
@@ -20,6 +20,8 @@
 服务器包含独立的 `management.db`、`pipeline.db` 和加密密钥 `master.key`。默认 `all` 适合本机验证；Compose 将管理和解析投递 worker 分为两个进程，共享**同一 Linux 主机的本地磁盘目录**。当前实现不是跨主机数据库集群，不能将 SQLite 数据目录放在 NFS/SMB 上。
 
 ## Windows 本机验证
+
+新版控制台独立后台部署：运行 `scripts/deploy-local.ps1`，访问 `http://127.0.0.1:18780/ui/`；密码保存在 `server/.local/frontend-local/secrets/admin-password`。该实例使用独立数据目录，不预置模拟网关；以 `-Action Status` 查看状态，以 `-Action Stop` 停止。前端源码修改后先在仓库根目录运行 `pnpm --dir frontend build`。
 
 需要 [go.mod](go.mod) 指定的 Go。PowerShell 脚本也能找到工作区 `.tools/go/bin/go.exe`。
 

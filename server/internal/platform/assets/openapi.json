@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Own BLE Gateway Server API",
-    "version": "1.8.0",
-    "description": "Server 0.2.0: additive GW32 protocol 1.1 with backward-compatible 1.0 ingress, explicit capabilities, durable connection ownership and automatic connection rules. UART execution and dual-radio pairing are gateway responsibilities."
+    "version": "1.9.0",
+    "description": "Server 0.3.0: operator console and durable scoped read models; GW32 1.0/1.1 device contracts remain compatible."
   },
   "servers": [
     {
@@ -464,6 +464,12 @@
                   "type": "string"
                 },
                 "description": "Strong revision ETag."
+              },
+              "X-CSRF-Token": {
+                "description": "Returned only for an authenticated browser session cookie; restores the same-origin CSRF proof without exposing the HttpOnly session token.",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -6427,6 +6433,243 @@
             }
           }
         }
+      },
+      "get": {
+        "operationId": "get__api_v1_artifacts",
+        "tags": [
+          "ConsoleReadModels"
+        ],
+        "summary": "Instance-scoped signed upload artifacts only: DEVICE_MANIFEST, FIRMWARE and PLATFORM_PACKAGE; excludes internal rule artifacts.",
+        "description": "Instance-scoped signed upload artifacts only: DEVICE_MANIFEST, FIRMWARE and PLATFORM_PACKAGE; excludes internal rule artifacts.",
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-required-permissions": [
+          "artifact:read"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid envelope/query.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action/object access denied.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Absent or inaccessible resource.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate/queue limit.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Seconds or HTTP date."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not ready or no durable capacity.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Seconds or HTTP date."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          }
+        ]
       }
     },
     "/api/v1/artifacts/{artifactId}": {
@@ -11289,6 +11532,243 @@
             }
           }
         }
+      },
+      "get": {
+        "operationId": "get__api_v1_reprocess_jobs",
+        "tags": [
+          "ConsoleReadModels"
+        ],
+        "summary": "Only non-preview jobs created by the current principal, including for administrators.",
+        "description": "Only non-preview jobs created by the current principal, including for administrators.",
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-required-permissions": [
+          "data:reprocess"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReprocessJobPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid envelope/query.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action/object access denied.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Absent or inaccessible resource.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate/queue limit.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Seconds or HTTP date."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not ready or no durable capacity.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Seconds or HTTP date."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          }
+        ]
       }
     },
     "/api/v1/reprocess-jobs/{jobId}": {
@@ -15442,6 +15922,246 @@
             }
           }
         }
+      },
+      "get": {
+        "operationId": "get__api_v1_ble_peers__peerId_",
+        "tags": [
+          "ConsoleReadModels"
+        ],
+        "summary": "Object-scoped peer detail; ETag is its revision.",
+        "description": "Object-scoped peer detail; ETag is its revision.",
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-required-permissions": [
+          "gatt:read"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Quoted current resource revision."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BLEPeer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid envelope/query.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action/object access denied.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Absent or inaccessible resource.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate/queue limit.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Seconds or HTTP date."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not ready or no durable capacity.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Seconds or HTTP date."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "peerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+            }
+          }
+        ]
       }
     },
     "/api/v1/auto-connect-rules": {
@@ -16304,6 +17024,246 @@
             }
           }
         }
+      },
+      "get": {
+        "operationId": "get__api_v1_auto_connect_rules__ruleId_",
+        "tags": [
+          "ConsoleReadModels"
+        ],
+        "summary": "Rule peer and every configured gateway must be readable; ETag is its revision.",
+        "description": "Rule peer and every configured gateway must be readable; ETag is its revision.",
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-required-permissions": [
+          "gatt:read"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Quoted current resource revision."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoConnectRule"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid envelope/query.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action/object access denied.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Absent or inaccessible resource.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate/queue limit.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Seconds or HTTP date."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not ready or no durable capacity.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Seconds or HTTP date."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "ruleId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+            }
+          }
+        ]
       }
     },
     "/api/v1/gatt-connections": {
@@ -16542,6 +17502,2188 @@
               "minLength": 1,
               "maxLength": 128,
               "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/gateways/{gatewayId}/configuration/effective": {
+      "get": {
+        "operationId": "get__api_v1_gateways__gatewayId__configuration_effective",
+        "tags": [
+          "ConsoleReadModels"
+        ],
+        "summary": "Verified reported patches only; absent paths are unknown. Values are acknowledged configuration, not a claim of current hardware readback.",
+        "description": "Verified reported patches only; absent paths are unknown. Values are acknowledged configuration, not a claim of current hardware readback.",
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-required-permissions": [
+          "gateway:read"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EffectiveConfiguration"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid envelope/query.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action/object access denied.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Absent or inaccessible resource.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate/queue limit.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Seconds or HTTP date."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not ready or no durable capacity.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Seconds or HTTP date."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "gatewayId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/tasks/{taskId}/request": {
+      "get": {
+        "operationId": "get__api_v1_tasks__taskId__request",
+        "tags": [
+          "ConsoleReadModels"
+        ],
+        "summary": "Durable command envelope with secret and byte-value fields redacted.",
+        "description": "Durable command envelope with secret and byte-value fields redacted.",
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-required-permissions": [
+          "task:read"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskRequestView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid envelope/query.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action/object access denied.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Absent or inaccessible resource.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate/queue limit.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Seconds or HTTP date."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not ready or no durable capacity.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Seconds or HTTP date."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/tasks/{taskId}/results": {
+      "get": {
+        "operationId": "get__api_v1_tasks__taskId__results",
+        "tags": [
+          "ConsoleReadModels"
+        ],
+        "summary": "Durably accepted result history ordered by device sequence; sensitive fields are redacted.",
+        "description": "Durably accepted result history ordered by device sequence; sensitive fields are redacted.",
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-required-permissions": [
+          "task:read"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResultHistoryPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid envelope/query.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action/object access denied.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Absent or inaccessible resource.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate/queue limit.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Seconds or HTTP date."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not ready or no durable capacity.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Seconds or HTTP date."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          }
+        ]
+      }
+    },
+    "/api/v1/outputs/{outputId}": {
+      "get": {
+        "operationId": "get__api_v1_outputs__outputId_",
+        "tags": [
+          "ConsoleReadModels"
+        ],
+        "summary": "Persisted result from the original processing revision; absent record with payloadAvailable=false means reclaimed payload.",
+        "description": "Persisted result from the original processing revision; absent record with payloadAvailable=false means reclaimed payload.",
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-required-permissions": [
+          "data:read",
+          "data:raw"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutputRecord"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid envelope/query.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action/object access denied.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Absent or inaccessible resource.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate/queue limit.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Seconds or HTTP date."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not ready or no durable capacity.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Seconds or HTTP date."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "outputId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/deliveries/{deliveryId}/payload": {
+      "get": {
+        "operationId": "get__api_v1_deliveries__deliveryId__payload",
+        "tags": [
+          "ConsoleReadModels"
+        ],
+        "summary": "Frozen customer event for this delivery; never reads destination credentials. payloadAvailable=false after retention.",
+        "description": "Frozen customer event for this delivery; never reads destination credentials. payloadAvailable=false after retention.",
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-required-permissions": [
+          "delivery:read",
+          "data:raw"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryPayload"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid envelope/query.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action/object access denied.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Absent or inaccessible resource.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate/queue limit.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Seconds or HTTP date."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not ready or no durable capacity.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Seconds or HTTP date."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "deliveryId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/gateways/{gatewayId}/events/{eventId}/deliveries": {
+      "get": {
+        "operationId": "get__api_v1_gateways__gatewayId__events__eventId__deliveries",
+        "tags": [
+          "ConsoleReadModels"
+        ],
+        "summary": "Delivery identities for every processing revision of the scoped source event.",
+        "description": "Delivery identities for every processing revision of the scoped source event.",
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-required-permissions": [
+          "delivery:read"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid envelope/query.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action/object access denied.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Absent or inaccessible resource.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate/queue limit.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Seconds or HTTP date."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not ready or no durable capacity.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Seconds or HTTP date."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "gatewayId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+            }
+          },
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          }
+        ]
+      }
+    },
+    "/api/v1/operations": {
+      "get": {
+        "operationId": "get__api_v1_operations",
+        "tags": [
+          "ConsoleReadModels"
+        ],
+        "summary": "Maintenance and pipeline operations; current owner or instance system:maintain permission required.",
+        "description": "Maintenance and pipeline operations; current owner or instance system:maintain permission required.",
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-required-permissions": [
+          "operation:read"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid envelope/query.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action/object access denied.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Absent or inaccessible resource.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate/queue limit.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Seconds or HTTP date."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not ready or no durable capacity.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Seconds or HTTP date."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/gatt-subscriptions": {
+      "get": {
+        "operationId": "get__api_v1_gatt_subscriptions",
+        "tags": [
+          "ConsoleReadModels"
+        ],
+        "summary": "Durable current/closed subscriptions visible within gateway scope.",
+        "description": "Durable current/closed subscriptions visible within gateway scope.",
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-required-permissions": [
+          "gatt:read"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GATTSubscriptionPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid envelope/query.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action/object access denied.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Absent or inaccessible resource.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate/queue limit.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Seconds or HTTP date."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not ready or no durable capacity.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Seconds or HTTP date."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "name": "gatewayId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "connectionRef",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/auto-connect-triggers": {
+      "get": {
+        "operationId": "get__api_v1_auto_connect_triggers",
+        "tags": [
+          "ConsoleReadModels"
+        ],
+        "summary": "Durable trigger provenance; both peer/rule scope and all configured gateways must be readable.",
+        "description": "Durable trigger provenance; both peer/rule scope and all configured gateways must be readable.",
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-required-permissions": [
+          "gatt:read"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoConnectTriggerPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid envelope/query.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action/object access denied.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Absent or inaccessible resource.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate/queue limit.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Seconds or HTTP date."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not ready or no durable capacity.",
+            "headers": {
+              "X-Trace-Id": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Seconds or HTTP date."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "Same key with different request",
+                    "retryable": false,
+                    "traceId": "trace_001"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "name": "gatewayId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "ruleId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
             }
           }
         ]
@@ -22325,6 +25467,618 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/GATTConnection"
+            },
+            "maxItems": 200
+          },
+          "nextCursor": {
+            "type": "string"
+          },
+          "snapshotAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "items",
+          "snapshotAt"
+        ],
+        "additionalProperties": false
+      },
+      "ConfigurationFieldSource": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "source": {
+            "const": "DEVICE_VERIFIED_PATCH"
+          },
+          "taskId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "verifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "path",
+          "revision",
+          "source"
+        ],
+        "additionalProperties": false
+      },
+      "EffectiveConfiguration": {
+        "type": "object",
+        "properties": {
+          "gatewayId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "configuration": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "knownPaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConfigurationFieldSource"
+            }
+          },
+          "reportedRevision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "complete": {
+            "const": false
+          },
+          "valueSemantics": {
+            "const": "ACKNOWLEDGED_PATCH_NOT_RUNTIME_READBACK"
+          }
+        },
+        "required": [
+          "gatewayId",
+          "configuration",
+          "knownPaths",
+          "sources",
+          "reportedRevision",
+          "complete",
+          "valueSemantics"
+        ],
+        "additionalProperties": false
+      },
+      "TaskRequestView": {
+        "type": "object",
+        "properties": {
+          "taskId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "gatewayId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "request": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "requestDigest": {
+            "type": "string"
+          },
+          "redacted": {
+            "const": true
+          }
+        },
+        "required": [
+          "taskId",
+          "gatewayId",
+          "request",
+          "requestDigest",
+          "redacted"
+        ],
+        "additionalProperties": false
+      },
+      "TaskResultHistoryItem": {
+        "type": "object",
+        "properties": {
+          "resultId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "taskId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "sequence": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "receivedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "result": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "payloadAvailable": {
+            "type": "boolean"
+          },
+          "redacted": {
+            "const": true
+          }
+        },
+        "required": [
+          "resultId",
+          "taskId",
+          "sequence",
+          "receivedAt",
+          "payloadAvailable",
+          "redacted"
+        ],
+        "additionalProperties": false
+      },
+      "TaskResultHistoryPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskResultHistoryItem"
+            },
+            "maxItems": 200
+          },
+          "nextCursor": {
+            "type": "string"
+          },
+          "snapshotAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "items",
+          "snapshotAt"
+        ],
+        "additionalProperties": false
+      },
+      "OutputRecord": {
+        "type": "object",
+        "properties": {
+          "outputId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "namespaceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "gatewayId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "sourceEventId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "processingRevision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "recordKey": {
+            "type": "string"
+          },
+          "schemaVersion": {
+            "type": "string"
+          },
+          "parserId": {
+            "type": "string"
+          },
+          "parserVersion": {
+            "type": "string"
+          },
+          "contentDigest": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "payloadAvailable": {
+            "type": "boolean"
+          },
+          "record": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "outputId",
+          "namespaceId",
+          "gatewayId",
+          "sourceEventId",
+          "processingRevision",
+          "recordKey",
+          "schemaVersion",
+          "parserId",
+          "parserVersion",
+          "contentDigest",
+          "createdAt",
+          "payloadAvailable"
+        ],
+        "additionalProperties": false
+      },
+      "DeliveryPayload": {
+        "type": "object",
+        "properties": {
+          "deliveryId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "gatewayId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "contentDigest": {
+            "type": "string"
+          },
+          "payloadAvailable": {
+            "type": "boolean"
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "deliveryId",
+          "gatewayId",
+          "contentDigest",
+          "payloadAvailable"
+        ],
+        "additionalProperties": false
+      },
+      "ArtifactListItem": {
+        "type": "object",
+        "properties": {
+          "artifactId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "DEVICE_MANIFEST",
+              "FIRMWARE",
+              "PLATFORM_PACKAGE"
+            ]
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "signatureState": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "VERIFIED",
+              "REJECTED"
+            ]
+          },
+          "compatibleModels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "name": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "artifactId",
+          "kind",
+          "sha256",
+          "sizeBytes",
+          "signatureState",
+          "name",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "ArtifactPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArtifactListItem"
+            },
+            "maxItems": 200
+          },
+          "nextCursor": {
+            "type": "string"
+          },
+          "snapshotAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "items",
+          "snapshotAt"
+        ],
+        "additionalProperties": false
+      },
+      "ReprocessJobPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReprocessJob"
+            },
+            "maxItems": 200
+          },
+          "nextCursor": {
+            "type": "string"
+          },
+          "snapshotAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "items",
+          "snapshotAt"
+        ],
+        "additionalProperties": false
+      },
+      "OperationPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Operation"
+            },
+            "maxItems": 200
+          },
+          "nextCursor": {
+            "type": "string"
+          },
+          "snapshotAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "items",
+          "snapshotAt"
+        ],
+        "additionalProperties": false
+      },
+      "GATTSubscription": {
+        "type": "object",
+        "properties": {
+          "subscriptionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "namespaceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "gatewayId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "connectionRef": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "serviceUuid": {
+            "type": "string"
+          },
+          "characteristicUuid": {
+            "type": "string"
+          },
+          "characteristicHandle": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "NOTIFY",
+              "INDICATE"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "CLOSED"
+            ]
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "subscriptionId",
+          "namespaceId",
+          "gatewayId",
+          "connectionRef",
+          "serviceUuid",
+          "characteristicUuid",
+          "characteristicHandle",
+          "mode",
+          "state",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "GATTSubscriptionPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GATTSubscription"
+            },
+            "maxItems": 200
+          },
+          "nextCursor": {
+            "type": "string"
+          },
+          "snapshotAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "items",
+          "snapshotAt"
+        ],
+        "additionalProperties": false
+      },
+      "AutoConnectTrigger": {
+        "type": "object",
+        "properties": {
+          "triggerId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "namespaceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "gatewayId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "ruleId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "ruleRevision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "advEventId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "uuidEventId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "serviceUuid": {
+            "type": "string"
+          },
+          "taskId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "triggerId",
+          "namespaceId",
+          "gatewayId",
+          "ruleId",
+          "ruleRevision",
+          "advEventId",
+          "uuidEventId",
+          "serviceUuid",
+          "taskId",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "AutoConnectTriggerPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AutoConnectTrigger"
             },
             "maxItems": 200
           },

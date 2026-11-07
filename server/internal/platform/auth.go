@@ -387,6 +387,11 @@ func (a *App) RegisterCore(r chi.Router) {
 	r.Delete("/api/v1/auth/sessions/current", a.logout)
 	r.Get("/api/v1/auth/me", func(w http.ResponseWriter, r *http.Request) {
 		if p, ok := a.Require(w, r, ""); ok {
+			// A new tab can restore its CSRF proof from an existing HttpOnly
+			// session without exposing the session token or requiring a new login.
+			if info, _ := r.Context().Value(authKey{}).(*authInfo); info != nil && info.Cookie {
+				w.Header().Set("X-CSRF-Token", a.csrf(info.Token))
+			}
 			JSON(w, 200, p.View())
 		}
 	})

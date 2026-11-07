@@ -1,0 +1,1 @@
+<script setup lang="ts">import {useRoute} from 'vue-router';const route=useRoute()</script><template><el-result :title="String(route.meta.title||'页面未找到')" sub-title="请从左侧可访问的功能入口继续。"><template #extra><router-link to="/integration"><el-button type="primary">查看对接指南</el-button></router-link></template></el-result></template>

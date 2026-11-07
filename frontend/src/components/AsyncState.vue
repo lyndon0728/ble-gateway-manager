@@ -1,0 +1,1 @@
+<script setup lang="ts">defineProps<{error?:string;loading?:boolean}>()</script><template><el-alert v-if="error" :title="error" type="error" :closable="false" show-icon/><div v-if="loading" class="loading-line">正在读取最新状态…</div><slot/></template>
