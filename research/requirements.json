@@ -1,0 +1,2364 @@
+{
+  "title": "企业级蓝牙网关平台详细需求建议",
+  "version": "1.0",
+  "checked_date": "2026-11-07",
+  "assumptions": [
+    "自研可商用多租户平台，建设目标待用户确认。",
+    "MVP优先BLE广播采集、资产可见性及环境监测；定位、GATT和终端OTA按设备及客户场景分阶段启用。",
+    "所有条目均为设计建议，不代表任何竞品已具有该能力，也不构成已经批准的产品范围。",
+    "明确标注建议验收基线的数值须在容量模型、设备测试及客户试点后批准。",
+    "MVP安全要求若依赖增强功能，仅在启用该功能时验收对应子项；不应以依赖尚未交付功能阻塞基础安全能力。"
+  ],
+  "requirements": [
+    {
+      "id": "BR-001",
+      "type": "业务",
+      "domain": "产品定位",
+      "title": "建立平台目标和范围",
+      "description": "以可商用多租户平台支撑企业级BLE设备接入和运营，先交付广播采集及资产和环境监测，再按客户场景扩展GATT和定位。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "产品负责人",
+      "value": "聚焦可销售的首期价值并约束范围",
+      "acceptance": "形成产品范围、首期场景、明确排除项与阶段进入条件，产品和技术负责人共同评审。",
+      "dependencies": [],
+      "source_basis": "设计建议",
+      "owner_role": "产品",
+      "status": "待确认"
+    },
+    {
+      "id": "BR-002",
+      "type": "业务",
+      "domain": "客户与角色",
+      "title": "定义客户及使用角色",
+      "description": "区分平台运营方、渠道伙伴、租户管理员、部署人员、业务人员、开发者和审计人员，明确各自工作任务。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "产品负责人",
+      "value": "避免后台功能代替真实用户流程",
+      "acceptance": "每类角色至少建立一条从触发到结果的任务流程，列出对象、权限和结果。",
+      "dependencies": [
+        "BR-001"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "产品",
+      "status": "待确认"
+    },
+    {
+      "id": "BR-003",
+      "type": "业务",
+      "domain": "组织与租户",
+      "title": "建立租户和项目层级",
+      "description": "租户作为数据及授权边界，租户下包含项目、园区、建筑、楼层和区域，允许按实际场景简化层级。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "租户管理员",
+      "value": "支撑多客户及跨站点运营",
+      "acceptance": "以两个租户各两个站点完成独立建档、查询和权限演示，不允许跨租户读取。",
+      "dependencies": [
+        "BR-002"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "产品",
+      "status": "待确认"
+    },
+    {
+      "id": "BR-004",
+      "type": "业务",
+      "domain": "设备生态",
+      "title": "建立设备兼容承诺",
+      "description": "按网关型号、固件、标签协议及设备类型公布支持矩阵，区分广播接收、GATT控制、定位和OTA能力。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "解决方案人员",
+      "value": "减少设备选型及交付争议",
+      "acceptance": "至少以两类网关及两类广播标签建立已测、有限支持、不支持三态矩阵，演示不支持能力的前端提示。",
+      "dependencies": [
+        "BR-001"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "解决方案",
+      "status": "待确认"
+    },
+    {
+      "id": "BR-005",
+      "type": "业务",
+      "domain": "场景价值",
+      "title": "提供环境监测业务闭环",
+      "description": "支持将温湿度等遥测绑定到区域或资产，通过阈值、持续时间、通知及确认记录形成可追溯处置。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "设施运营人员",
+      "value": "缩短异常发现和处置时间",
+      "acceptance": "用一条正常、超限、恢复数据序列演示图表、告警、通知、确认及事件历史。",
+      "dependencies": [
+        "BR-004"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "产品",
+      "status": "待确认"
+    },
+    {
+      "id": "BR-006",
+      "type": "业务",
+      "domain": "场景价值",
+      "title": "提供资产可见性业务闭环",
+      "description": "从资产登记、标签绑定、最近出现区域和离线识别切入，保留盘点和查找结果，不以未经验证的坐标精度承诺销售。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "资产管理员",
+      "value": "减少人工找物和盘点工作",
+      "acceptance": "演示资产建档、标签绑定、最近区域、过期未知及一次盘点差异报告。",
+      "dependencies": [
+        "BR-004"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "产品",
+      "status": "待确认"
+    },
+    {
+      "id": "BR-007",
+      "type": "业务",
+      "domain": "交付部署",
+      "title": "建立站点部署和验收流程",
+      "description": "部署人员按站点完成勘测、网关注册、位置录入、覆盖验证和交付签收，保留现场证据。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "实施工程师",
+      "value": "使试点可复制到批量项目",
+      "acceptance": "输出一个站点的部署记录和验收报告，包含覆盖盲区、设备清单、配置版本及责任人。",
+      "dependencies": [
+        "BR-003",
+        "BR-004"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "实施",
+      "status": "待确认"
+    },
+    {
+      "id": "BR-008",
+      "type": "业务",
+      "domain": "运营服务",
+      "title": "建立远程运维服务流程",
+      "description": "围绕网关离线、数据异常、低电量、配置失败和升级失败定义检测、分派、处理、验证和关闭流程。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "运维人员",
+      "value": "降低现场维护成本",
+      "acceptance": "五类异常分别具有处理指引、责任角色、恢复验证条件和历史工单示例。",
+      "dependencies": [
+        "BR-005",
+        "BR-006"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "运营",
+      "status": "待确认"
+    },
+    {
+      "id": "BR-009",
+      "type": "业务",
+      "domain": "业务指标",
+      "title": "定义试点成功指标",
+      "description": "以设备上线率、数据新鲜度、告警有效率、查找耗时和部署耗时衡量平台价值，采用客户基线比较。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "客户负责人",
+      "value": "让试点是否扩张有量化依据",
+      "acceptance": "每项指标注明分子、分母、采样窗口、数据来源及负责角色，禁止将未测改善率作为结论。",
+      "dependencies": [
+        "BR-005",
+        "BR-006",
+        "BR-007"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "产品",
+      "status": "待确认"
+    },
+    {
+      "id": "BR-010",
+      "type": "业务",
+      "domain": "系统集成",
+      "title": "确定企业集成边界",
+      "description": "平台负责设备、观测、位置和事件，通过API及事件推送连接客户资产、工单或业务系统，明确主数据归属。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "企业架构师",
+      "value": "避免多系统各自维护冲突数据",
+      "acceptance": "完成一份对象归属表和一个告警推送到外部测试系统的联调流程。",
+      "dependencies": [
+        "BR-003",
+        "BR-005",
+        "BR-006"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "产品",
+      "status": "待确认"
+    },
+    {
+      "id": "BR-011",
+      "type": "业务",
+      "domain": "商业化",
+      "title": "定义套餐和授权口径",
+      "description": "按启用网关、活跃标签、数据保留、API配额和可选模块制定授权口径，先支持人工配置套餐。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "平台运营方",
+      "value": "使产品具备清晰报价及权益边界",
+      "acceptance": "以两个套餐展示权益差异和超额提示，计数窗口、重复设备及停用设备处理规则可查。",
+      "dependencies": [
+        "BR-004",
+        "BR-010"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "商业运营",
+      "status": "待确认"
+    },
+    {
+      "id": "BR-012",
+      "type": "业务",
+      "domain": "商业化",
+      "title": "支持客户试用和转正式",
+      "description": "明确试用时长、设备额度、试用数据归属及到期处理，转正式保留已授权数据和设备归属。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "售前人员",
+      "value": "缩短销售验证周期",
+      "acceptance": "完成试用创建、额度触达、到期只读及转正式流程，数据删除遵循既定保留策略。",
+      "dependencies": [
+        "BR-011"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "商业运营",
+      "status": "待确认"
+    },
+    {
+      "id": "BR-013",
+      "type": "业务",
+      "domain": "渠道生态",
+      "title": "建立伙伴交付模式",
+      "description": "伙伴只能管理被授权客户和站点，支持交付模板、渠道标识及可追溯的代运维授权。",
+      "priority": "P2",
+      "phase": "扩展",
+      "persona": "渠道伙伴",
+      "value": "支撑规模化分销及交付",
+      "acceptance": "演示伙伴管理两个已授权租户，第三租户不可见，代操作记录包含真实操作者。",
+      "dependencies": [
+        "BR-003",
+        "BR-007"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "商业运营",
+      "status": "待确认"
+    },
+    {
+      "id": "BR-014",
+      "type": "业务",
+      "domain": "部署模式",
+      "title": "确定云服务与私有部署边界",
+      "description": "优先交付一套可运营版本，按客户要求提供私有部署方案及功能差异，明确升级、备份和支持责任。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "采购及IT人员",
+      "value": "满足不同客户部署和运维要求",
+      "acceptance": "形成部署模式对照及责任矩阵，至少完成一种目标环境的安装和升级演练。",
+      "dependencies": [
+        "BR-001",
+        "BR-008"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "解决方案",
+      "status": "待确认"
+    },
+    {
+      "id": "BR-015",
+      "type": "业务",
+      "domain": "服务质量",
+      "title": "建立服务等级和支持边界",
+      "description": "定义云服务可用性、响应时间、数据新鲜度和服务支持窗口，区分平台故障、现场网络及射频问题。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "客户负责人",
+      "value": "减少服务承诺和实际交付偏差",
+      "acceptance": "SLA草案列出指标公式、测量点、排除项、报告周期和异常申诉方式，阈值待试点确认。",
+      "dependencies": [
+        "BR-008",
+        "BR-009"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "运营",
+      "status": "待确认"
+    },
+    {
+      "id": "BR-016",
+      "type": "业务",
+      "domain": "数据治理",
+      "title": "明确数据权属及保留要求",
+      "description": "约定设备遥测、位置轨迹、人员关联和操作日志的权属、用途、访问者、保留时间、导出和删除规则。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "租户管理员",
+      "value": "支持客户的数据治理要求",
+      "acceptance": "完成按数据类别的治理表，演示租户导出与删除申请，并可追踪处理状态。",
+      "dependencies": [
+        "BR-003",
+        "BR-006"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "产品及安全",
+      "status": "待确认"
+    },
+    {
+      "id": "BR-017",
+      "type": "业务",
+      "domain": "安全管理",
+      "title": "建立安全责任和高风险操作规则",
+      "description": "明确用户、平台、网关和设备的安全责任，对批量配置、远程控制、授权调整及数据导出设置权限和审计要求。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "安全负责人",
+      "value": "降低远程管理带来的业务风险",
+      "acceptance": "权限矩阵覆盖四类高风险操作，未经授权的操作被拒绝且产生可审计记录。",
+      "dependencies": [
+        "BR-002",
+        "BR-016"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "安全",
+      "status": "待确认"
+    },
+    {
+      "id": "BR-018",
+      "type": "业务",
+      "domain": "定位扩展",
+      "title": "建立定位应用分级",
+      "description": "按在场、区域、房间及连续坐标定义不同定位产品级别，独立验证RSSI、AoA等技术在目标环境的适用性。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "解决方案人员",
+      "value": "使定位承诺与现场能力相符",
+      "acceptance": "每个拟销售级别包含硬件要求、布设要求、刷新率、置信度和现场验收方法。",
+      "dependencies": [
+        "BR-006",
+        "BR-007"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "解决方案",
+      "status": "待确认"
+    },
+    {
+      "id": "BR-019",
+      "type": "业务",
+      "domain": "设备控制扩展",
+      "title": "建立远程设备控制边界",
+      "description": "GATT读写和终端OTA仅面向已适配设备，明确连接独占、凭据管理、失败恢复及操作权限。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "设备开发者",
+      "value": "在可控设备范围内实现双向服务",
+      "acceptance": "至少选择一种目标设备完成连接、读写、失败恢复和业务结果验证，支持矩阵同步更新。",
+      "dependencies": [
+        "BR-004",
+        "BR-017"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "产品",
+      "status": "待确认"
+    },
+    {
+      "id": "BR-020",
+      "type": "业务",
+      "domain": "运营分析",
+      "title": "提供运营和客户使用分析",
+      "description": "按租户、站点及设备类型查看活跃设备、数据量、故障、告警处置和使用模块，支持服务复盘。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "客户成功人员",
+      "value": "发现续费及交付质量问题",
+      "acceptance": "导出一个周期的运营报告，指标可追溯到明细，跨租户汇总仅限平台授权角色。",
+      "dependencies": [
+        "BR-009",
+        "BR-011",
+        "BR-015"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "运营",
+      "status": "待确认"
+    },
+    {
+      "id": "BR-021",
+      "type": "业务",
+      "domain": "实施规划",
+      "title": "建立版本范围及变更控制",
+      "description": "所有需求关联优先级、里程碑、负责人及验收条件，新增设备协议和行业模块通过变更评审进入版本。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "项目负责人",
+      "value": "控制交付承诺和持续扩张成本",
+      "acceptance": "版本计划包含MVP、增强和扩展范围，每个需求可查到验收人和变更记录。",
+      "dependencies": [
+        "BR-001",
+        "BR-004"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "项目管理",
+      "status": "待确认"
+    },
+    {
+      "id": "BR-022",
+      "type": "业务",
+      "domain": "供应商评估",
+      "title": "建立可复现的竞品和供应商评估",
+      "description": "用相同设备负载、现场条件和业务流程评估候选平台，记录已证实、未确认和不适用能力。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "采购及产品人员",
+      "value": "使对标结论可验证",
+      "acceptance": "完成一张证据矩阵及一次PoC记录，所有性能比较标注型号、固件、环境和数据口径。",
+      "dependencies": [
+        "BR-004",
+        "BR-009"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "解决方案",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-001",
+      "type": "功能",
+      "domain": "租户与身份",
+      "title": "强制租户上下文",
+      "description": "用户请求、网关连接、异步任务和数据存储均绑定不可由客户端任意替换的租户身份。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "租户管理员",
+      "value": "保护客户边界",
+      "acceptance": "以租户A身份访问租户B的API、导出、订阅和后台任务结果均被拒绝，拒绝记录可查。",
+      "dependencies": [
+        "BR-003",
+        "BR-017"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-002",
+      "type": "功能",
+      "domain": "租户与身份",
+      "title": "提供角色权限模型",
+      "description": "支持平台管理员、租户管理员、部署、运维、业务只读和开发者角色，允许按操作及对象授权。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "租户管理员",
+      "value": "减少过度授权",
+      "acceptance": "按角色逐项验证设备管理、控制、导出和用户管理权限，默认角色无未声明权限。",
+      "dependencies": [
+        "TR-001",
+        "BR-002"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-003",
+      "type": "功能",
+      "domain": "租户与身份",
+      "title": "限定站点及项目范围",
+      "description": "权限支持租户内按项目和站点约束，列表、搜索、地图、统计及导出使用一致过滤。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "站点负责人",
+      "value": "支持分区域协作",
+      "acceptance": "仅授权站点A的账号在五类入口均无法访问站点B对象及聚合信息。",
+      "dependencies": [
+        "TR-002"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-004",
+      "type": "功能",
+      "domain": "租户与身份",
+      "title": "管理成员完整生命周期",
+      "description": "支持邀请、激活、禁用、会话撤销及移交管理员，禁止形成无管理员租户。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "租户管理员",
+      "value": "支持人员变动",
+      "acceptance": "禁用用户后现有会话和API授权按策略失效，最后一个管理员不可直接删除。",
+      "dependencies": [
+        "TR-002"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-005",
+      "type": "技术",
+      "domain": "租户与身份",
+      "title": "支持企业单点登录",
+      "description": "通过标准OIDC或SAML之一对接企业身份提供方，保留账号映射、失效及本地应急访问规则。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "企业IT人员",
+      "value": "简化企业账号治理",
+      "acceptance": "与一个测试IdP完成登录、登出、停用、组映射及证书或密钥轮换联调。",
+      "dependencies": [
+        "TR-004"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及安全",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-006",
+      "type": "功能",
+      "domain": "租户与身份",
+      "title": "保护高权限登录",
+      "description": "对平台管理员及其他高权限账号启用MFA，提供受控恢复流程和异常登录记录。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "安全管理员",
+      "value": "降低管理员账号风险",
+      "acceptance": "高权限账号未完成MFA无法完成登录，恢复操作需独立验证且留审计。",
+      "dependencies": [
+        "TR-004",
+        "BR-017"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "安全",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-007",
+      "type": "技术",
+      "domain": "租户与身份",
+      "title": "区分服务账号和个人账号",
+      "description": "API服务账号具有租户、范围、有效期和密钥轮换能力，不复用个人登录凭据。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "集成开发者",
+      "value": "使系统集成权限可追溯",
+      "acceptance": "创建仅读取指定站点的服务账号，越权写入失败，撤销后新请求立即被拒绝。",
+      "dependencies": [
+        "TR-002",
+        "TR-003"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-008",
+      "type": "功能",
+      "domain": "租户与身份",
+      "title": "审计关键操作",
+      "description": "审计登录、授权、设备归属、配置、控制、升级、导出和删除，包含操作者、对象、前后值摘要及关联请求。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "审计人员",
+      "value": "支持故障调查和责任定位",
+      "acceptance": "逐类执行操作后可按租户、对象、时间及操作者检索，普通用户不能修改或删除审计记录。",
+      "dependencies": [
+        "TR-001",
+        "TR-002"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及安全",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-009",
+      "type": "功能",
+      "domain": "租户与身份",
+      "title": "支持临时代运维授权",
+      "description": "租户可授权平台或伙伴限时处理指定对象，展示授权范围并可提前撤销。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "租户管理员",
+      "value": "兼顾远程支持和客户控制",
+      "acceptance": "授权超时或撤销后代运维访问被拒绝，记录同时包含授权方及实际操作者。",
+      "dependencies": [
+        "TR-003",
+        "TR-008",
+        "BR-013"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-010",
+      "type": "功能",
+      "domain": "租户与身份",
+      "title": "管理租户配额",
+      "description": "对网关数、终端数、存储、规则数及API速率实施可配置配额，超限返回明确原因而非静默丢弃。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "平台运营方",
+      "value": "保证资源和商业权益一致",
+      "acceptance": "逐项触发配额上限，控制台展示使用量，业务操作收到可识别错误，已有数据可按策略读取。",
+      "dependencies": [
+        "TR-001",
+        "BR-011"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-011",
+      "type": "功能",
+      "domain": "设备生命周期",
+      "title": "建立网关注册和认领",
+      "description": "网关以唯一设备身份入库，经认领凭据绑定租户及站点，防止重复认领和凭据暴力尝试。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "部署人员",
+      "value": "使设备归属明确",
+      "acceptance": "同一网关只能属于一个有效租户，错误及重复认领均失败，成功后产生归属审计。",
+      "dependencies": [
+        "TR-001",
+        "TR-008",
+        "BR-007"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及固件",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-012",
+      "type": "功能",
+      "domain": "设备生命周期",
+      "title": "支持批量导入和校验",
+      "description": "支持批量导入网关和标签，逐行返回格式、重复及权限错误，可导出失败行重试。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "部署人员",
+      "value": "降低批量部署成本",
+      "acceptance": "建议验收基线为一次导入1000条，混入错误行后正确行处理符合事务策略且错误可定位到行。",
+      "dependencies": [
+        "TR-011"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及前端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-013",
+      "type": "功能",
+      "domain": "设备生命周期",
+      "title": "维护设备能力清单",
+      "description": "记录型号、硬件版本、固件、协议、射频模式、缓存、OTA和定位能力，并区分声明及实测状态。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "运维人员",
+      "value": "避免下发不受支持操作",
+      "acceptance": "同一功能在支持与不支持网关上展示不同可操作状态，能力变化可追踪固件版本。",
+      "dependencies": [
+        "TR-011",
+        "BR-004"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及固件",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-014",
+      "type": "功能",
+      "domain": "设备生命周期",
+      "title": "绑定网关物理位置",
+      "description": "网关绑定站点、楼层及区域，地图坐标注明坐标系和图纸版本，变更保留生效时间。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "部署人员",
+      "value": "为资产区域和现场维护提供依据",
+      "acceptance": "移动网关后新观测使用新位置，历史记录仍能还原原绑定位置及生效区间。",
+      "dependencies": [
+        "TR-003",
+        "TR-011"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及前端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-015",
+      "type": "功能",
+      "domain": "设备生命周期",
+      "title": "显示设备状态和新鲜度",
+      "description": "独立展示网关连接状态、最近心跳、最近有效数据、配置同步和终端最近被观测时间。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "运维人员",
+      "value": "防止在线状态掩盖业务断数",
+      "acceptance": "分别模拟心跳正常无遥测、断网及终端消失，控制台显示不同状态和时间。",
+      "dependencies": [
+        "TR-013"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及前端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-016",
+      "type": "技术",
+      "domain": "设备生命周期",
+      "title": "采用期望配置和已报配置",
+      "description": "配置包含版本号、校验值和生效状态，期望版本与设备已报版本独立存储，禁止仅凭下发成功标记生效。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "运维人员",
+      "value": "提高远程配置可验证性",
+      "acceptance": "模拟设备离线、下发成功但应用失败及成功应用三种情形，控制台正确展示差异。",
+      "dependencies": [
+        "TR-013",
+        "TR-015"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及固件",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-017",
+      "type": "功能",
+      "domain": "设备生命周期",
+      "title": "提供配置模板和分组",
+      "description": "按型号、站点或用途建立设备分组及配置模板，保存版本，预览变更并校验兼容性。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "运维人员",
+      "value": "减少重复配置和误配",
+      "acceptance": "模板应用到包含两种型号的分组时，支持设备进入任务，不兼容设备明确列出拒绝原因。",
+      "dependencies": [
+        "TR-013",
+        "TR-016"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及前端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-018",
+      "type": "功能",
+      "domain": "设备生命周期",
+      "title": "保护归属转移及退役",
+      "description": "设备转移需原归属授权或受控找回，退役撤销连接凭据并按策略清除敏感配置。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "租户管理员",
+      "value": "防止二手设备泄露和越权迁移",
+      "acceptance": "设备从租户A转移到B后旧凭据无法连接，B不能读取A的历史业务数据。",
+      "dependencies": [
+        "TR-008",
+        "TR-011"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及固件",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-019",
+      "type": "功能",
+      "domain": "设备生命周期",
+      "title": "支持现场部署核查",
+      "description": "部署界面汇总网络连通、云端认证、时间同步、扫描数据及归属位置，并保存部署检查结果。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "实施工程师",
+      "value": "使上线质量可重复验证",
+      "acceptance": "网关存在一项失败检查时不能标记部署验收通过，报告列出失败项和处理建议。",
+      "dependencies": [
+        "TR-014",
+        "TR-015",
+        "BR-007"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "前端及固件",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-020",
+      "type": "功能",
+      "domain": "设备生命周期",
+      "title": "管理电池和维护计划",
+      "description": "终端电量注明来源及更新时间，支持低电量阈值、未知电量及更换记录，不把RSSI推算为电量。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "资产管理员",
+      "value": "减少标签失联和重复维护",
+      "acceptance": "展示有电量、过期电量和无电量字段三种设备，更换电池记录不会更改历史测量值。",
+      "dependencies": [
+        "TR-013",
+        "TR-015"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及前端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-021",
+      "type": "技术",
+      "domain": "BLE接入",
+      "title": "采集BLE广播原始观测",
+      "description": "保留广播类型、原始载荷、地址类型、RSSI、网关身份、射频模式及接收时间，缺失字段显式为空。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "设备开发者",
+      "value": "保留协议适配和问题定位基础",
+      "acceptance": "用已知样本核对原始字节及元数据，未知协议可保存但不伪造已解析值。",
+      "dependencies": [
+        "TR-013",
+        "BR-004"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "固件及后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-022",
+      "type": "功能",
+      "domain": "BLE接入",
+      "title": "配置扫描和过滤策略",
+      "description": "按能力配置扫描窗口、间隔、广播类型、服务UUID、厂商标识及RSSI过滤，校验合法范围。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "部署人员",
+      "value": "控制采集范围和数据负载",
+      "acceptance": "分别验证允许与拒绝样本，越界参数被拒绝，配置生效版本可以回读。",
+      "dependencies": [
+        "TR-016",
+        "TR-021"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "固件及后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-023",
+      "type": "技术",
+      "domain": "BLE接入",
+      "title": "提供可版本化协议解析器",
+      "description": "解析器按协议、设备类型和版本管理，输出标准字段、单位、质量标记及错误原因，支持回放测试。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "设备开发者",
+      "value": "降低新设备接入成本",
+      "acceptance": "对正常、截断、未知及版本变化样本运行测试，输出确定结果且一类错误不阻塞其他设备。",
+      "dependencies": [
+        "TR-021"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-024",
+      "type": "技术",
+      "domain": "BLE接入",
+      "title": "解析多广告帧及扩展广播",
+      "description": "同一设备多帧数据按协议关联，扩展广播能力按网关型号启用，不将分片当成独立资产。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "设备开发者",
+      "value": "覆盖更复杂的广播协议",
+      "acceptance": "以支持型号回放多帧样本，验证拼接超时和缺片状态，不支持型号明确拒绝开启。",
+      "dependencies": [
+        "TR-013",
+        "TR-023"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "固件及后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-025",
+      "type": "技术",
+      "domain": "BLE接入",
+      "title": "处理设备身份和随机地址",
+      "description": "标签业务身份优先来自受支持载荷或已授权身份解析，不把BLE地址永久视为资产主键，保留身份置信状态。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "设备开发者",
+      "value": "避免随机地址导致资产重复",
+      "acceptance": "模拟地址轮换且业务标识稳定的标签保持同一身份，无可靠标识的样本不得自动合并。",
+      "dependencies": [
+        "TR-021",
+        "TR-023"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-026",
+      "type": "功能",
+      "domain": "BLE接入",
+      "title": "管理终端协议兼容状态",
+      "description": "按终端型号、协议和网关组合记录通过、受限及不支持状态，限制可选功能。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "解决方案人员",
+      "value": "使现场能力与销售承诺一致",
+      "acceptance": "新增设备需关联测试样本和结果，未验证组合在交付清单上显示待验证。",
+      "dependencies": [
+        "TR-013",
+        "TR-023",
+        "BR-004"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "测试及产品",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-027",
+      "type": "技术",
+      "domain": "BLE接入",
+      "title": "调度GATT连接会话",
+      "description": "为已适配设备管理连接、发现服务、订阅、断开及重试，按网关射频能力设置并发和优先级。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "设备开发者",
+      "value": "安全扩展双向连接",
+      "acceptance": "在支持矩阵内验证会话上限、排队、超时和断开释放，达到上限不影响网关管理心跳。",
+      "dependencies": [
+        "TR-013",
+        "TR-026",
+        "BR-019"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "固件及后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-028",
+      "type": "技术",
+      "domain": "BLE接入",
+      "title": "控制GATT读写语义",
+      "description": "使用设备适配模板约束特征UUID、操作类型、字节格式及响应验证，写入需业务授权和审计。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "设备开发者",
+      "value": "降低远程控制误操作",
+      "acceptance": "对未授权特征写入被拒绝，已授权写入区分已发送、协议应答和设备状态确认。",
+      "dependencies": [
+        "TR-008",
+        "TR-027"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及固件",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-029",
+      "type": "技术",
+      "domain": "BLE接入",
+      "title": "保护设备配对和密钥",
+      "description": "按设备能力支持配对、绑定和密钥保管，凭据不出现在日志及普通API响应中，提供解绑与轮换流程。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "安全管理员",
+      "value": "保护双向BLE设备访问",
+      "acceptance": "完成一种目标设备的配对和重连，检查日志无明文密钥，撤销绑定后访问失败。",
+      "dependencies": [
+        "TR-027",
+        "BR-017"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "固件及安全",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-030",
+      "type": "非功能",
+      "domain": "BLE接入",
+      "title": "验证射频采集能力边界",
+      "description": "分别测试广播接收、GATT并发、扫描与连接共存及不同PHY，记录现场干扰、距离、广播周期和丢包口径。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "测试人员",
+      "value": "避免将云容量误当射频容量",
+      "acceptance": "每个支持型号形成可复现射频报告，报告区分发射帧、网关观测和云端事件数量。",
+      "dependencies": [
+        "TR-021",
+        "TR-026"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "测试",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-031",
+      "type": "技术",
+      "domain": "数据管道",
+      "title": "定义统一观测信封",
+      "description": "每条观测包含schema_version、租户、网关、源身份、事件时间、接收时间、序列及质量字段，字段单位可查。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "后端开发者",
+      "value": "形成稳定数据契约",
+      "acceptance": "校验样本包含必填字段和版本，非法数据进入可诊断错误通道，不混入正常指标。",
+      "dependencies": [
+        "TR-021",
+        "TR-023",
+        "TR-025"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-032",
+      "type": "技术",
+      "domain": "数据管道",
+      "title": "支持可靠上行接入",
+      "description": "网关优先使用MQTT over TLS或HTTPS之一可靠接入，连接认证和主题权限绑定设备所属租户。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "运维人员",
+      "value": "建立可管理的数据入口",
+      "acceptance": "未注册设备、过期凭据及跨租户主题访问被拒绝，正常设备可完成断线重连。",
+      "dependencies": [
+        "TR-011",
+        "TR-031"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及固件",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-033",
+      "type": "技术",
+      "domain": "数据管道",
+      "title": "约束重复与幂等处理",
+      "description": "传输允许至少一次重试，按网关会话及事件序列识别重传，业务写入和计数使用明确幂等键。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "后端开发者",
+      "value": "避免重传造成重复事件和计费",
+      "acceptance": "同一批事件重复投递三次，原始审计可见重传，业务事件及授权计数仅计算一次。",
+      "dependencies": [
+        "TR-031",
+        "TR-032"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-034",
+      "type": "技术",
+      "domain": "数据管道",
+      "title": "保留多网关观测关系",
+      "description": "同一标签被多个网关接收时保留独立观测，在业务层按用途聚合，不能全局去重掉定位所需信息。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "定位开发者",
+      "value": "兼顾资产视图及定位计算",
+      "acceptance": "两个网关接收同一广播时原始层保留两条观测，资产最近状态按确定规则聚合。",
+      "dependencies": [
+        "TR-025",
+        "TR-031",
+        "TR-033"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-035",
+      "type": "技术",
+      "domain": "数据管道",
+      "title": "处理事件时间及乱序",
+      "description": "区分终端采样、网关接收和云接收时间，设置时钟质量、允许迟到窗口及水位策略，保留原始时间。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "后端开发者",
+      "value": "防止离线补传破坏当前状态",
+      "acceptance": "回放晚到和未来时间样本，历史曲线按策略补齐且最近状态不被旧事件覆盖。",
+      "dependencies": [
+        "TR-031",
+        "TR-033"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-036",
+      "type": "技术",
+      "domain": "数据管道",
+      "title": "建立数据质量隔离",
+      "description": "对非法载荷、异常单位、越界值、缺失身份及解析失败标记质量，保留样本和原因供处理。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "运维人员",
+      "value": "降低错误数据触发业务动作",
+      "acceptance": "注入五类异常样本，可查询原因并重放修复；默认不触发依赖有效测量的业务告警。",
+      "dependencies": [
+        "TR-023",
+        "TR-031"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-037",
+      "type": "技术",
+      "domain": "数据管道",
+      "title": "分离原始数据和业务投影",
+      "description": "原始观测、归一化遥测、设备最新状态及业务事件分层保存，投影可从授权原始数据重建。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "平台开发者",
+      "value": "支持故障恢复及协议迭代",
+      "acceptance": "清空一个测试投影后重放指定区间，重建结果与原结果在定义字段上相同。",
+      "dependencies": [
+        "TR-031",
+        "TR-033",
+        "TR-035"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-038",
+      "type": "功能",
+      "domain": "数据管道",
+      "title": "配置数据保留和聚合",
+      "description": "按数据类别和租户套餐配置原始、明细、聚合和审计保留周期，展示删除生效时间和导出窗口。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "租户管理员",
+      "value": "控制存储成本并满足治理需求",
+      "acceptance": "在缩短的测试周期验证过期清理、聚合保留及未过期数据可读，审计独立遵循策略。",
+      "dependencies": [
+        "TR-037",
+        "BR-016"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-039",
+      "type": "技术",
+      "domain": "数据管道",
+      "title": "提供数据查询和导出",
+      "description": "按设备、资产、区域、字段及时间查询时序和事件，分页或异步导出并复用相同权限过滤。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "业务人员",
+      "value": "支持业务分析和系统迁移",
+      "acceptance": "同一条件下页面和导出条数一致，大区间进入异步任务，下载链接到期失效且不能跨租户访问。",
+      "dependencies": [
+        "TR-003",
+        "TR-037",
+        "TR-038"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及前端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-040",
+      "type": "技术",
+      "domain": "数据管道",
+      "title": "实施背压和租户公平调度",
+      "description": "限制单网关及单租户突发流量，对接入、解析和消费设置队列水位、限速和可观测的降级策略。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "平台运维人员",
+      "value": "防止一个客户拖垮整个平台",
+      "acceptance": "租户A超额发送时其受限状态明确，租户B在约定负载内满足已批准延迟基线。",
+      "dependencies": [
+        "TR-001",
+        "TR-032",
+        "TR-036"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及运维",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-041",
+      "type": "技术",
+      "domain": "边缘与OTA",
+      "title": "提供边缘持久缓存",
+      "description": "断网时缓存观测及必要状态，恢复后分批补传，缓存容量按型号和负载配置并展示使用率。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "运维人员",
+      "value": "降低现场断网的数据损失",
+      "acceptance": "断网并重启网关后可恢复已落盘数据，补传结果可对账；超容量行为按型号明确且有计数告警。",
+      "dependencies": [
+        "TR-013",
+        "TR-033",
+        "TR-035"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "固件",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-042",
+      "type": "技术",
+      "domain": "边缘与OTA",
+      "title": "控制补传和实时流优先级",
+      "description": "恢复连接后为历史补传和实时数据分配带宽与并发，避免补传长期阻塞新鲜数据。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "运维人员",
+      "value": "维持恢复期间业务可用性",
+      "acceptance": "存在历史积压时持续生成实时数据，实时流延迟满足恢复模式基线，积压量持续下降且无静默丢弃。",
+      "dependencies": [
+        "TR-040",
+        "TR-041"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "固件及后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-043",
+      "type": "技术",
+      "domain": "边缘与OTA",
+      "title": "实施边缘过滤和聚合版本",
+      "description": "边缘去重、聚合和过滤带版本及计数，上传处理前后数量，位置应用可以要求保留完整多网关观测。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "平台运维人员",
+      "value": "在可解释条件下减少流量",
+      "acceptance": "对固定样本集计算输入、过滤、聚合和输出数量平衡，切换策略后可辨认新旧版本数据。",
+      "dependencies": [
+        "TR-022",
+        "TR-034",
+        "TR-041"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "固件及后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-044",
+      "type": "技术",
+      "domain": "边缘与OTA",
+      "title": "支持网关健康自恢复",
+      "description": "对进程故障、网络异常、磁盘临界及连接失效实施有限重试和看门狗，防止无限重启循环。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "运维人员",
+      "value": "减少现场人工重启",
+      "acceptance": "注入进程崩溃、网络抖动和磁盘满，设备记录原因并按策略恢复或进入可诊断保护状态。",
+      "dependencies": [
+        "TR-015",
+        "TR-041"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "固件",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-045",
+      "type": "技术",
+      "domain": "边缘与OTA",
+      "title": "执行安全OTA包校验",
+      "description": "网关升级包具有签名、哈希、型号及版本约束，下载、校验、安装和启动确认分别上报状态。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "运维人员",
+      "value": "使远程升级可控",
+      "acceptance": "篡改包、错误型号包及不允许降级包均被拒绝，正常包具有完整状态链和版本回读。",
+      "dependencies": [
+        "TR-008",
+        "TR-013",
+        "TR-032"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "固件及安全",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-046",
+      "type": "功能",
+      "domain": "边缘与OTA",
+      "title": "编排OTA灰度与暂停",
+      "description": "升级任务按设备清单或已支持分组、窗口和批次执行，设置失败阈值、暂停及撤销未执行任务能力。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "运维人员",
+      "value": "限制批量升级影响范围",
+      "acceptance": "建议验收基线为1台试点后10台灰度，注入超阈失败后后续批次停止，成功与失败设备明细完整。",
+      "dependencies": [
+        "TR-045"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及固件",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-047",
+      "type": "技术",
+      "domain": "边缘与OTA",
+      "title": "建立升级恢复路径",
+      "description": "优先采用A/B或等效恢复机制；不具备自动回滚能力的型号必须标注并提供现场恢复流程。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "实施工程师",
+      "value": "避免升级失败导致大面积失联",
+      "acceptance": "在下载、安装和首次启动阶段分别断电测试，支持型号可恢复到可管理版本，受限型号生成现场恢复记录。",
+      "dependencies": [
+        "TR-013",
+        "TR-045"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "固件及测试",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-048",
+      "type": "功能",
+      "domain": "边缘与OTA",
+      "title": "区分网关与终端升级任务",
+      "description": "终端OTA按设备适配插件执行，单独管理电量、连接窗口、固件兼容和业务验证，不继承网关OTA能力。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "设备开发者",
+      "value": "防止把管理网关误认为支持升级所有标签",
+      "acceptance": "对一种已适配终端完成灰度升级和失败重试，未适配终端不出现可执行升级入口。",
+      "dependencies": [
+        "TR-026",
+        "TR-027",
+        "TR-045",
+        "BR-019"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "固件及后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-049",
+      "type": "功能",
+      "domain": "边缘与OTA",
+      "title": "提供受控远程诊断",
+      "description": "支持限时采集日志、连接状态、缓存水位、资源占用及配置摘要，敏感信息脱敏且操作审计。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "运维人员",
+      "value": "缩短问题定位时间",
+      "acceptance": "远程诊断包可定位一个模拟故障，普通账号无权获取，包内无明文密钥及无关租户数据。",
+      "dependencies": [
+        "TR-008",
+        "TR-015",
+        "TR-041"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "固件及后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-050",
+      "type": "技术",
+      "domain": "边缘与OTA",
+      "title": "管理网络和时间同步",
+      "description": "按网关能力支持以太网、WiFi或蜂窝配置，显示链路质量、切换记录、NTP状态及时间偏差。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "实施工程师",
+      "value": "提高现场网络可维护性",
+      "acceptance": "至少针对目标型号验证两种链路切换，时间失同步时数据带时钟质量标记，回连不重复认领。",
+      "dependencies": [
+        "TR-013",
+        "TR-032",
+        "TR-035"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "固件",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-051",
+      "type": "功能",
+      "domain": "资产与位置",
+      "title": "建立资产主数据",
+      "description": "资产具有稳定业务ID、类别、归属、责任人、状态和外部系统ID，标签与资产对象分别管理。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "资产管理员",
+      "value": "使设备数据对应业务对象",
+      "acceptance": "创建、搜索、更新和停用资产，业务ID租户内唯一，标签更换不产生新资产。",
+      "dependencies": [
+        "TR-001",
+        "TR-025",
+        "BR-006"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及前端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-052",
+      "type": "功能",
+      "domain": "资产与位置",
+      "title": "保留标签绑定时间区间",
+      "description": "资产与标签绑定包含开始、结束和操作者，按业务规则约束一对一或已批准的多标签关系。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "资产管理员",
+      "value": "防止更换标签污染历史轨迹",
+      "acceptance": "同一标签顺序绑定资产A和B后，各自历史仅包含对应有效区间的观测和业务状态。",
+      "dependencies": [
+        "TR-008",
+        "TR-051"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-053",
+      "type": "功能",
+      "domain": "资产与位置",
+      "title": "展示最近出现和未知状态",
+      "description": "MVP提供最近网关或区域以及观测时间，超过有效期进入过期或未知，不显示为持续确定位置。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "资产管理员",
+      "value": "避免错误位置误导找物",
+      "acceptance": "标签停止广播或网关离线后，位置按约定TTL变为过期或未知，历史位置仍可查。",
+      "dependencies": [
+        "TR-014",
+        "TR-015",
+        "TR-034",
+        "TR-052"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及前端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-054",
+      "type": "技术",
+      "domain": "资产与位置",
+      "title": "配置区域判定和防抖",
+      "description": "区域推断支持RSSI及时间窗口等可解释规则，使用滞回、最短驻留或候选状态抑制边界抖动。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "定位开发者",
+      "value": "提高区域事件稳定性",
+      "acceptance": "回放边界往返样本，真实持续跨区生成一次确认事件，短时抖动保留候选记录且不反复告警。",
+      "dependencies": [
+        "TR-034",
+        "TR-035",
+        "TR-053",
+        "BR-018"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-055",
+      "type": "功能",
+      "domain": "资产与位置",
+      "title": "管理楼层图和区域版本",
+      "description": "上传平面图并定义楼层、比例尺、区域、多边形及版本，地图更新不改变历史位置解释。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "部署人员",
+      "value": "提供可管理的空间语义",
+      "acceptance": "替换楼层图后当前坐标可映射到新版本，历史事件仍关联原图或原区域定义。",
+      "dependencies": [
+        "TR-014",
+        "TR-053"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "前端及后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-056",
+      "type": "技术",
+      "domain": "资产与位置",
+      "title": "提供位置质量和置信状态",
+      "description": "位置结果注明方法、区域或坐标、更新时间、质量、置信度定义及参与网关，不把不同算法分数直接横向比较。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "资产管理员",
+      "value": "使业务人员理解位置可靠性",
+      "acceptance": "构造高质量、低质量及观测不足样本，输出差异可解释，低质量位置不自动标成精确坐标。",
+      "dependencies": [
+        "TR-053",
+        "TR-054",
+        "BR-018"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及算法",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-057",
+      "type": "技术",
+      "domain": "资产与位置",
+      "title": "插件化接入专业定位引擎",
+      "description": "通过独立位置契约接入AoA等引擎，校验标签兼容、定位器、坐标系、时间和质量字段。",
+      "priority": "P2",
+      "phase": "扩展",
+      "persona": "定位开发者",
+      "value": "按场景扩展精度而保留平台核心",
+      "acceptance": "接入一种目标引擎，完成坐标转换和断流降级演练，移除插件不影响基础广播遥测。",
+      "dependencies": [
+        "TR-055",
+        "TR-056",
+        "BR-018"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及算法",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-058",
+      "type": "功能",
+      "domain": "资产与位置",
+      "title": "提供基础清单盘点和差异复核",
+      "description": "MVP按资产清单及观测时间窗口生成已见、未见和差异明细，允许人工复核并记录结果；未见不直接认定为丢失。跨周期计划、审批和复杂盘点流程作为后续扩展。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "资产管理员",
+      "value": "形成可执行的资产管理流程",
+      "acceptance": "使用一份已知资产清单及固定观测窗口完成盘点，同一资产只计一次，已见和未见数量与明细一致；差异可回溯观测时间和绑定关系，人工复核记录操作者、时间及原因。",
+      "dependencies": [
+        "TR-039",
+        "TR-051",
+        "TR-053"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "前端及后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-059",
+      "type": "功能",
+      "domain": "资产与位置",
+      "title": "提供环境测量看板",
+      "description": "遥测按测量类型和单位展示当前值、质量、趋势和缺口，支持区域及资产维度筛选。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "设施运营人员",
+      "value": "让采集数据直接支持日常工作",
+      "acceptance": "同一指标的单位、缺测和异常值呈现一致，图表与明细查询值相同，过期值有明显标记。",
+      "dependencies": [
+        "TR-023",
+        "TR-035",
+        "TR-036",
+        "TR-039",
+        "BR-005"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "前端及后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-060",
+      "type": "非功能",
+      "domain": "资产与位置",
+      "title": "验证定位现场质量",
+      "description": "定位验收以现场样本的区域正确率、刷新周期、覆盖率及坐标误差分位数分别衡量，不以平均误差替代完整表现。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "测试人员",
+      "value": "让定位验收可复现",
+      "acceptance": "完成静态、移动、边界、遮挡及密集标签测试，报告样本数、置信定义、p50和p95误差及未知比例。",
+      "dependencies": [
+        "TR-030",
+        "TR-056",
+        "BR-018"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "测试及算法",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-061",
+      "type": "功能",
+      "domain": "告警与处置",
+      "title": "配置阈值和持续时间规则",
+      "description": "支持测量超限、设备离线、低电量及区域事件等已支持规则，配置条件、持续窗口和恢复条件。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "运营人员",
+      "value": "从数据发现需要处理的问题",
+      "acceptance": "用正常、瞬时超限、持续超限和恢复样本验证触发及恢复，规则保存前检查字段和单位。",
+      "dependencies": [
+        "TR-015",
+        "TR-036",
+        "TR-059",
+        "BR-005"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及前端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-062",
+      "type": "技术",
+      "domain": "告警与处置",
+      "title": "定义告警生命周期",
+      "description": "告警包含新建、确认、处理中、恢复、关闭及抑制状态，状态变化有操作者和事件时间记录。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "运营人员",
+      "value": "避免通知发送后无人负责",
+      "acceptance": "按允许状态迁移完成一条告警，非法迁移被拒绝，恢复不自动抹去未完成处置记录。",
+      "dependencies": [
+        "TR-008",
+        "TR-061"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-063",
+      "type": "技术",
+      "domain": "告警与处置",
+      "title": "去重和抑制告警风暴",
+      "description": "按对象、规则和事件窗口合并重复告警，支持维护期、冷却期及上级网关故障关联提示。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "运维人员",
+      "value": "减少重复通知及误处置",
+      "acceptance": "网关离线导致多个终端断数时，保留关联关系并按规则抑制通知，恢复后不重复推送旧告警。",
+      "dependencies": [
+        "TR-033",
+        "TR-061",
+        "TR-062"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-064",
+      "type": "功能",
+      "domain": "告警与处置",
+      "title": "配置通知渠道和路由",
+      "description": "支持站内及Webhook为首期渠道，按角色、站点、严重级别和时段路由，其他渠道经授权配置。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "运营人员",
+      "value": "将异常送达负责人员或系统",
+      "acceptance": "按三种严重级别将告警发送至正确接收对象，测试通知有显式标识，路由不可越过站点权限。",
+      "dependencies": [
+        "TR-003",
+        "TR-007",
+        "TR-062"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及前端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-065",
+      "type": "技术",
+      "domain": "告警与处置",
+      "title": "追踪通知结果和重试",
+      "description": "通知记录待发送、成功、失败、重试和放弃，重试指数退避并支持死信查询及人工重发。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "运维人员",
+      "value": "防止消息发送失败不可见",
+      "acceptance": "外部接收端连续失败再恢复，平台可追踪每次尝试并在重试窗口内送达，最终失败可人工处理。",
+      "dependencies": [
+        "TR-033",
+        "TR-064"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-066",
+      "type": "功能",
+      "domain": "告警与处置",
+      "title": "支持告警责任和升级",
+      "description": "按站点及类型指定负责人，设置响应时限及升级规则，授权人员可转派和补充处理说明。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "运营主管",
+      "value": "使异常处置形成责任闭环",
+      "acceptance": "一条未及时确认告警触发升级，转派及确认记录保留，越权人员不能转派。",
+      "dependencies": [
+        "TR-062",
+        "TR-064"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及前端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-067",
+      "type": "功能",
+      "domain": "告警与处置",
+      "title": "创建和关联维修工单",
+      "description": "从告警创建平台简版工单或关联外部工单，记录责任人、状态、处理证据及验证结果。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "现场维护人员",
+      "value": "连接远程发现和现场处理",
+      "acceptance": "告警可定位到对应工单，工单关闭前检查验证信息，重复推送不会创建多张相同工单。",
+      "dependencies": [
+        "TR-062",
+        "TR-065",
+        "BR-008",
+        "BR-010"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及前端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-068",
+      "type": "技术",
+      "domain": "告警与处置",
+      "title": "处理晚到事件和补传告警",
+      "description": "补传数据按事件时间评估历史异常，区分历史补录与当前告警，不把早已恢复的异常默认推送为实时。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "运营人员",
+      "value": "减少网络恢复后误报",
+      "acceptance": "回放断网期间超限后恢复的数据，历史异常可见但不产生误导的当前告警，策略可配置。",
+      "dependencies": [
+        "TR-035",
+        "TR-041",
+        "TR-061"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-069",
+      "type": "功能",
+      "domain": "告警与处置",
+      "title": "测试和版本化规则",
+      "description": "规则修改产生新版本，支持样本测试及生效预览，记录创建者、生效时间和回滚版本。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "运营人员",
+      "value": "降低规则改动造成的误报",
+      "acceptance": "同一数据集在两个规则版本下结果可对比，回滚后新事件使用恢复版本，历史结论保留原版本。",
+      "dependencies": [
+        "TR-008",
+        "TR-061",
+        "TR-068"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及前端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-070",
+      "type": "功能",
+      "domain": "告警与处置",
+      "title": "统计告警处置指标",
+      "description": "按站点、规则和级别统计告警量、确认时长、恢复时长、重复率和人工误报反馈。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "运营主管",
+      "value": "改进规则和服务质量",
+      "acceptance": "选定时间窗的统计结果可追溯到明细，未关闭告警的时长口径与已关闭告警明确区分。",
+      "dependencies": [
+        "TR-039",
+        "TR-062",
+        "TR-066",
+        "BR-009"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及前端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-071",
+      "type": "技术",
+      "domain": "开放集成",
+      "title": "提供版本化REST API",
+      "description": "API覆盖设备、资产、遥测、位置、告警和任务，提供OpenAPI说明、分页、过滤、稳定错误码及弃用策略。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "集成开发者",
+      "value": "使外部系统能稳定集成",
+      "acceptance": "开发者依据文档完成设备查询和告警查询，错误响应含请求ID且不暴露敏感内部信息。",
+      "dependencies": [
+        "TR-007",
+        "TR-031",
+        "TR-039",
+        "TR-051",
+        "TR-062",
+        "BR-010"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-072",
+      "type": "技术",
+      "domain": "开放集成",
+      "title": "提供可验证事件Webhook",
+      "description": "事件含唯一ID、类型、时间、版本和业务对象，使用签名及时间窗口校验，接收方可幂等处理。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "集成开发者",
+      "value": "可靠连接客户业务系统",
+      "acceptance": "篡改及过期签名被测试接收端拒绝，重复投递可识别，订阅者只能接收其授权租户数据。",
+      "dependencies": [
+        "TR-007",
+        "TR-033",
+        "TR-065",
+        "TR-071"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-073",
+      "type": "技术",
+      "domain": "开放集成",
+      "title": "区分命令接受与设备执行",
+      "description": "远程操作创建可查询任务，区分接受、排队、投递、执行、成功、失败、超时和取消，支持幂等请求。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "运维及集成开发者",
+      "value": "避免HTTP成功被误认为设备已执行",
+      "acceptance": "离线设备命令返回已接受及任务ID，超过有效期不再执行；设备执行结果可与请求关联。",
+      "dependencies": [
+        "TR-008",
+        "TR-016",
+        "TR-033",
+        "TR-071"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及固件",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-074",
+      "type": "技术",
+      "domain": "开放集成",
+      "title": "管理API限流和重试语义",
+      "description": "按账号、租户及端点限流，返回可识别状态和重试建议，写请求明确可重试及幂等规则。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "集成开发者",
+      "value": "保护平台并降低集成错误",
+      "acceptance": "触发限流后收到约定错误及重试信息，正常租户不受超额租户影响，文档示例能正确处理重试。",
+      "dependencies": [
+        "TR-040",
+        "TR-071",
+        "TR-073"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-075",
+      "type": "技术",
+      "domain": "开放集成",
+      "title": "管理外部主数据映射",
+      "description": "维护客户资产、组织、位置和工单系统的外部ID，支持冲突检测及同步状态，禁止无规则双向覆盖。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "集成开发者",
+      "value": "减少系统间主数据冲突",
+      "acceptance": "同一外部ID重复导入按约定更新或拒绝，冲突可查，删除同步不得隐式跨系统级联。",
+      "dependencies": [
+        "TR-051",
+        "TR-067",
+        "TR-071",
+        "BR-010"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-076",
+      "type": "功能",
+      "domain": "开放集成",
+      "title": "提供开发者测试环境",
+      "description": "提供测试租户、模拟网关、广播样本和Webhook测试工具，测试数据及密钥与生产隔离。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "集成开发者",
+      "value": "缩短协议和业务联调时间",
+      "acceptance": "开发者无需生产设备即可完成数据接入和事件订阅演练，测试环境密钥不能访问生产。",
+      "dependencies": [
+        "TR-023",
+        "TR-071",
+        "TR-072"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "开发者平台",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-077",
+      "type": "技术",
+      "domain": "计量与授权",
+      "title": "记录可追溯用量",
+      "description": "按授权口径记录网关启用、标签活跃、存储和API调用，支持查询统计周期及明细来源。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "商业运营人员",
+      "value": "支撑报价、权益和成本分析",
+      "acceptance": "用固定样本核对重复数据、跨月、停用和转租户情况的用量，结果符合已批准计量规则。",
+      "dependencies": [
+        "TR-010",
+        "TR-033",
+        "TR-038",
+        "BR-011"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-078",
+      "type": "功能",
+      "domain": "计量与授权",
+      "title": "配置套餐和到期策略",
+      "description": "套餐控制模块、额度、保留期和授权有效期，到期区分只读、暂停新增及受限功能，保留必要告警与数据导出策略。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "平台运营方",
+      "value": "实现可运营的软件授权",
+      "acceptance": "为两个租户配置不同套餐，到期后行为与公示策略一致，续期不重建原有设备及资产。",
+      "dependencies": [
+        "TR-010",
+        "TR-038",
+        "TR-077",
+        "BR-012"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及前端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-079",
+      "type": "功能",
+      "domain": "计量与授权",
+      "title": "提供客户用量及成本视图",
+      "description": "展示设备、流量、存储和API用量及配额预警，供应成本或收费金额仅在规则配置后计算。",
+      "priority": "P1",
+      "phase": "增强",
+      "persona": "客户成功及租户管理员",
+      "value": "提升使用透明度和容量规划",
+      "acceptance": "租户视图与后台计量明细一致，未配置价格时不展示伪造费用，达到预警阈值产生一次通知。",
+      "dependencies": [
+        "TR-065",
+        "TR-077",
+        "TR-078"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及前端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-080",
+      "type": "技术",
+      "domain": "开放集成",
+      "title": "支持完整客户数据退出",
+      "description": "按租户导出约定对象、字段、时间和关联ID，随后依策略删除或匿名化，保留必要审计及处理回执。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "租户管理员",
+      "value": "满足迁移和数据治理要求",
+      "acceptance": "在测试租户执行导出及退出，导出对象关系可还原，删除后普通查询不可读，残留副本处理按策略可追踪。",
+      "dependencies": [
+        "TR-008",
+        "TR-018",
+        "TR-038",
+        "TR-039",
+        "BR-016"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "后端及安全",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-081",
+      "type": "非功能",
+      "domain": "容量与服务质量",
+      "title": "建立可计算容量模型",
+      "description": "分别定义网关数量、活跃标签、广告频率、重复观测倍数、过滤率、包大小、峰值和保留周期，计算网络与存储需求。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "平台架构师",
+      "value": "避免仅按设备数量估算系统",
+      "acceptance": "容量表列明公式、参数来源及待测参数，示例负载能从标签数换算到网关观测、上行事件及日存储量。",
+      "dependencies": [
+        "TR-030",
+        "TR-034",
+        "TR-038",
+        "TR-040",
+        "BR-015"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "架构",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-082",
+      "type": "非功能",
+      "domain": "容量与服务质量",
+      "title": "验证云端吞吐和延迟",
+      "description": "以批准容量模型进行持续及峰值压测，分别记录接收、持久化、解析、业务可见和告警延迟分位数。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "测试人员",
+      "value": "使容量承诺具有可复现证据",
+      "acceptance": "建议云端合成验收基线为稳态10000条每秒、平均信封1KB持续30分钟，业务可见p95不超过5秒；现场试点模型另以2000条每秒为建议参考，实际参数及射频接收率独立验证。",
+      "dependencies": [
+        "TR-037",
+        "TR-040",
+        "TR-081"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "测试及后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-083",
+      "type": "非功能",
+      "domain": "容量与服务质量",
+      "title": "定义并测量平台可用性",
+      "description": "以云端关键API及接入链路的探测成功率测量可用性，分离现场网络和设备状态，并提供故障预算报告。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "平台运营人员",
+      "value": "建立可执行的服务等级",
+      "acceptance": "建议验收基线为月度99.9%，指标边界、探测间隔、计划维护与排除项先批准，再输出一个测试周期报告。",
+      "dependencies": [
+        "TR-032",
+        "TR-071",
+        "BR-015"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "运维",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-084",
+      "type": "非功能",
+      "domain": "容量与服务质量",
+      "title": "验证备份和灾难恢复",
+      "description": "数据库、配置、密钥引用和必要对象存储建立备份、恢复和一致性验证流程，明确跨区域需求。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "平台运营人员",
+      "value": "使数据恢复能力可实测",
+      "acceptance": "建议验收基线为RPO不超过15分钟、RTO不超过4小时，按批准数据范围完成一次恢复演练并记录实际值。",
+      "dependencies": [
+        "TR-037",
+        "TR-038",
+        "TR-081",
+        "BR-015"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "运维",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-085",
+      "type": "技术",
+      "domain": "安全与隐私",
+      "title": "管理端到端凭据生命周期",
+      "description": "网关使用独立凭据并支持签发、轮换、吊销及到期预警，传输采用受支持TLS版本，密钥集中受控保存。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "安全管理员",
+      "value": "控制设备接入和凭据泄露影响",
+      "acceptance": "吊销单台设备凭据后仅该设备失去接入，轮换期间按批准窗口连续服务，日志和导出不含私钥。",
+      "dependencies": [
+        "TR-008",
+        "TR-011",
+        "TR-032"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "安全及运维",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-086",
+      "type": "技术",
+      "domain": "安全与隐私",
+      "title": "保护位置与人员关联数据",
+      "description": "对人员关联、轨迹、敏感标签字段实施最小化采集、分级授权、加密存储及可配置保留，人员用途单独启用。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "租户管理员",
+      "value": "降低位置及个人数据暴露",
+      "acceptance": "默认未启用人员关联，启用后只有授权角色可查，导出及删除按数据类别策略执行并审计。",
+      "dependencies": [
+        "TR-003",
+        "TR-008",
+        "TR-038",
+        "BR-016"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "安全及后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-087",
+      "type": "技术",
+      "domain": "可观测运维",
+      "title": "提供端到端可观测指标",
+      "description": "监控接入连接、解析失败、队列积压、补传、数据年龄、命令成功、OTA失败及租户资源，日志与指标具有关联ID。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "运维人员",
+      "value": "减少仅凭在线率判断系统健康",
+      "acceptance": "模拟一个设备断数和一个解析故障，可从告警定位到租户、设备、队列及对应日志，不泄露其他租户信息。",
+      "dependencies": [
+        "TR-015",
+        "TR-036",
+        "TR-040",
+        "TR-045",
+        "TR-073"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "运维及后端",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-088",
+      "type": "非功能",
+      "domain": "安全与测试",
+      "title": "建立安全验证和依赖治理",
+      "description": "实施越权、接口滥用、输入校验、密钥泄露、升级包完整性和依赖漏洞检查，维护组件及固件物料清单。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "安全及测试人员",
+      "value": "使平台与固件安全可持续检查",
+      "acceptance": "完成跨租户及关键操作测试，发布前无未处置的已批准阻断级问题，例外必须有责任人、补偿措施及期限。",
+      "dependencies": [
+        "TR-001",
+        "TR-008",
+        "TR-045",
+        "TR-071",
+        "TR-085"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "安全及测试",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-089",
+      "type": "非功能",
+      "domain": "发布与兼容",
+      "title": "验证协议和升级兼容性",
+      "description": "维护网关固件、平台API、协议解析器及数据schema兼容矩阵，发布需完成回归、灰度及回退方案。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "研发负责人",
+      "value": "防止平台升级导致存量设备失效",
+      "acceptance": "新版本对已支持设备回放样本及核心业务流程回归通过，演示一次服务版本回退和数据兼容检查。",
+      "dependencies": [
+        "TR-023",
+        "TR-026",
+        "TR-031",
+        "TR-046",
+        "TR-071"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "研发及测试",
+      "status": "待确认"
+    },
+    {
+      "id": "TR-090",
+      "type": "非功能",
+      "domain": "故障与业务验收",
+      "title": "执行跨层故障和业务验收",
+      "description": "联合验证断网、断电、乱序、重复、时钟偏差、网关失联、消息积压及外部系统失败，同时完成资产和环境业务场景。",
+      "priority": "P0",
+      "phase": "MVP",
+      "persona": "测试及客户代表",
+      "value": "证明平台在异常下仍可解释和恢复",
+      "acceptance": "执行经批准的故障矩阵及两条端到端业务流程，每项具有注入条件、预期结果、恢复和数据对账证据，未通过项明确阻断对应功能。",
+      "dependencies": [
+        "TR-019",
+        "TR-030",
+        "TR-033",
+        "TR-035",
+        "TR-041",
+        "TR-047",
+        "TR-059",
+        "TR-062",
+        "TR-065",
+        "TR-082",
+        "TR-084",
+        "TR-089"
+      ],
+      "source_basis": "设计建议",
+      "owner_role": "测试及产品",
+      "status": "待确认"
+    }
+  ],
+  "architecture_tradeoffs": [
+    {
+      "id": "ADR-01",
+      "title": "核心平台与定位引擎分离",
+      "decision": "以广播观测、设备管理和业务事件为核心，区域定位与AoA引擎采用独立契约和可选插件。",
+      "rationale": "不同定位方法依赖不同硬件、环境与算法，单一平台不应承诺统一精度。",
+      "cost": "需维护观测、位置和业务对象之间的明确边界及版本。",
+      "verification": "在卸载定位插件时基础采集和环境业务仍能运行。"
+    },
+    {
+      "id": "ADR-02",
+      "title": "至少一次传输配合业务幂等",
+      "decision": "允许设备与消息系统重试，由事件ID及业务幂等键控制重复影响。",
+      "rationale": "网络中断常见，端到端恰好一次承诺会掩盖边界及成本。",
+      "cost": "增加幂等状态、过期窗口及对账处理，不应把多网关观测去重掉。",
+      "verification": "重复投递和离线补传不重复创建告警、工单或用量。"
+    },
+    {
+      "id": "ADR-03",
+      "title": "期望配置与设备执行结果分开",
+      "decision": "配置和命令采用异步任务，独立保存期望、投递、执行及回读状态。",
+      "rationale": "设备离线或执行失败时平台HTTP成功不能代表现场成功。",
+      "cost": "前后端需处理版本冲突、超时、有效期与取消。",
+      "verification": "下发成功但应用失败时控制台仍显示未生效。"
+    },
+    {
+      "id": "ADR-04",
+      "title": "原始观测与业务数据分层",
+      "decision": "保留有限周期原始载荷，归一化数据、最新状态和业务事件使用独立投影。",
+      "rationale": "协议迭代和问题追踪需要原始证据，业务查询需要稳定语义。",
+      "cost": "增加存储和重放实现，需按保留期及访问权限控制成本和敏感信息。",
+      "verification": "从保留区间重建投影且不重复触发实时通知。"
+    },
+    {
+      "id": "ADR-05",
+      "title": "共享服务与租户隔离同时建设",
+      "decision": "MVP采用共享基础设施加统一租户边界和配额，特殊客户后续评估独立实例或私有部署。",
+      "rationale": "首期资源效率较高，但隔离必须覆盖数据、队列、缓存、导出和异步任务。",
+      "cost": "需要系统性租户上下文和噪声邻居测试，独立部署有额外运维成本。",
+      "verification": "一个租户超额或故障不导致另一个租户越权及明显服务退化。"
+    },
+    {
+      "id": "ADR-06",
+      "title": "以设备支持矩阵约束双向能力",
+      "decision": "广播接收为基础能力，GATT、配对和终端OTA仅通过已验证适配插件启用。",
+      "rationale": "设备特征、凭据、升级协议和射频并发存在差异，扫描到设备不等于可控制设备。",
+      "cost": "新增设备需额外适配及样本验证，不能按BLE版本号自动承诺。",
+      "verification": "未知或受限设备在界面和API均不能触发未支持操作。"
+    },
+    {
+      "id": "ADR-07",
+      "title": "业务新鲜度独立于设备在线率",
+      "decision": "同时管理网关连通、遥测年龄、资产位置有效期和业务告警状态。",
+      "rationale": "网关在线时仍可能断数，标签失联后历史位置仍需保留但不能视为当前事实。",
+      "cost": "需要多状态模型、时间质量和迟到数据处理。",
+      "verification": "心跳正常无遥测、设备失联和离线补传显示不同且可解释的业务状态。"
+    },
+    {
+      "id": "ADR-08",
+      "title": "先建立运维及计量后扩展自动计费",
+      "decision": "MVP提供配额及可追溯数据，增强期实现套餐和计量，自动账单及支付按商业模式另行立项。",
+      "rationale": "先明确活跃设备和数据量的定义，可避免商业承诺与实际成本脱节。",
+      "cost": "首期需人工配置授权及报价，随后迁移到正式计量规则。",
+      "verification": "固定样本的设备用量与授权明细可核对，不因重复上传多计。"
+    }
+  ],
+  "open_questions": [
+    {
+      "id": "Q-01",
+      "question": "首期优先解决环境监测、资产可见性、人员安全还是远程设备连接，目标客户所属行业和现有损失是什么？",
+      "impact": "决定MVP业务流程、终端类型、告警及定位深度。",
+      "suggested_owner": "产品及业务负责人"
+    },
+    {
+      "id": "Q-02",
+      "question": "是自研商用多租户平台、内部平台还是采购选型，已有平台或历史系统需要兼容吗？",
+      "impact": "决定商业化、伙伴权限、迁移及部署范围。",
+      "suggested_owner": "业务负责人"
+    },
+    {
+      "id": "Q-03",
+      "question": "已有网关和标签的准确型号、固件、广播协议及供应商协议文档是否齐全？是否要求接入第三方设备？",
+      "impact": "决定兼容矩阵、适配工作量和硬件能力边界。",
+      "suggested_owner": "硬件及供应链负责人"
+    },
+    {
+      "id": "Q-04",
+      "question": "是否确实需要GATT读写、配对或终端OTA，需要操作哪些精确设备及业务命令？",
+      "impact": "决定双向连接安全、并发调度和设备适配投入。",
+      "suggested_owner": "设备及产品负责人"
+    },
+    {
+      "id": "Q-05",
+      "question": "定位要求是在场、区域、房间还是坐标，允许的刷新周期、未知比例和现场误差如何验收？",
+      "impact": "决定RSSI或AoA路径、定位器布设和算法验证成本。",
+      "suggested_owner": "解决方案及客户代表"
+    },
+    {
+      "id": "Q-06",
+      "question": "首年及三年预计网关、活跃标签、广播频率、重复观测倍数、峰值和数据保留周期分别是多少？",
+      "impact": "决定云端吞吐、边缘缓存、网络流量和存储预算。",
+      "suggested_owner": "业务及架构负责人"
+    },
+    {
+      "id": "Q-07",
+      "question": "需要公有云、单客户云实例、私有化还是离线部署？现场最长断网多久，谁负责网关网络和现场恢复？",
+      "impact": "决定部署架构、缓存、升级及服务责任。",
+      "suggested_owner": "客户IT及运维负责人"
+    },
+    {
+      "id": "Q-08",
+      "question": "位置轨迹是否关联人员，数据归属、授权目的、地域、保留、导出及删除规则由谁批准？",
+      "impact": "决定敏感数据治理和访问控制，不以通用功能替代客户规则。",
+      "suggested_owner": "数据及安全负责人"
+    },
+    {
+      "id": "Q-09",
+      "question": "需对接哪些资产、工单、告警、身份或数据分析系统，各对象的唯一主数据源是什么？",
+      "impact": "决定API、Webhook、主数据映射及集成验收。",
+      "suggested_owner": "企业架构及集成负责人"
+    },
+    {
+      "id": "Q-10",
+      "question": "商业模式按设备、站点、模块还是项目收费，交付时间、试点预算、运营责任和成功门槛是什么？",
+      "impact": "决定套餐计量、路线图、团队投入及试点是否扩张。",
+      "suggested_owner": "商业及项目负责人"
+    }
+  ],
+  "validation": {
+    "requirement_count": 112,
+    "business_count": 22,
+    "technical_count": 90,
+    "unique_ids": true,
+    "dependency_references_valid": true,
+    "dependency_graph_acyclic": true,
+    "mvp_dependencies_within_mvp": true,
+    "priority_counts": {
+      "P0": 78,
+      "P1": 32,
+      "P2": 2
+    },
+    "phase_counts": {
+      "扩展": 2,
+      "增强": 32,
+      "MVP": 78
+    }
+  }
+}

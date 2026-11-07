@@ -1,0 +1,254 @@
+[
+  {
+    "id": "S-MOKO-01",
+    "title": "MOKO IoT Device Management Platform",
+    "url": "https://www.mokosmart.com/moko-iot-dm/",
+    "checked_date": "2026-11-07",
+    "claims": [
+      "设备数据解析展示、批量注册、远程网关配置及部分标签批量升级",
+      "官网明确平台只供测试MOKOSMART设备，不可商用"
+    ],
+    "limitations": "不能作为商用SaaS许可、SLA或多租户能力的证明"
+  },
+  {
+    "id": "S-MOKO-02",
+    "title": "MKGW1 BW Pro Indoor Bluetooth Gateway",
+    "url": "https://www.mokosmart.com/mokosmart-mkgw1-gateway-iot-cloud-platform/",
+    "checked_date": "2026-11-07",
+    "claims": [
+      "BLE广播采集，WiFi或以太网上云，Web GUI及MQTT管理"
+    ],
+    "limitations": "单型号硬件与固件特性，非通用平台能力；不引用扫描上限作为建设承诺"
+  },
+  {
+    "id": "S-BLUEUP-01",
+    "title": "BlueUp bleenc platform",
+    "url": "https://www.blueupbeacons.com/bleenc/",
+    "checked_date": "2026-11-07",
+    "claims": [
+      "展示实时追踪、双向通信、批量配置与告警场景"
+    ],
+    "limitations": "营销页未给出完整API、商业条款及SLA"
+  },
+  {
+    "id": "S-BLUEUP-02",
+    "title": "BlueUp Bluetooth Low Energy products",
+    "url": "https://www.blueupbeacons.com/bluetooth-low-energy-products/",
+    "checked_date": "2026-11-07",
+    "claims": [
+      "BLE产品、BlueBeacon Manager App及Cloud管理工具，并列多种RTLS路线"
+    ],
+    "limitations": "不同产品线与平台不可合并视为同一套能力"
+  },
+  {
+    "id": "S-SIG-01",
+    "title": "Bluetooth SIG Direction Finding",
+    "url": "https://www.bluetooth.com/learn-about-bluetooth/feature-enhancements/direction-finding/",
+    "checked_date": "2026-11-07",
+    "claims": [
+      "AoA接收端使用天线阵列，AoD发射端使用天线阵列"
+    ],
+    "limitations": "技术机制说明不等于任意BLE网关可获得指定精度"
+  },
+  {
+    "id": "S-MQTT-01",
+    "title": "OASIS MQTT Version 5.0 Standard",
+    "url": "https://docs.oasis-open.org/mqtt/mqtt/v5.0/mqtt-v5.0.html",
+    "checked_date": "2026-11-07",
+    "claims": [
+      "QoS1为至少一次交付，允许重复；协议确认与业务处理语义需区分"
+    ],
+    "limitations": "传输协议不能单独保障云端业务幂等及无线采集完整性"
+  },
+  {
+    "id": "S-AWS-01",
+    "title": "AWS IoT Device Shadow service",
+    "url": "https://docs.aws.amazon.com/iot/latest/developerguide/iot-device-shadows.html",
+    "checked_date": "2026-11-07",
+    "claims": [
+      "设备状态可在离线时保留，应用期望与设备上报分离"
+    ],
+    "limitations": "仅借鉴设计机制，不要求采用AWS，不代表目标网关已经支持"
+  },
+  {
+    "id": "S-AWS-02",
+    "title": "AWS IoT Jobs configurations",
+    "url": "https://docs.aws.amazon.com/iot/latest/developerguide/jobs-configurations-details.html",
+    "checked_date": "2026-11-07",
+    "claims": [
+      "任务具备分批下发、中止条件、超时和重试配置"
+    ],
+    "limitations": "中止下发不等于设备固件自动回滚；回滚须设备另行实现"
+  },
+  {
+    "id": "S-AWS-03",
+    "title": "AWS IoT fleet provisioning",
+    "url": "https://docs.aws.amazon.com/en_en/iot/latest/developerguide/provision-wo-cert.html",
+    "checked_date": "2026-11-07",
+    "claims": [
+      "支持使用引导机制建立设备独立证书身份"
+    ],
+    "limitations": "借鉴注册与身份分离机制，生产制造及密钥保护方案另行设计"
+  },
+  {
+    "id": "S-CAS-01",
+    "title": "Cassia IoT Access Controller",
+    "url": "https://www.cassianetworks.com/products/iot-access-controller/",
+    "checked_date": "2026-11-07",
+    "claims": [
+      "集中部署管理网关与BLE设备，展示位置、漫游和负载管理能力"
+    ],
+    "limitations": "受支持型号及授权限制；容量与漫游效果须实测"
+  },
+  {
+    "id": "S-CAS-02",
+    "title": "Cassia Bluetooth SDK",
+    "url": "https://www.cassianetworks.com/products/bluetooth-sdk/",
+    "checked_date": "2026-11-07",
+    "claims": [
+      "REST接口支持本地及云端接入和远程BLE设备交互，可对接自有云"
+    ],
+    "limitations": "需要开发者接入流程；终端私有服务与安全协议仍需适配"
+  },
+  {
+    "id": "S-CAS-03",
+    "title": "桂花网技术支持和开发集成方式",
+    "url": "https://www.cassianetworks.com.cn/support/",
+    "checked_date": "2026-11-07",
+    "claims": [
+      "区分面向双向交互的主路API模式与面向广播采集的MQTT旁路模式；可在服务器、AC或网关侧承载应用"
+    ],
+    "limitations": "属于官方集成路线说明，不代表任意型号和版本均具备所有特性"
+  },
+  {
+    "id": "S-JJ-01",
+    "title": "Jinju JJ IS40BXPA Indoor AoA Gateway",
+    "url": "https://www.rpilink.com/products/product-12/",
+    "checked_date": "2026-11-07",
+    "claims": [
+      "站点自署Jinju Intelligence Beijing；AoA阵列网关与ACServer配合，ACServer进行位置计算、设备管理和数据推送",
+      "公开Socket、WebSocket、MQTT、HTTP推送方式及配置和升级入口"
+    ],
+    "limitations": "产品介绍未完整公开商用许可、租户隔离、安全和API鉴权；精度为无遮挡条件标称，不作实测承诺"
+  },
+  {
+    "id": "S-JJ-02",
+    "title": "Jinju BLE AoA Positioning solution",
+    "url": "https://www.rpilink.com/solutions/ble-aoa/",
+    "checked_date": "2026-11-07",
+    "claims": [
+      "兼容标签、阵列网关、位置引擎和布点标定共同构成定位系统"
+    ],
+    "limitations": "网页架构为概念示意；不能把模拟数据当性能，需明确所指金桔主体及交付版本"
+  },
+  {
+    "id": "S-MIN-01",
+    "title": "Minew IoT Developer Starter Kits",
+    "url": "https://www.minew.com/iot-developer-starter-kits/",
+    "checked_date": "2026-11-07",
+    "claims": [
+      "按办公、医院、仓储等场景组合标签传感器与网关；另列AoA组合和TagCloud 3.0远程批量配置组合"
+    ],
+    "limitations": "不同组合非同一能力集合；套件介绍不等于商用SLA或私有化许可"
+  },
+  {
+    "id": "S-MIN-02",
+    "title": "Minew IoT Gateway overview",
+    "url": "https://www.minew.com/iot-gateway/",
+    "checked_date": "2026-11-07",
+    "claims": [
+      "多型号网关支持不同回传方式；可通过自有或第三方云进行网关监测、配置和故障排查"
+    ],
+    "limitations": "按具体型号验证，协议名称不单独证明端到端安全"
+  },
+  {
+    "id": "S-MIN-03",
+    "title": "Minew MBT02 Connectable Asset Tag",
+    "url": "https://www.minew.com/product/mbt02-connectable-asset-tag/",
+    "checked_date": "2026-11-07",
+    "claims": [
+      "可连接资产标签支持批量管理、远程配置和OTA；TagCloud 3.0被列为演示平台"
+    ],
+    "limitations": "此标签能力不能外推到所有Minew终端，云平台商业使用条件需确认"
+  },
+  {
+    "id": "S-KON-01",
+    "title": "Kontakt io Products and Architecture",
+    "url": "https://kontakt.io/products/",
+    "checked_date": "2026-11-07",
+    "claims": [
+      "产品组合包括标签传感器、网关或兼容AP、设备管理和位置API以及资产安全等应用"
+    ],
+    "limitations": "不同应用和硬件需单独选配；房间定位可组合IR等能力，非仅靠通用BLE RSSI"
+  },
+  {
+    "id": "S-KON-02",
+    "title": "Kontakt io Care Operations and Asset Management",
+    "url": "https://kontakt.io/solutions/healthcare/care-operations/",
+    "checked_date": "2026-11-07",
+    "claims": [
+      "面向医疗资产运营，展示房间级可见性、云服务、角色权限及业务集成"
+    ],
+    "limitations": "行业方案及合规陈述不能直接继承为本项目能力；许可和支持以合同确认"
+  },
+  {
+    "id": "S-QUU-01",
+    "title": "Quuppa QPE APIs",
+    "url": "https://www.quuppa.com/documentation/QPE/topics/QPE_API.html",
+    "checked_date": "2026-11-07",
+    "claims": [
+      "QPE提供位置、传感器和遥测输出、标签命令及基础设施监控接口，支持REST或UDP推送"
+    ],
+    "limitations": "完整API字段随版本并在控制台或客户门户提供；非任意BLE广播透传平台"
+  },
+  {
+    "id": "S-QUU-02",
+    "title": "Quuppa API Data Formats and Output Targets",
+    "url": "https://www.quuppa.com/documentation/QSP/topics/QSP_udp_logging_api.html",
+    "checked_date": "2026-11-07",
+    "claims": [
+      "区分标签信息、位置、定位器与引擎数据，输出包含坐标系、区域及健康信息"
+    ],
+    "limitations": "数据格式与引擎版本相关，需匹配项目许可及部署条件"
+  },
+  {
+    "id": "S-ARU-01",
+    "title": "HPE Aruba AOS10 IoT operations",
+    "url": "https://arubanetworking.hpe.com/techdocs/aos/aos10/services/iot-ops/",
+    "checked_date": "2026-11-07",
+    "claims": [
+      "AP采集IoT数据，经IoT Connector进行聚合、边缘处理和伙伴应用转发，Central显示设备元数据"
+    ],
+    "limitations": "VM或AP连接器及许可证、型号、版本有限制；接入不等于通用GATT或高精度位置引擎"
+  },
+  {
+    "id": "S-ARU-02",
+    "title": "Aruba official IoT Operations BLE example",
+    "url": "https://github.com/aruba/aruba-iotops-example-ble",
+    "checked_date": "2026-11-07",
+    "claims": [
+      "官方示例展示设备分类、边缘计算和数据传输的伙伴应用实现"
+    ],
+    "limitations": "示例代码不等于生产SLA，需要伙伴接入与测试"
+  },
+  {
+    "id": "S-CIS-01",
+    "title": "Cisco Spaces IoT Service Configuration Guide Wireless",
+    "url": "https://www.cisco.com/c/en/us/td/docs/wireless/spaces/iot-services-wireless/b_iot_services/m_overview.html",
+    "checked_date": "2026-11-07",
+    "claims": [
+      "复用受支持AP、控制器与Connector，支持设备认领、管理与遥测；区分基础与装有IOx应用的高级BLE网关"
+    ],
+    "limitations": "扫描、发射与高级连接配置因AP及应用而异；按兼容矩阵和许可确认"
+  },
+  {
+    "id": "S-CIS-02",
+    "title": "Cisco Spaces Indoor IoT Services Setup Guide",
+    "url": "https://spaces.cisco.com/setupguide/app-iot-services/",
+    "checked_date": "2026-11-07",
+    "claims": [
+      "提供AP中BLE网关激活监控、设备数据接入及通过API支持行业应用的路径"
+    ],
+    "limitations": "现有企业网络可复用程度需现场调查，不能默认零新增硬件或零授权成本"
+  }
+]

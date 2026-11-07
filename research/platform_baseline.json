@@ -1,0 +1,15 @@
+{
+  "date":"2026-11-07",
+  "assumptions":["研究对象为企业级蓝牙低功耗 BLE 网关平台","建设目标暂按可商用多租户平台","优先资产可见性和环境监测，定位与GATT作为分阶段能力","本文性能数值均为拟议验收基线，不是竞品实测或合同承诺"],
+  "sources":[
+    {"id":"S-MOKO-01","title":"MOKO IoT Device Management Platform","url":"https://www.mokosmart.com/moko-iot-dm/","checked_date":"2026-11-07","claims":["设备数据解析展示、批量注册、远程网关配置及部分标签批量升级","官网明确平台只供测试MOKOSMART设备，不可商用"],"limitations":"不能作为商用SaaS许可、SLA或多租户能力的证明"},
+    {"id":"S-MOKO-02","title":"MKGW1 BW Pro Indoor Bluetooth Gateway","url":"https://www.mokosmart.com/mokosmart-mkgw1-gateway-iot-cloud-platform/","checked_date":"2026-11-07","claims":["BLE广播采集，WiFi或以太网上云，Web GUI及MQTT管理"],"limitations":"单型号硬件与固件特性，非通用平台能力；不引用扫描上限作为建设承诺"},
+    {"id":"S-BLUEUP-01","title":"BlueUp bleenc platform","url":"https://www.blueupbeacons.com/bleenc/","checked_date":"2026-11-07","claims":["展示实时追踪、双向通信、批量配置与告警场景"],"limitations":"营销页未给出完整API、商业条款及SLA"},
+    {"id":"S-BLUEUP-02","title":"BlueUp Bluetooth Low Energy products","url":"https://www.blueupbeacons.com/bluetooth-low-energy-products/","checked_date":"2026-11-07","claims":["BLE产品、BlueBeacon Manager App及Cloud管理工具，并列多种RTLS路线"],"limitations":"不同产品线与平台不可合并视为同一套能力"},
+    {"id":"S-SIG-01","title":"Bluetooth SIG Direction Finding","url":"https://www.bluetooth.com/learn-about-bluetooth/feature-enhancements/direction-finding/","checked_date":"2026-11-07","claims":["AoA接收端使用天线阵列，AoD发射端使用天线阵列"],"limitations":"技术机制说明不等于任意BLE网关可获得指定精度"},
+    {"id":"S-MQTT-01","title":"OASIS MQTT Version 5.0 Standard","url":"https://docs.oasis-open.org/mqtt/mqtt/v5.0/mqtt-v5.0.html","checked_date":"2026-11-07","claims":["QoS1为至少一次交付，允许重复；协议确认与业务处理语义需区分"],"limitations":"传输协议不能单独保障云端业务幂等及无线采集完整性"},
+    {"id":"S-AWS-01","title":"AWS IoT Device Shadow service","url":"https://docs.aws.amazon.com/iot/latest/developerguide/iot-device-shadows.html","checked_date":"2026-11-07","claims":["设备状态可在离线时保留，应用期望与设备上报分离"],"limitations":"仅借鉴设计机制，不要求采用AWS，不代表目标网关已经支持"},
+    {"id":"S-AWS-02","title":"AWS IoT Jobs configurations","url":"https://docs.aws.amazon.com/iot/latest/developerguide/jobs-configurations-details.html","checked_date":"2026-11-07","claims":["任务具备分批下发、中止条件、超时和重试配置"],"limitations":"中止下发不等于设备固件自动回滚；回滚须设备另行实现"},
+    {"id":"S-AWS-03","title":"AWS IoT fleet provisioning","url":"https://docs.aws.amazon.com/en_en/iot/latest/developerguide/provision-wo-cert.html","checked_date":"2026-11-07","claims":["支持使用引导机制建立设备独立证书身份"],"limitations":"借鉴注册与身份分离机制，生产制造及密钥保护方案另行设计"}
+  ]
+}
