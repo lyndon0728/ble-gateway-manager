@@ -1,0 +1,12 @@
+# Service credential is for the platform only; never install it on a gateway.
+user platform
+topic readwrite gw/v1/ns_local/#
+topic readwrite customer/v1/#
+
+# MQTT username MUST equal the provisioned gateway ID.
+pattern write gw/v1/ns_local/%u/telemetry
+pattern write gw/v1/ns_local/%u/command-results
+pattern write gw/v1/ns_local/%u/status
+pattern read gw/v1/ns_local/%u/telemetry-ack
+pattern read gw/v1/ns_local/%u/commands
+pattern read gw/v1/ns_local/%u/result-ack

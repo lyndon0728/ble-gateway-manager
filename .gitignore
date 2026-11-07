@@ -1,5 +1,16 @@
 # Dependencies, generated code and local caches
 node_modules
+.tools/
+/server/.local/
+/server/.testdata/
+/server/dist/
+/server/vendor/
+/server/bin/
+/server/deploy/data/
+/server/deploy/secrets/
+/server/deploy/tls/
+/server/deploy/mosquitto/passwords
+/server/deploy/mosquitto/data/
 __pycache__/
 *.py[cod]
 dist/

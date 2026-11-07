@@ -1,0 +1,13 @@
+.git
+data
+sim-data
+bin
+dist
+secrets
+*.key
+*.bgb
+deploy/data
+deploy/secrets
+deploy/tls
+deploy/mosquitto/data
+deploy/mosquitto/passwords

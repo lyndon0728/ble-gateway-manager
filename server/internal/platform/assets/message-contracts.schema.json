@@ -1,0 +1,4058 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.invalid/ble-gateway/1.7.1/contracts.json",
+  "title": "BLE gateway protocol v1 - server contract 1.7.1",
+  "$defs": {
+    "Error": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "traceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "field",
+              "reason"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 100
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable",
+        "traceId"
+      ],
+      "additionalProperties": false
+    },
+    "ErrorResponse": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "$ref": "#/$defs/Error"
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "additionalProperties": false,
+      "examples": [
+        {
+          "error": {
+            "code": "IDEMPOTENCY_CONFLICT",
+            "message": "Same key with different request",
+            "retryable": false,
+            "traceId": "trace_001"
+          }
+        }
+      ]
+    },
+    "RoleBinding": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": [
+            "ADMIN",
+            "DEVICE_ADMIN",
+            "DEVELOPER",
+            "OPERATOR",
+            "AUDITOR"
+          ]
+        },
+        "scopeId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        }
+      },
+      "required": [
+        "role",
+        "scopeId"
+      ],
+      "additionalProperties": false
+    },
+    "Principal": {
+      "type": "object",
+      "properties": {
+        "principalId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "USER",
+            "APPLICATION",
+            "SERVICE"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "roleBindings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RoleBinding"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
+          "readOnly": true,
+          "description": "Effective permissions derived from fixed role table; not writable."
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "ACTIVE",
+            "DISABLED"
+          ]
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "principalId",
+        "type",
+        "name",
+        "roleBindings",
+        "scopes",
+        "state",
+        "revision"
+      ],
+      "additionalProperties": false,
+      "description": "Role, action scope and namespace/group object checks all apply."
+    },
+    "PrincipalCreate": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "USER",
+            "APPLICATION"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "roleBindings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RoleBinding"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "password": {
+          "type": "string",
+          "minLength": 12,
+          "maxLength": 256,
+          "writeOnly": true
+        }
+      },
+      "required": [
+        "type",
+        "name",
+        "roleBindings"
+      ],
+      "additionalProperties": false,
+      "description": "Internal SERVICE principals provisioned only by trusted installer; fixed role permissions, no custom scopes.",
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "USER"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "password"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "password"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "PrincipalPatch": {
+      "type": "object",
+      "properties": {
+        "roleBindings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RoleBinding"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "ACTIVE",
+            "DISABLED"
+          ]
+        },
+        "password": {
+          "type": "string",
+          "minLength": 12,
+          "maxLength": 256,
+          "writeOnly": true
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "minProperties": 1
+    },
+    "Login": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "password": {
+          "type": "string",
+          "writeOnly": true,
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "name",
+        "password"
+      ],
+      "additionalProperties": false
+    },
+    "Session": {
+      "type": "object",
+      "properties": {
+        "principal": {
+          "$ref": "#/$defs/Principal"
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "csrfToken": {
+          "type": "string",
+          "readOnly": true
+        }
+      },
+      "required": [
+        "principal",
+        "expiresAt",
+        "csrfToken"
+      ],
+      "additionalProperties": false
+    },
+    "CredentialCreate": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "label",
+        "expiresAt"
+      ],
+      "additionalProperties": false
+    },
+    "CredentialIssued": {
+      "type": "object",
+      "properties": {
+        "credentialId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "token": {
+          "type": "string",
+          "readOnly": true
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "credentialId",
+        "token",
+        "expiresAt"
+      ],
+      "additionalProperties": false,
+      "description": "Only displayed on creation; never stored in idempotency response, audit or logs."
+    },
+    "CredentialMetadata": {
+      "type": "object",
+      "properties": {
+        "credentialId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "principalId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "label": {
+          "type": "string"
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "ACTIVE",
+            "REVOKED",
+            "EXPIRED"
+          ]
+        }
+      },
+      "required": [
+        "credentialId",
+        "principalId",
+        "label",
+        "expiresAt",
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "ResourceScope": {
+      "type": "object",
+      "properties": {
+        "scopeId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "INSTANCE",
+            "PROJECT",
+            "GROUP"
+          ]
+        },
+        "parentScopeId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "ACTIVE",
+            "ARCHIVED"
+          ]
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "scopeId",
+        "kind",
+        "name",
+        "state",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "ResourceScopeCreate": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "PROJECT",
+            "GROUP"
+          ]
+        },
+        "parentScopeId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        }
+      },
+      "required": [
+        "kind",
+        "parentScopeId",
+        "name"
+      ],
+      "additionalProperties": false,
+      "description": "INSTANCE created during bootstrap. PROJECT parent INSTANCE; GROUP parent PROJECT. Server checks authorized parent and duplicate sibling name."
+    },
+    "ResourceScopePatch": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "ACTIVE",
+            "ARCHIVED"
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "Parent immutable. Archive only after active child scopes/gateway assignments and bindings resolved; conflict409.",
+      "minProperties": 1
+    },
+    "Gateway": {
+      "type": "object",
+      "properties": {
+        "gatewayId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "namespaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "sn": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "hardwareVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "firmwareVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "displayName": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "groupId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "UNCLAIMED",
+            "ACTIVE",
+            "DISABLED",
+            "RETIRED"
+          ]
+        },
+        "online": {
+          "type": "boolean"
+        },
+        "lastSeenAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "gatewayId",
+        "namespaceId",
+        "sn",
+        "model",
+        "hardwareVersion",
+        "state",
+        "online",
+        "capabilities",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "GatewayPatch": {
+      "type": "object",
+      "properties": {
+        "groupId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "ACTIVE",
+            "DISABLED",
+            "RETIRED"
+          ]
+        },
+        "displayName": {
+          "type": "string",
+          "maxLength": 100
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "minProperties": 1
+    },
+    "GatewayImport": {
+      "type": "object",
+      "properties": {
+        "artifactId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "groupId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "dryRun": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "artifactId",
+        "dryRun"
+      ],
+      "additionalProperties": false
+    },
+    "Configuration": {
+      "type": "object",
+      "properties": {
+        "gatewayId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "desiredRevision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "reportedRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "desired": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "reported": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "lastTaskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        }
+      },
+      "required": [
+        "gatewayId",
+        "desiredRevision",
+        "reportedRevision",
+        "desired",
+        "reported"
+      ],
+      "additionalProperties": false
+    },
+    "ConfigurationUpdate": {
+      "type": "object",
+      "properties": {
+        "expectedReportedRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "configuration": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "expectedReportedRevision",
+        "configuration",
+        "expiresAt"
+      ],
+      "additionalProperties": false,
+      "description": "Validate configuration against SKU capability schema; reject unknown/unsupported fields."
+    },
+    "TaskParamsConfigure": {
+      "type": "object",
+      "properties": {
+        "configuration": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "expectedReportedRevision": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "configuration",
+        "expectedReportedRevision"
+      ],
+      "additionalProperties": false
+    },
+    "TaskParamsReboot": {
+      "type": "object",
+      "properties": {
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "TaskParamsDiagnostics": {
+      "type": "object",
+      "properties": {
+        "profile": {
+          "type": "string",
+          "enum": [
+            "HEALTH",
+            "NETWORK",
+            "BLE"
+          ]
+        },
+        "durationSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60
+        }
+      },
+      "required": [
+        "profile",
+        "durationSeconds"
+      ],
+      "additionalProperties": false
+    },
+    "TaskParamsGattRead": {
+      "type": "object",
+      "properties": {
+        "deviceAddress": {
+          "type": "string"
+        },
+        "addressType": {
+          "type": "string",
+          "enum": [
+            "PUBLIC",
+            "RANDOM"
+          ]
+        },
+        "serviceUuid": {
+          "type": "string"
+        },
+        "characteristicUuid": {
+          "type": "string"
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 30000
+        }
+      },
+      "required": [
+        "deviceAddress",
+        "addressType",
+        "serviceUuid",
+        "characteristicUuid",
+        "timeoutMs"
+      ],
+      "additionalProperties": false
+    },
+    "TaskParamsGattWrite": {
+      "type": "object",
+      "properties": {
+        "deviceAddress": {
+          "type": "string"
+        },
+        "addressType": {
+          "type": "string",
+          "enum": [
+            "PUBLIC",
+            "RANDOM"
+          ]
+        },
+        "serviceUuid": {
+          "type": "string"
+        },
+        "characteristicUuid": {
+          "type": "string"
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 30000
+        },
+        "valueBase64": {
+          "type": "string",
+          "contentEncoding": "base64",
+          "maxLength": 4096
+        },
+        "writeMode": {
+          "type": "string",
+          "enum": [
+            "WITH_RESPONSE",
+            "WITHOUT_RESPONSE"
+          ]
+        },
+        "verification": {
+          "type": "string",
+          "enum": [
+            "READBACK",
+            "APPLICATION_REPLY",
+            "NONE"
+          ]
+        }
+      },
+      "required": [
+        "deviceAddress",
+        "addressType",
+        "serviceUuid",
+        "characteristicUuid",
+        "timeoutMs",
+        "valueBase64",
+        "writeMode",
+        "verification"
+      ],
+      "additionalProperties": false
+    },
+    "TaskParamsFirmware": {
+      "type": "object",
+      "properties": {
+        "artifactId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "expectedFirmwareVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "maintenanceWindowId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        }
+      },
+      "required": [
+        "artifactId",
+        "expectedFirmwareVersion"
+      ],
+      "additionalProperties": false
+    },
+    "TaskRequest": {
+      "type": "object",
+      "properties": {
+        "gatewayId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "CONFIGURE",
+            "REBOOT",
+            "DIAGNOSTICS",
+            "GATT_READ",
+            "GATT_WRITE",
+            "FIRMWARE_UPGRADE"
+          ]
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "gatewayId",
+        "type",
+        "parameters",
+        "expiresAt"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "CONFIGURE"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "$ref": "#/$defs/TaskParamsConfigure"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "REBOOT"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "$ref": "#/$defs/TaskParamsReboot"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "DIAGNOSTICS"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "$ref": "#/$defs/TaskParamsDiagnostics"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "GATT_READ"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "$ref": "#/$defs/TaskParamsGattRead"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "GATT_WRITE"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "$ref": "#/$defs/TaskParamsGattWrite"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "FIRMWARE_UPGRADE"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "$ref": "#/$defs/TaskParamsFirmware"
+              }
+            }
+          }
+        }
+      ],
+      "examples": [
+        {
+          "gatewayId": "gw_demo",
+          "type": "REBOOT",
+          "parameters": {
+            "reason": "maintenance test"
+          },
+          "expiresAt": "2026-11-07T10:05:00Z"
+        }
+      ]
+    },
+    "Task": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "gatewayId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "CONFIGURE",
+            "REBOOT",
+            "DIAGNOSTICS",
+            "GATT_READ",
+            "GATT_WRITE",
+            "FIRMWARE_UPGRADE"
+          ]
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "QUEUED",
+            "DISPATCHED",
+            "ACCEPTED",
+            "EXECUTING",
+            "SUCCEEDED",
+            "FAILED",
+            "UNKNOWN",
+            "EXPIRED",
+            "CANCELLED"
+          ]
+        },
+        "executionStage": {
+          "type": "string",
+          "enum": [
+            "NONE",
+            "DEVICE_ACCEPTED",
+            "EXECUTING",
+            "APPLIED",
+            "VERIFIED"
+          ]
+        },
+        "requestDigest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "errorCode": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "taskId",
+        "gatewayId",
+        "type",
+        "state",
+        "executionStage",
+        "requestDigest",
+        "createdAt",
+        "expiresAt",
+        "revision"
+      ],
+      "additionalProperties": false,
+      "examples": [
+        {
+          "taskId": "task_demo",
+          "gatewayId": "gw_demo",
+          "type": "REBOOT",
+          "state": "QUEUED",
+          "executionStage": "NONE",
+          "requestDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+          "createdAt": "2026-11-07T10:00:00Z",
+          "expiresAt": "2026-11-07T10:05:00Z",
+          "revision": 1
+        }
+      ]
+    },
+    "CancelRequest": {
+      "type": "object",
+      "properties": {
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "Operation": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "QUEUED",
+            "RUNNING",
+            "SUCCEEDED",
+            "FAILED",
+            "CANCELLED"
+          ]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "progress": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "resourceIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          }
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "errorCode": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "operationId",
+        "kind",
+        "state",
+        "createdAt",
+        "progress",
+        "resourceIds"
+      ],
+      "additionalProperties": false
+    },
+    "Artifact": {
+      "type": "object",
+      "properties": {
+        "artifactId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "DEVICE_MANIFEST",
+            "FIRMWARE",
+            "PLATFORM_PACKAGE"
+          ]
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "sizeBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "signatureState": {
+          "type": "string",
+          "enum": [
+            "PENDING",
+            "VERIFIED",
+            "REJECTED"
+          ]
+        },
+        "compatibleModels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "required": [
+        "artifactId",
+        "kind",
+        "sha256",
+        "sizeBytes",
+        "signatureState"
+      ],
+      "additionalProperties": false
+    },
+    "Parser": {
+      "type": "object",
+      "properties": {
+        "parserId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "modelIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "protocolVersions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        },
+        "schemaVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "implementationDigest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "INSTALLED",
+            "DISABLED"
+          ]
+        },
+        "maxInputBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxOutputRecords": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "parserId",
+        "version",
+        "modelIds",
+        "protocolVersions",
+        "schemaVersion",
+        "implementationDigest",
+        "state",
+        "maxInputBytes",
+        "maxOutputRecords"
+      ],
+      "additionalProperties": false
+    },
+    "ParserTest": {
+      "type": "object",
+      "properties": {
+        "payloadBase64": {
+          "type": "string",
+          "contentEncoding": "base64",
+          "maxLength": 87384
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "expected": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "maxItems": 100
+        }
+      },
+      "required": [
+        "payloadBase64",
+        "metadata"
+      ],
+      "additionalProperties": false
+    },
+    "ParserTestResult": {
+      "type": "object",
+      "properties": {
+        "passed": {
+          "type": "boolean"
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "maxItems": 100
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Error"
+          }
+        },
+        "cpuTimeMicros": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "implementationDigest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "passed",
+        "outputs",
+        "errors",
+        "cpuTimeMicros",
+        "implementationDigest"
+      ],
+      "additionalProperties": false
+    },
+    "Rule": {
+      "type": "object",
+      "properties": {
+        "ruleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "match": {
+          "type": "object",
+          "properties": {
+            "modelIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1
+            },
+            "groupIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            "protocolVersions": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            },
+            "packetTypes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "modelIds"
+          ],
+          "additionalProperties": false
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "PASSTHROUGH",
+            "DECODE",
+            "QUARANTINE"
+          ]
+        },
+        "parserId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "parserVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "schemaVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "targetVersions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "targetId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+              },
+              "version": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "mappingVersion": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "required": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "targetId",
+              "version",
+              "mappingVersion",
+              "required"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 8
+        }
+      },
+      "required": [
+        "ruleId",
+        "priority",
+        "match",
+        "action",
+        "targetVersions"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "const": "DECODE"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "parserId",
+              "parserVersion",
+              "schemaVersion"
+            ],
+            "properties": {
+              "targetVersions": {
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "const": "PASSTHROUGH"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "targetVersions": {
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "const": "QUARANTINE"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "targetVersions": {
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      ]
+    },
+    "RuleBundleCreate": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Rule"
+          },
+          "minItems": 1,
+          "maxItems": 200
+        },
+        "defaultAction": {
+          "type": "string",
+          "enum": [
+            "QUARANTINE"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500
+        }
+      },
+      "required": [
+        "name",
+        "rules",
+        "defaultAction"
+      ],
+      "additionalProperties": false,
+      "examples": [
+        {
+          "name": "demo route",
+          "defaultAction": "QUARANTINE",
+          "rules": [
+            {
+              "ruleId": "rule_demo",
+              "priority": 100,
+              "match": {
+                "modelIds": [
+                  "DEMO-GW"
+                ],
+                "protocolVersions": [
+                  "demo-v1"
+                ],
+                "packetTypes": [
+                  "sensor"
+                ]
+              },
+              "action": "DECODE",
+              "parserId": "demo_sensor",
+              "parserVersion": "1.0.0",
+              "schemaVersion": "temperature-1",
+              "targetVersions": [
+                {
+                  "targetId": "target_demo",
+                  "version": "1",
+                  "mappingVersion": "map-1",
+                  "required": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "RuleBundle": {
+      "type": "object",
+      "properties": {
+        "bundleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "contentDigest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "DRAFT",
+            "VALIDATED",
+            "RELEASED",
+            "RETIRED"
+          ]
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Rule"
+          }
+        },
+        "defaultAction": {
+          "type": "string",
+          "enum": [
+            "QUARANTINE"
+          ]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "dependencyDigests": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      },
+      "required": [
+        "bundleId",
+        "contentDigest",
+        "state",
+        "rules",
+        "defaultAction",
+        "createdAt",
+        "dependencyDigests"
+      ],
+      "additionalProperties": false,
+      "description": "Content immutable; edit creates new ID. State lifecycle does not mutate manifest."
+    },
+    "BundleActivation": {
+      "type": "object",
+      "properties": {
+        "dataNodeId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "expectedActivationRevision": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "dataNodeId",
+        "expectedActivationRevision"
+      ],
+      "additionalProperties": false,
+      "description": "One active bundle per namespace on data node. Group canary rollout belongs to Rule.match.groupIds inside a complete bundle; unaffected groups retain rules pointing to old parsers."
+    },
+    "SecretCreate": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "HTTP_BEARER",
+            "MQTT_PASSWORD",
+            "CLIENT_CERTIFICATE"
+          ]
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 131072,
+          "writeOnly": true
+        }
+      },
+      "required": [
+        "label",
+        "kind",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "SecretReference": {
+      "type": "object",
+      "properties": {
+        "secretRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "secretRef",
+        "kind",
+        "createdAt"
+      ],
+      "additionalProperties": false
+    },
+    "TargetVersionCreate": {
+      "type": "object",
+      "properties": {
+        "protocol": {
+          "type": "string",
+          "enum": [
+            "HTTP",
+            "MQTT"
+          ]
+        },
+        "endpoint": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "secretRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "tlsTrustRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "ackMode": {
+          "type": "string",
+          "enum": [
+            "HTTP_DURABLE_RESPONSE",
+            "MQTT_APPLICATION_ACK"
+          ]
+        },
+        "payloadTopic": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "ackTopic": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "maxBatchEvents": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        },
+        "maxInflightEvents": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        },
+        "maxQueueBytes": {
+          "type": "integer",
+          "minimum": 1048576
+        },
+        "mappingVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "mapping": {
+          "$ref": "#/$defs/OutputMapping"
+        }
+      },
+      "required": [
+        "protocol",
+        "endpoint",
+        "ackMode",
+        "maxBatchEvents",
+        "maxInflightEvents",
+        "maxQueueBytes",
+        "mappingVersion"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "protocol": {
+                "const": "MQTT"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "payloadTopic",
+              "ackTopic"
+            ],
+            "properties": {
+              "ackMode": {
+                "const": "MQTT_APPLICATION_ACK"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "ackMode": {
+                "const": "HTTP_DURABLE_RESPONSE"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "TargetCreate": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "configuration": {
+          "$ref": "#/$defs/TargetVersionCreate"
+        }
+      },
+      "required": [
+        "name",
+        "configuration"
+      ],
+      "additionalProperties": false
+    },
+    "Target": {
+      "type": "object",
+      "properties": {
+        "targetId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "name": {
+          "type": "string"
+        },
+        "versions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "configuration": {
+                "$ref": "#/$defs/TargetVersionCreate"
+              },
+              "contentDigest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "version",
+              "configuration",
+              "contentDigest"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "targetId",
+        "name",
+        "versions"
+      ],
+      "additionalProperties": false
+    },
+    "RawEvent": {
+      "type": "object",
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "capturedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "timeQuality": {
+          "type": "string",
+          "enum": [
+            "SYNCED",
+            "UNSYNCED",
+            "ESTIMATED"
+          ]
+        },
+        "sourceDeviceId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "protocolHint": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "payloadBase64": {
+          "type": "string",
+          "contentEncoding": "base64",
+          "maxLength": 87384
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "eventId",
+        "timeQuality",
+        "payloadBase64"
+      ],
+      "additionalProperties": false,
+      "description": "capturedAt omitted if source has no observation timestamp; mark UNSYNCED/ESTIMATED as appropriate. Server receipt time never masquerades as capture time."
+    },
+    "IngressBatch": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0"
+        },
+        "namespaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "gatewayId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "batchId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RawEvent"
+          },
+          "minItems": 1,
+          "maxItems": 200
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "namespaceId",
+        "gatewayId",
+        "batchId",
+        "events"
+      ],
+      "additionalProperties": false,
+      "description": "Authenticated identity must match namespaceId/gatewayId. Decoded payload <=64KiB/event, <=256KiB/batch; encoded HTTP entity <=1MiB. Enforce cross-field limits before acceptance.",
+      "examples": [
+        {
+          "schemaVersion": "1.0",
+          "namespaceId": "ns_demo",
+          "gatewayId": "gw_demo",
+          "batchId": "batch_001",
+          "events": [
+            {
+              "eventId": "boot_a:1",
+              "capturedAt": "2026-11-07T10:00:00Z",
+              "timeQuality": "SYNCED",
+              "sourceDeviceId": "sensor_demo",
+              "protocolHint": "demo-v1",
+              "payloadBase64": "CcQD6A==",
+              "sequence": 1
+            }
+          ]
+        }
+      ]
+    },
+    "IngressAckItem": {
+      "type": "object",
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "ACCEPTED",
+            "DUPLICATE",
+            "REJECTED_RETRYABLE",
+            "REJECTED_PERMANENT"
+          ]
+        },
+        "code": {
+          "type": "string"
+        },
+        "retryAfterMs": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "eventId",
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "IngressAck": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0"
+        },
+        "namespaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "gatewayId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "batchId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "receiverId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "durability": {
+          "type": "string",
+          "enum": [
+            "RAW_PERSISTED"
+          ]
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/IngressAckItem"
+          },
+          "minItems": 1,
+          "maxItems": 200
+        },
+        "traceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "namespaceId",
+        "gatewayId",
+        "batchId",
+        "receiverId",
+        "durability",
+        "items",
+        "traceId"
+      ],
+      "additionalProperties": false,
+      "description": "Every request event appears once. Only ACCEPTED/DUPLICATE release matching gateway payload. Custody ACK does not imply parsed or delivered.",
+      "examples": [
+        {
+          "schemaVersion": "1.0",
+          "namespaceId": "ns_demo",
+          "gatewayId": "gw_demo",
+          "batchId": "batch_001",
+          "receiverId": "instance_demo",
+          "durability": "RAW_PERSISTED",
+          "items": [
+            {
+              "eventId": "boot_a:1",
+              "status": "ACCEPTED"
+            }
+          ],
+          "traceId": "trace_001"
+        }
+      ]
+    },
+    "EventView": {
+      "type": "object",
+      "properties": {
+        "namespaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "gatewayId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "eventId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "acceptedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "bundleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "ACCEPTED_RAW",
+            "PROCESSED",
+            "DELIVERED",
+            "QUARANTINED",
+            "FILTERED",
+            "TERMINATED"
+          ]
+        },
+        "latestProcessingRevision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "rawAvailable": {
+          "type": "boolean"
+        },
+        "raw": {
+          "$ref": "#/$defs/RawEvent"
+        },
+        "processing": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "processingRevision": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "PENDING",
+                  "PROCESSING",
+                  "RETRY_WAIT",
+                  "SUCCEEDED",
+                  "QUARANTINED",
+                  "FILTERED",
+                  "TERMINATED"
+                ]
+              },
+              "bundleId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+              },
+              "outputIds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                }
+              },
+              "errorCode": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "processingRevision",
+              "state",
+              "bundleId",
+              "outputIds"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "namespaceId",
+        "gatewayId",
+        "eventId",
+        "acceptedAt",
+        "bundleId",
+        "state",
+        "latestProcessingRevision",
+        "rawAvailable",
+        "processing"
+      ],
+      "additionalProperties": false
+    },
+    "QuarantineItem": {
+      "type": "object",
+      "properties": {
+        "namespaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "gatewayId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "eventId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "processingRevision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "errorCode": {
+          "type": "string"
+        },
+        "bundleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "rawAvailable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "namespaceId",
+        "gatewayId",
+        "eventId",
+        "processingRevision",
+        "errorCode",
+        "bundleId",
+        "createdAt",
+        "rawAvailable"
+      ],
+      "additionalProperties": false
+    },
+    "EventSelector": {
+      "type": "object",
+      "properties": {
+        "gatewayIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "minItems": 1,
+          "maxItems": 100
+        },
+        "from": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "to": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "errorCodes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 30
+        },
+        "eventIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "maxItems": 200
+        }
+      },
+      "required": [
+        "gatewayIds",
+        "from",
+        "to"
+      ],
+      "additionalProperties": false,
+      "description": "Range [from,to); bounded range and rows. Snapshot event selection when creating job."
+    },
+    "ReprocessPreviewRequest": {
+      "type": "object",
+      "properties": {
+        "selector": {
+          "$ref": "#/$defs/EventSelector"
+        },
+        "bundleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "maxSampleEvents": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        }
+      },
+      "required": [
+        "selector",
+        "bundleId",
+        "maxSampleEvents"
+      ],
+      "additionalProperties": false
+    },
+    "ReprocessPreview": {
+      "type": "object",
+      "properties": {
+        "previewId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "selectionDigest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "matchedCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "missingRawCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "sampleDifferences": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "maxItems": 100
+        }
+      },
+      "required": [
+        "previewId",
+        "selectionDigest",
+        "matchedCount",
+        "missingRawCount",
+        "expiresAt",
+        "sampleDifferences"
+      ],
+      "additionalProperties": false
+    },
+    "ReprocessCreate": {
+      "type": "object",
+      "properties": {
+        "previewId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "selectionDigest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "maxEventsPerSecond": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "correctionMode": {
+          "type": "string",
+          "enum": [
+            "UPSERT_RECORD",
+            "REPLACE_EVENT_SET"
+          ]
+        }
+      },
+      "required": [
+        "previewId",
+        "selectionDigest",
+        "reason",
+        "maxEventsPerSecond",
+        "correctionMode"
+      ],
+      "additionalProperties": false
+    },
+    "ReprocessJob": {
+      "type": "object",
+      "properties": {
+        "jobId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "QUEUED",
+            "RUNNING",
+            "PAUSED",
+            "SUCCEEDED",
+            "FAILED",
+            "CANCELLED"
+          ]
+        },
+        "selectedCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "processedCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failedCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "bundleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        }
+      },
+      "required": [
+        "jobId",
+        "state",
+        "selectedCount",
+        "processedCount",
+        "failedCount",
+        "createdAt",
+        "bundleId"
+      ],
+      "additionalProperties": false
+    },
+    "Delivery": {
+      "type": "object",
+      "properties": {
+        "deliveryId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "outputId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "namespaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "gatewayId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "sourceEventId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "processingRevision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "recordKey": {
+          "type": "string"
+        },
+        "targetId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "targetVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "mappingVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "PENDING",
+            "IN_FLIGHT",
+            "RETRY_WAIT",
+            "DELIVERED",
+            "TERMINATED"
+          ]
+        },
+        "terminationReason": {
+          "type": "string"
+        },
+        "attempts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "nextAttemptAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lastErrorCode": {
+          "type": "string"
+        },
+        "confirmedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "deliveryId",
+        "outputId",
+        "namespaceId",
+        "gatewayId",
+        "sourceEventId",
+        "processingRevision",
+        "recordKey",
+        "targetId",
+        "targetVersion",
+        "mappingVersion",
+        "state",
+        "attempts"
+      ],
+      "additionalProperties": false
+    },
+    "RetryRequest": {
+      "type": "object",
+      "properties": {
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "additionalProperties": false,
+      "description": "Same ID/payload/target version; only retry schedule changes. No reparse or remap."
+    },
+    "TaskResult": {
+      "type": "object",
+      "properties": {
+        "resultId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "resultSequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "ACCEPTED",
+            "EXECUTING",
+            "SUCCEEDED",
+            "FAILED",
+            "UNKNOWN",
+            "EXPIRED",
+            "CANCELLED"
+          ]
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "verification": {
+          "type": "string",
+          "enum": [
+            "NONE",
+            "APPLIED",
+            "VERIFIED"
+          ]
+        },
+        "details": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "errorCode": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "resultId",
+        "taskId",
+        "resultSequence",
+        "state",
+        "observedAt",
+        "verification",
+        "details"
+      ],
+      "additionalProperties": false,
+      "description": "Per-task nonnegative sequence assigned when result is first persisted; same resultId retains sequence/content across retries. Old sequence may be acknowledged without regressing task projection."
+    },
+    "TaskResultBatch": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0"
+        },
+        "namespaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "gatewayId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TaskResult"
+          },
+          "minItems": 1,
+          "maxItems": 100
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "namespaceId",
+        "gatewayId",
+        "results"
+      ],
+      "additionalProperties": false,
+      "examples": [
+        {
+          "schemaVersion": "1.0",
+          "namespaceId": "ns_demo",
+          "gatewayId": "gw_demo",
+          "results": [
+            {
+              "resultId": "result_demo",
+              "taskId": "task_demo",
+              "resultSequence": 3,
+              "state": "SUCCEEDED",
+              "observedAt": "2026-11-07T10:00:00Z",
+              "verification": "VERIFIED",
+              "details": {
+                "bootId": "boot_b"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "TaskResultAck": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0"
+        },
+        "namespaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "gatewayId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "receiverId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "durability": {
+          "type": "string",
+          "enum": [
+            "RESULT_PERSISTED"
+          ]
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+              },
+              "resultId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "ACCEPTED",
+                  "DUPLICATE",
+                  "REJECTED_RETRYABLE",
+                  "REJECTED_PERMANENT"
+                ]
+              },
+              "code": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "taskId",
+              "resultId",
+              "status"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 100
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "namespaceId",
+        "gatewayId",
+        "receiverId",
+        "durability",
+        "items"
+      ],
+      "additionalProperties": false,
+      "examples": [
+        {
+          "schemaVersion": "1.0",
+          "namespaceId": "ns_demo",
+          "gatewayId": "gw_demo",
+          "receiverId": "instance_demo",
+          "durability": "RESULT_PERSISTED",
+          "items": [
+            {
+              "taskId": "task_demo",
+              "resultId": "result_demo",
+              "status": "ACCEPTED"
+            }
+          ]
+        }
+      ]
+    },
+    "Command": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0"
+        },
+        "namespaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "gatewayId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "CONFIGURE",
+            "REBOOT",
+            "DIAGNOSTICS",
+            "GATT_READ",
+            "GATT_WRITE",
+            "FIRMWARE_UPGRADE"
+          ]
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "requestDigest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "namespaceId",
+        "gatewayId",
+        "taskId",
+        "type",
+        "parameters",
+        "createdAt",
+        "expiresAt",
+        "requestDigest"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "CONFIGURE"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "$ref": "#/$defs/CommandParamsConfigure"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "REBOOT"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "$ref": "#/$defs/TaskParamsReboot"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "DIAGNOSTICS"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "$ref": "#/$defs/TaskParamsDiagnostics"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "GATT_READ"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "$ref": "#/$defs/TaskParamsGattRead"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "GATT_WRITE"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "$ref": "#/$defs/TaskParamsGattWrite"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "FIRMWARE_UPGRADE"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "$ref": "#/$defs/TaskParamsFirmware"
+              }
+            }
+          }
+        }
+      ],
+      "examples": [
+        {
+          "schemaVersion": "1.0",
+          "namespaceId": "ns_demo",
+          "gatewayId": "gw_demo",
+          "taskId": "task_demo",
+          "type": "REBOOT",
+          "parameters": {
+            "reason": "maintenance test"
+          },
+          "createdAt": "2026-11-07T10:00:00Z",
+          "expiresAt": "2026-11-07T10:05:00Z",
+          "requestDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ]
+    },
+    "GatewayStatus": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0"
+        },
+        "namespaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "gatewayId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "firmwareVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "reportedConfigurationRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "spoolBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "timeQuality": {
+          "type": "string",
+          "enum": [
+            "SYNCED",
+            "UNSYNCED",
+            "ESTIMATED"
+          ]
+        },
+        "health": {
+          "type": "string",
+          "enum": [
+            "OK",
+            "DEGRADED",
+            "FAULT"
+          ]
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "namespaceId",
+        "gatewayId",
+        "observedAt",
+        "firmwareVersion",
+        "reportedConfigurationRevision",
+        "spoolBytes",
+        "timeQuality",
+        "health"
+      ],
+      "additionalProperties": false,
+      "examples": [
+        {
+          "schemaVersion": "1.0",
+          "namespaceId": "ns_demo",
+          "gatewayId": "gw_demo",
+          "observedAt": "2026-11-07T10:00:00Z",
+          "firmwareVersion": "demo-1",
+          "reportedConfigurationRevision": 1,
+          "spoolBytes": 0,
+          "timeQuality": "SYNCED",
+          "health": "OK"
+        }
+      ]
+    },
+    "CustomerEvent": {
+      "type": "object",
+      "properties": {
+        "deliveryId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "outputId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "namespaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "gatewayId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "sourceEventId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "processingRevision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "recordKey": {
+          "type": "string"
+        },
+        "targetId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "targetVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "schemaVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "mappingVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "PASSTHROUGH",
+            "DECODE"
+          ]
+        },
+        "correction": {
+          "type": "boolean"
+        },
+        "replacesOutputIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "maxItems": 100
+        },
+        "capturedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "receivedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "timeQuality": {
+          "type": "string",
+          "enum": [
+            "SYNCED",
+            "UNSYNCED",
+            "ESTIMATED"
+          ]
+        },
+        "quality": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "rawBase64": {
+          "type": "string",
+          "contentEncoding": "base64"
+        }
+      },
+      "required": [
+        "deliveryId",
+        "outputId",
+        "namespaceId",
+        "gatewayId",
+        "sourceEventId",
+        "processingRevision",
+        "recordKey",
+        "targetId",
+        "targetVersion",
+        "schemaVersion",
+        "mappingVersion",
+        "mode",
+        "correction",
+        "receivedAt",
+        "timeQuality",
+        "quality"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "PASSTHROUGH"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "rawBase64"
+            ]
+          },
+          "else": {
+            "required": [
+              "data"
+            ]
+          }
+        }
+      ]
+    },
+    "CustomerBatch": {
+      "type": "object",
+      "properties": {
+        "batchId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CustomerEvent"
+          },
+          "minItems": 1,
+          "maxItems": 200
+        }
+      },
+      "required": [
+        "batchId",
+        "events"
+      ],
+      "additionalProperties": false,
+      "examples": [
+        {
+          "batchId": "delivery_batch_001",
+          "events": [
+            {
+              "deliveryId": "delivery_demo",
+              "outputId": "output_demo",
+              "namespaceId": "ns_demo",
+              "gatewayId": "gw_demo",
+              "sourceEventId": "boot_a:1",
+              "processingRevision": 1,
+              "recordKey": "0",
+              "targetId": "target_demo",
+              "targetVersion": "1",
+              "schemaVersion": "temperature-1",
+              "mappingVersion": "map-1",
+              "mode": "DECODE",
+              "correction": false,
+              "capturedAt": "2026-11-07T10:00:00Z",
+              "receivedAt": "2026-11-07T10:00:00Z",
+              "timeQuality": "SYNCED",
+              "quality": [],
+              "data": {
+                "temperature": 25.0,
+                "temperatureUnit": "Cel",
+                "humidity": 10.0,
+                "humidityUnit": "%"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "CustomerAck": {
+      "type": "object",
+      "properties": {
+        "batchId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "targetId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "targetVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "durability": {
+          "type": "string",
+          "enum": [
+            "CUSTOMER_INBOX_PERSISTED",
+            "CUSTOMER_BUSINESS_PERSISTED"
+          ]
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "deliveryId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "ACCEPTED",
+                  "DUPLICATE",
+                  "RETRYABLE",
+                  "REJECTED"
+                ]
+              },
+              "code": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "deliveryId",
+              "status"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 200
+        }
+      },
+      "required": [
+        "batchId",
+        "targetId",
+        "targetVersion",
+        "durability",
+        "items"
+      ],
+      "additionalProperties": false,
+      "description": "Durable inbox ACK transfers custody; later business processing belongs to customer. Match target/version/delivery exactly.",
+      "examples": [
+        {
+          "batchId": "delivery_batch_001",
+          "targetId": "target_demo",
+          "targetVersion": "1",
+          "durability": "CUSTOMER_INBOX_PERSISTED",
+          "items": [
+            {
+              "deliveryId": "delivery_demo",
+              "status": "ACCEPTED"
+            }
+          ]
+        }
+      ]
+    },
+    "AuditEvent": {
+      "type": "object",
+      "properties": {
+        "auditId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "actorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "action": {
+          "type": "string"
+        },
+        "resourceType": {
+          "type": "string"
+        },
+        "resourceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "SUCCESS",
+            "DENIED",
+            "FAILED"
+          ]
+        },
+        "traceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "changes": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "auditId",
+        "at",
+        "actorId",
+        "action",
+        "resourceType",
+        "resourceId",
+        "outcome",
+        "traceId"
+      ],
+      "additionalProperties": false
+    },
+    "SystemStatus": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "softwareVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "ready": {
+          "type": "boolean"
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "READY",
+                  "DEGRADED",
+                  "NOT_READY"
+                ]
+              },
+              "code": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "state"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "dataNodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "dataNodeId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+              },
+              "activeBundleId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+              },
+              "activationRevision": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "activationEtag": {
+                "type": "string",
+                "description": "Opaque strong ETag, including quotes; copy unchanged to If-Match."
+              }
+            },
+            "required": [
+              "dataNodeId",
+              "activeBundleId",
+              "activationRevision",
+              "activationEtag"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "queueBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "oldestPendingAgeSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "diskFreeBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "storageBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "storageLimitBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "diskReserveBytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "instanceId",
+        "softwareVersion",
+        "ready",
+        "components",
+        "dataNodes",
+        "queueBytes",
+        "oldestPendingAgeSeconds",
+        "diskFreeBytes"
+      ],
+      "additionalProperties": false
+    },
+    "MaintenanceRequest": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "BACKUP",
+            "DIAGNOSTIC_EXPORT"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "includeRawPayload": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "reason",
+        "includeRawPayload"
+      ],
+      "additionalProperties": false
+    },
+    "PrincipalPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Principal"
+          },
+          "maxItems": 200
+        },
+        "nextCursor": {
+          "type": "string"
+        },
+        "snapshotAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "items",
+        "snapshotAt"
+      ],
+      "additionalProperties": false
+    },
+    "CredentialMetadataPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CredentialMetadata"
+          },
+          "maxItems": 200
+        },
+        "nextCursor": {
+          "type": "string"
+        },
+        "snapshotAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "items",
+        "snapshotAt"
+      ],
+      "additionalProperties": false
+    },
+    "ResourceScopePage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ResourceScope"
+          },
+          "maxItems": 200
+        },
+        "nextCursor": {
+          "type": "string"
+        },
+        "snapshotAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "items",
+        "snapshotAt"
+      ],
+      "additionalProperties": false
+    },
+    "GatewayPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Gateway"
+          },
+          "maxItems": 200
+        },
+        "nextCursor": {
+          "type": "string"
+        },
+        "snapshotAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "items",
+        "snapshotAt"
+      ],
+      "additionalProperties": false
+    },
+    "TaskPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Task"
+          },
+          "maxItems": 200
+        },
+        "nextCursor": {
+          "type": "string"
+        },
+        "snapshotAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "items",
+        "snapshotAt"
+      ],
+      "additionalProperties": false
+    },
+    "ParserPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Parser"
+          },
+          "maxItems": 200
+        },
+        "nextCursor": {
+          "type": "string"
+        },
+        "snapshotAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "items",
+        "snapshotAt"
+      ],
+      "additionalProperties": false
+    },
+    "RuleBundlePage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RuleBundle"
+          },
+          "maxItems": 200
+        },
+        "nextCursor": {
+          "type": "string"
+        },
+        "snapshotAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "items",
+        "snapshotAt"
+      ],
+      "additionalProperties": false
+    },
+    "TargetPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Target"
+          },
+          "maxItems": 200
+        },
+        "nextCursor": {
+          "type": "string"
+        },
+        "snapshotAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "items",
+        "snapshotAt"
+      ],
+      "additionalProperties": false
+    },
+    "EventViewPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EventView"
+          },
+          "maxItems": 200
+        },
+        "nextCursor": {
+          "type": "string"
+        },
+        "snapshotAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "items",
+        "snapshotAt"
+      ],
+      "additionalProperties": false
+    },
+    "QuarantineItemPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/QuarantineItem"
+          },
+          "maxItems": 200
+        },
+        "nextCursor": {
+          "type": "string"
+        },
+        "snapshotAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "items",
+        "snapshotAt"
+      ],
+      "additionalProperties": false
+    },
+    "DeliveryPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Delivery"
+          },
+          "maxItems": 200
+        },
+        "nextCursor": {
+          "type": "string"
+        },
+        "snapshotAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "items",
+        "snapshotAt"
+      ],
+      "additionalProperties": false
+    },
+    "AuditEventPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AuditEvent"
+          },
+          "maxItems": 200
+        },
+        "nextCursor": {
+          "type": "string"
+        },
+        "snapshotAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "items",
+        "snapshotAt"
+      ],
+      "additionalProperties": false
+    },
+    "Health": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "ok",
+            "not_ready"
+          ]
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "CommandParamsConfigure": {
+      "type": "object",
+      "properties": {
+        "configuration": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "expectedReportedRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "desiredRevision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "configuration",
+        "expectedReportedRevision",
+        "desiredRevision"
+      ],
+      "additionalProperties": false,
+      "description": "Server-assigned desired revision. Firmware must persist and echo this revision after exact readback; do not derive it from expectedReportedRevision."
+    },
+    "CommandPage": {
+      "type": "object",
+      "properties": {
+        "commands": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/Command"
+          }
+        }
+      },
+      "required": [
+        "commands"
+      ],
+      "additionalProperties": false
+    },
+    "ArtifactVerification": {
+      "type": "object",
+      "properties": {
+        "manifest": {
+          "type": "string"
+        },
+        "signature": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "manifest",
+        "signature"
+      ],
+      "additionalProperties": false
+    },
+    "GatewayStatusAck": {
+      "type": "object",
+      "properties": {
+        "accepted": {
+          "const": true
+        },
+        "serverTime": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "accepted",
+        "serverTime"
+      ],
+      "additionalProperties": false
+    },
+    "OutputMapping": {
+      "type": "object",
+      "properties": {
+        "fields": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "properties": {
+              "source": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$"
+              },
+              "target": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$"
+              },
+              "scale": {
+                "type": "number",
+                "minimum": -1000000,
+                "maximum": 1000000
+              },
+              "offset": {
+                "type": "number",
+                "minimum": -1000000,
+                "maximum": 1000000
+              },
+              "unit": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 32
+              }
+            },
+            "required": [
+              "source",
+              "target"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "constants": {
+          "type": "object",
+          "maxProperties": 32,
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$"
+          },
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean",
+              "null"
+            ],
+            "maxLength": 256
+          }
+        },
+        "wrapKey": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$"
+        }
+      },
+      "required": [
+        "fields"
+      ],
+      "additionalProperties": false,
+      "description": "Deterministic mapping within data only: rename selected top-level fields, optional numeric value*scale+offset, output targetUnit label, scalar constants, optional wrapper. Required missing or nonnumeric fields quarantine the event. Identity/revision fields cannot be mapped."
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/IngressBatch"
+    },
+    {
+      "$ref": "#/$defs/IngressAck"
+    },
+    {
+      "$ref": "#/$defs/TaskResultBatch"
+    },
+    {
+      "$ref": "#/$defs/TaskResultAck"
+    },
+    {
+      "$ref": "#/$defs/Command"
+    },
+    {
+      "$ref": "#/$defs/GatewayStatus"
+    },
+    {
+      "$ref": "#/$defs/CustomerBatch"
+    },
+    {
+      "$ref": "#/$defs/CustomerAck"
+    }
+  ]
+}

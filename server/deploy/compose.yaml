@@ -1,0 +1,86 @@
+name: ble-gateway
+x-app: &app
+  image: ${GW_IMAGE:-ble-gateway-server:0.1.0}
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile
+  user: "10001:10001"
+  read_only: true
+  tmpfs: ["/tmp:size=64m,mode=1777"]
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: ["ALL"]
+  volumes:
+    - ./data:/app/data
+    - ./secrets:/run/secrets:ro
+    - ./tls:/run/tls:ro
+  restart: unless-stopped
+  stop_grace_period: 30s
+  logging:
+    driver: json-file
+    options: {max-size: "10m", max-file: "3"}
+x-env: &env
+  GW_DATA_DIR: /app/data
+  TMPDIR: /app/data/tmp
+  GW_NAMESPACE: ns_local
+  GW_LISTEN: 0.0.0.0:8443
+  GW_TLS_CERT: /run/tls/server.crt
+  GW_TLS_KEY: /run/tls/server.key
+  GW_CLIENT_CA: /run/tls/ca.crt
+  GW_BROKER_URL: ssl://broker:8883
+  GW_BROKER_CA: /run/tls/ca.crt
+  GW_BROKER_USER: platform
+  GW_BROKER_PASSWORD_FILE: /run/secrets/broker-password
+  GW_ALLOWED_TARGET_HOSTS: ${GW_ALLOWED_TARGET_HOSTS:-}
+  GW_MAX_QUEUE_BYTES: ${GW_MAX_QUEUE_BYTES:-1073741824}
+services:
+  init:
+    <<: *app
+    entrypoint: ["gatewayctl"]
+    command: ["init", "--data-dir", "/app/data", "--password-file", "/run/secrets/admin-password"]
+    restart: "no"
+    cpus: "0.5"
+    mem_limit: 256m
+  manager:
+    <<: *app
+    environment:
+      <<: *env
+      GW_ROLE: manager
+      GW_NODE_ID: data_local
+    ports: ["${GW_MANAGEMENT_BIND:-127.0.0.1}:8443:8443"]
+    depends_on:
+      init: {condition: service_completed_successfully}
+      broker: {condition: service_started}
+    cpus: "1.0"
+    mem_limit: 512m
+  pipeline:
+    <<: *app
+    environment:
+      <<: *env
+      GW_ROLE: pipeline
+      GW_NODE_ID: data_local
+    ports: ["${GW_INGRESS_BIND:-0.0.0.0}:8444:8443"]
+    depends_on:
+      init: {condition: service_completed_successfully}
+      broker: {condition: service_started}
+    cpus: "2.0"
+    mem_limit: 1024m
+  broker:
+    image: ${MOSQUITTO_IMAGE:-eclipse-mosquitto:2.0.22}
+    user: "1883:1883"
+    command: ["mosquitto", "-c", "/mosquitto/config/mosquitto.conf"]
+    restart: unless-stopped
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    ports: ["${GW_MQTT_BIND:-0.0.0.0}:8883:8883"]
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/acl:/mosquitto/config/acl:ro
+      - ./mosquitto/passwords:/mosquitto/config/passwords:ro
+      - ./mosquitto/data:/mosquitto/data
+      - ./tls:/run/tls:ro
+    cpus: "0.5"
+    mem_limit: 256m
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}

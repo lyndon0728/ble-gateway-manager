@@ -1,0 +1,306 @@
+[
+  {
+    "Path": "github.com/dlclark/regexp2",
+    "Version": "v1.11.0",
+    "Sum": "h1:G/nrcoOa7ZXlpoa/91N3X7mM3r8eIlMBBJZvsz/mxKI=",
+    "licenseFiles": [
+      "licenses/github.com_dlclark_regexp2@v1.11.0_LICENSE"
+    ]
+  },
+  {
+    "Path": "github.com/dustin/go-humanize",
+    "Version": "v1.1.0",
+    "Sum": "h1:dbKTrvD0klcbBV/h4AWJdMuZogJACoMlvWIWZ5b2xWg=",
+    "licenseFiles": [
+      "licenses/github.com_dustin_go-humanize@v1.1.0_LICENSE"
+    ]
+  },
+  {
+    "Path": "github.com/eclipse/paho.mqtt.golang",
+    "Version": "v1.5.1",
+    "Sum": "h1:/VSOv3oDLlpqR2Epjn1Q7b2bSTplJIeV2ISgCl2W7nE=",
+    "licenseFiles": [
+      "licenses/github.com_eclipse_paho.mqtt.golang@v1.5.1_LICENSE"
+    ]
+  },
+  {
+    "Path": "github.com/go-chi/chi/v5",
+    "Version": "v5.5.0",
+    "Sum": "h1:xdKQ1dJmVJsmgahrXSKhUx8NyVPzpwdlyrrQFpMPJgg=",
+    "licenseFiles": [
+      "licenses/github.com_go-chi_chi_v5@v5.5.0_LICENSE"
+    ]
+  },
+  {
+    "Path": "github.com/gofrs/flock",
+    "Version": "v0.13.1",
+    "Sum": "h1:jjREztyBeSKBZYAC+mgc1laB+xsgy4kYMf3FbKF2UBo=",
+    "licenseFiles": [
+      "licenses/github.com_gofrs_flock@v0.13.1_LICENSE"
+    ]
+  },
+  {
+    "Path": "github.com/google/pprof",
+    "Version": "v0.0.0-20261016150608-1facf8f91b50",
+    "Sum": "h1:PlNWJRxu5APSV0pWqfIsZ0qt9OOGHSWfZQ4zvx+WgWs=",
+    "licenseFiles": [
+      "licenses/github.com_google_pprof@v0.0.0-20261016150608-1facf8f91b50_LICENSE"
+    ]
+  },
+  {
+    "Path": "github.com/google/uuid",
+    "Version": "v1.6.0",
+    "Sum": "h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=",
+    "licenseFiles": [
+      "licenses/github.com_google_uuid@v1.6.0_LICENSE"
+    ]
+  },
+  {
+    "Path": "github.com/gorilla/websocket",
+    "Version": "v1.5.3",
+    "Sum": "h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg=",
+    "licenseFiles": [
+      "licenses/github.com_gorilla_websocket@v1.5.3_LICENSE"
+    ]
+  },
+  {
+    "Path": "github.com/hashicorp/golang-lru/v2",
+    "Version": "v2.0.7",
+    "Sum": "h1:a+bsQ5rvGLjzHuww6tVxozPZFVghXaHOwFs4luLUK2k=",
+    "licenseFiles": [
+      "licenses/github.com_hashicorp_golang-lru_v2@v2.0.7_LICENSE"
+    ]
+  },
+  {
+    "Path": "github.com/mattn/go-isatty",
+    "Version": "v0.0.24",
+    "Sum": "h1:tGZZoVgT/KiqK1c8ocVLeDS8BSWMRd47J3Lbz7vsReI=",
+    "licenseFiles": [
+      "licenses/github.com_mattn_go-isatty@v0.0.24_LICENSE"
+    ]
+  },
+  {
+    "Path": "github.com/ncruces/go-strftime",
+    "Version": "v1.1.0",
+    "Sum": "h1:vtPmPWMkb539RGV9WpWT9EwJGvrOCKvMNI4obWL47Hk=",
+    "licenseFiles": [
+      "licenses/github.com_ncruces_go-strftime@v1.1.0_LICENSE"
+    ]
+  },
+  {
+    "Path": "github.com/remyoudompheng/bigfft",
+    "Version": "v0.0.0-20230129092748-24d4a6f8daec",
+    "Sum": "h1:W09IVJc94icq4NjY3clb7Lk8O1qJ8BdBEF8z0ibU0rE=",
+    "licenseFiles": [
+      "licenses/github.com_remyoudompheng_bigfft@v0.0.0-20230129092748-24d4a6f8daec_LICENSE"
+    ]
+  },
+  {
+    "Path": "github.com/santhosh-tekuri/jsonschema/v6",
+    "Version": "v6.0.3",
+    "Sum": "h1:1EYB5IzjZawrrnELUi78f9fPu57HuXjmddZPjrls/28=",
+    "licenseFiles": [
+      "licenses/github.com_santhosh-tekuri_jsonschema_v6@v6.0.3_LICENSE"
+    ]
+  },
+  {
+    "Path": "github.com/stretchr/testify",
+    "Version": "v1.12.1",
+    "Sum": "h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWDWE=",
+    "licenseFiles": [
+      "licenses/github.com_stretchr_testify@v1.12.1_LICENSE"
+    ]
+  },
+  {
+    "Path": "go.yaml.in/yaml/v3",
+    "Version": "v3.0.5",
+    "Sum": "h1:N6y/pJk8buWs9NY5ERU2HSMfm+IuD/OtfdAnq6kESPw=",
+    "licenseFiles": [
+      "licenses/go.yaml.in_yaml_v3@v3.0.5_LICENSE",
+      "licenses/go.yaml.in_yaml_v3@v3.0.5_NOTICE"
+    ]
+  },
+  {
+    "Path": "golang.org/x/crypto",
+    "Version": "v0.58.0",
+    "Sum": "h1:COkYLr4k7nDI4r6QtMML2AfzeIswWHAJthLS6K/M/54=",
+    "licenseFiles": [
+      "licenses/golang.org_x_crypto@v0.58.0_LICENSE"
+    ]
+  },
+  {
+    "Path": "golang.org/x/mod",
+    "Version": "v0.42.0",
+    "Sum": "h1:ICeL3t2L30ljSPHHxDnR4fqVcBt/zR2zJAb9juavmQg=",
+    "licenseFiles": [
+      "licenses/golang.org_x_mod@v0.42.0_LICENSE"
+    ]
+  },
+  {
+    "Path": "golang.org/x/net",
+    "Version": "v0.60.0",
+    "Sum": "h1:79p50tfZlm0J9YfoDsSi639qSXNGVwEzOPLCxM2FsYU=",
+    "licenseFiles": [
+      "licenses/golang.org_x_net@v0.60.0_LICENSE"
+    ]
+  },
+  {
+    "Path": "golang.org/x/sync",
+    "Version": "v0.24.0",
+    "Sum": "h1:iqiDrGoDgyuvAKrhLQthUEzU/R378N78gXbBjxed7oA=",
+    "licenseFiles": [
+      "licenses/golang.org_x_sync@v0.24.0_LICENSE"
+    ]
+  },
+  {
+    "Path": "golang.org/x/sys",
+    "Version": "v0.49.0",
+    "Sum": "h1:XbzkgYJHdqh/8m2Uu0W/dQv8nktxx4BFHp1M0gROTXA=",
+    "licenseFiles": [
+      "licenses/golang.org_x_sys@v0.49.0_LICENSE"
+    ]
+  },
+  {
+    "Path": "golang.org/x/term",
+    "Version": "v0.47.0",
+    "licenseFiles": [
+      "licenses/golang.org_x_term@v0.47.0_LICENSE"
+    ],
+    "Sum": "h1:cpyOwQkr2Nzxe2p6KnrTG7Ei2wtzjsuSjhpXXepZ/BM="
+  },
+  {
+    "Path": "golang.org/x/text",
+    "Version": "v0.43.0",
+    "Sum": "h1:1QivrlhwAsnMOcqgOdl9my7s9OyZl8O5/UGUTJVXoWc=",
+    "licenseFiles": [
+      "licenses/golang.org_x_text@v0.43.0_LICENSE"
+    ]
+  },
+  {
+    "Path": "golang.org/x/tools",
+    "Version": "v0.52.0",
+    "Sum": "h1:ryxg4U63oaUYk7uOLTF37n43f4qgtGvqV4Ioit1BaEs=",
+    "licenseFiles": [
+      "licenses/golang.org_x_tools@v0.52.0_LICENSE"
+    ]
+  },
+  {
+    "Path": "modernc.org/cc/v4",
+    "Version": "v4.30.6-0.20261101114202-1b9d1a076f6b",
+    "Sum": "h1:WE5SLOURcNd8s6uPR/n4WV4weQxxYKi5OpEZkfNVvdE=",
+    "licenseFiles": [
+      "licenses/modernc.org_cc_v4@v4.30.6-0.20261101114202-1b9d1a076f6b_LICENSE"
+    ]
+  },
+  {
+    "Path": "modernc.org/ccgo/v4",
+    "Version": "v4.38.1",
+    "Sum": "h1:wdxJVBuFT8JufZnnQyS6Bbz3NOWhViD0xJOGR96Bpd4=",
+    "licenseFiles": [
+      "licenses/modernc.org_ccgo_v4@v4.38.1_LICENSE"
+    ]
+  },
+  {
+    "Path": "modernc.org/fileutil",
+    "Version": "v1.4.0",
+    "Sum": "h1:j6ZzNTftVS054gi281TyLjHPp6CPHr2KCxEXjEbD6SM=",
+    "licenseFiles": [
+      "licenses/modernc.org_fileutil@v1.4.0_LICENSE"
+    ]
+  },
+  {
+    "Path": "modernc.org/gc/v2",
+    "Version": "v2.6.5",
+    "Sum": "h1:nyqdV8q46KvTpZlsw66kWqwXRHdjIlJOhG6kxiV/9xI=",
+    "licenseFiles": [
+      "licenses/modernc.org_gc_v2@v2.6.5_LICENSE"
+    ]
+  },
+  {
+    "Path": "modernc.org/gc/v3",
+    "Version": "v3.2.0",
+    "Sum": "h1:/Y3LGDMQaoYf55PebP1qsZ5FDGgAZyG1RYKEHeQzh1o=",
+    "licenseFiles": [
+      "licenses/modernc.org_gc_v3@v3.2.0_LICENSE"
+    ]
+  },
+  {
+    "Path": "modernc.org/goabi0",
+    "Version": "v0.2.0",
+    "Sum": "h1:HvEowk7LxcPd0eq6mVOAEMai46V+i7Jrj13t4AzuNks=",
+    "licenseFiles": [
+      "licenses/modernc.org_goabi0@v0.2.0_LICENSE"
+    ]
+  },
+  {
+    "Path": "modernc.org/libc",
+    "Version": "v1.80.1",
+    "Sum": "h1:ejn7HtTV3GknNKbklqWQ1nvUrfX8mTxs1D+xp/JQwy4=",
+    "licenseFiles": [
+      "licenses/modernc.org_libc@v1.80.1_LICENSE",
+      "licenses/modernc.org_libc@v1.80.1_LICENSE-3RD-PARTY.md"
+    ]
+  },
+  {
+    "Path": "modernc.org/mathutil",
+    "Version": "v1.7.1",
+    "Sum": "h1:GCZVGXdaN8gTqB1Mf/usp1Y/hSqgI2vAGGP4jZMCxOU=",
+    "licenseFiles": [
+      "licenses/modernc.org_mathutil@v1.7.1_LICENSE"
+    ]
+  },
+  {
+    "Path": "modernc.org/memory",
+    "Version": "v1.12.1",
+    "Sum": "h1:nFMiWrpStgZczNl6XI9GnIk/rWhYIyHGUaR04pGbp9g=",
+    "licenseFiles": [
+      "licenses/modernc.org_memory@v1.12.1_LICENSE",
+      "licenses/modernc.org_memory@v1.12.1_LICENSE-GO",
+      "licenses/modernc.org_memory@v1.12.1_LICENSE-LOGO",
+      "licenses/modernc.org_memory@v1.12.1_LICENSE-MMAP-GO"
+    ]
+  },
+  {
+    "Path": "modernc.org/opt",
+    "Version": "v0.2.0",
+    "Sum": "h1:tGyef5ApycA7FSEOMraay9SaTk5zmbx7Tu+cJs4QKZg=",
+    "licenseFiles": [
+      "licenses/modernc.org_opt@v0.2.0_LICENSE"
+    ]
+  },
+  {
+    "Path": "modernc.org/sortutil",
+    "Version": "v1.2.1",
+    "Sum": "h1:+xyoGf15mM3NMlPDnFqrteY07klSFxLElE2PVuWIJ7w=",
+    "licenseFiles": [
+      "licenses/modernc.org_sortutil@v1.2.1_LICENSE"
+    ]
+  },
+  {
+    "Path": "modernc.org/sqlite",
+    "Version": "v1.62.0",
+    "Sum": "h1:gMaCjSM1qpl+iOjiWhR1LYP3zqrYDI+5GYLGt6veP2g=",
+    "licenseFiles": [
+      "licenses/modernc.org_sqlite@v1.62.0_LICENSE",
+      "licenses/modernc.org_sqlite@v1.62.0_LICENSE-3RD-PARTY.md",
+      "licenses/modernc.org_sqlite@v1.62.0_LICENSE-SQLITE",
+      "licenses/modernc.org_sqlite@v1.62.0_LICENSE-SQLITE_VEC"
+    ]
+  },
+  {
+    "Path": "modernc.org/strutil",
+    "Version": "v1.2.1",
+    "Sum": "h1:UneZBkQA+DX2Rp35KcM69cSsNES9ly8mQWD71HKlOA0=",
+    "licenseFiles": [
+      "licenses/modernc.org_strutil@v1.2.1_LICENSE"
+    ]
+  },
+  {
+    "Path": "modernc.org/token",
+    "Version": "v1.1.0",
+    "Sum": "h1:Xl7Ap9dKaEs5kLoOQeQmPWevfnk/DM5qcLcYlA8ys6Y=",
+    "licenseFiles": [
+      "licenses/modernc.org_token@v1.1.0_LICENSE"
+    ]
+  }
+]

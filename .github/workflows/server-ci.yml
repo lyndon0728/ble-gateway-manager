@@ -1,0 +1,36 @@
+name: Server CI
+on:
+  push:
+    paths: ["server/**", ".github/workflows/server-ci.yml"]
+  pull_request:
+    paths: ["server/**", ".github/workflows/server-ci.yml"]
+permissions:
+  contents: read
+jobs:
+  verify:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: server
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - run: test -z "$(gofmt -l cmd internal)"
+      - run: go vet ./...
+      - run: go test ./... -count=1
+      - run: go build ./cmd/...
+      - if: runner.os == 'Linux'
+        run: go test -race ./...
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose -f server/deploy/compose.yaml config --quiet
+      - run: docker build -f server/deploy/Dockerfile -t ble-gateway-server:ci server

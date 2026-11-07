@@ -1,0 +1,275 @@
+{
+  "version": "1.7.0-draft",
+  "topics": [
+    {
+      "topic": "gw/v1/{namespaceId}/{gatewayId}/telemetry",
+      "publisher": "gateway",
+      "subscriber": "data-service",
+      "qos": 1,
+      "retain": false,
+      "payload": "IngressBatch",
+      "acl": "Gateway publishes only own namespace/gateway."
+    },
+    {
+      "topic": "gw/v1/{namespaceId}/{gatewayId}/telemetry-ack",
+      "publisher": "data-service",
+      "subscriber": "gateway",
+      "qos": 1,
+      "retain": false,
+      "payload": "IngressAck",
+      "acl": "Only data-service publishes, gateway subscribes own ACK."
+    },
+    {
+      "topic": "gw/v1/{namespaceId}/{gatewayId}/commands",
+      "publisher": "management-service",
+      "subscriber": "gateway",
+      "qos": 1,
+      "retain": false,
+      "payload": "Command",
+      "acl": "Gateway cannot publish commands; control service restricted to target scope."
+    },
+    {
+      "topic": "gw/v1/{namespaceId}/{gatewayId}/command-results",
+      "publisher": "gateway",
+      "subscriber": "management-service",
+      "qos": 1,
+      "retain": false,
+      "payload": "TaskResultBatch",
+      "acl": "Gateway only own results; management checks task owner."
+    },
+    {
+      "topic": "gw/v1/{namespaceId}/{gatewayId}/result-ack",
+      "publisher": "management-service",
+      "subscriber": "gateway",
+      "qos": 1,
+      "retain": false,
+      "payload": "TaskResultAck",
+      "acl": "Only management publishes; gateway own ACK."
+    },
+    {
+      "topic": "gw/v1/{namespaceId}/{gatewayId}/status",
+      "publisher": "gateway",
+      "subscriber": "management-service",
+      "qos": 1,
+      "retain": false,
+      "payload": "GatewayStatus",
+      "acl": "Own identity only; time freshness separate from transport Last Will."
+    },
+    {
+      "topic": "customer/v1/{targetId}/events",
+      "publisher": "data-service",
+      "subscriber": "customer-system",
+      "qos": 1,
+      "retain": false,
+      "payload": "CustomerBatch",
+      "acl": "Illustrative, freeze actual customer topic per target version."
+    },
+    {
+      "topic": "customer/v1/{targetId}/acks",
+      "publisher": "customer-system",
+      "subscriber": "data-service",
+      "qos": 1,
+      "retain": false,
+      "payload": "CustomerAck",
+      "acl": "Only this target credential publishes; IDs tied to target/version."
+    }
+  ],
+  "examples": {
+    "IngressBatch": {
+      "schemaVersion": "1.0",
+      "namespaceId": "ns_demo",
+      "gatewayId": "gw_demo",
+      "batchId": "batch_001",
+      "events": [
+        {
+          "eventId": "boot_a:1",
+          "capturedAt": "2026-11-07T10:00:00Z",
+          "timeQuality": "SYNCED",
+          "sourceDeviceId": "sensor_demo",
+          "protocolHint": "demo-v1",
+          "payloadBase64": "CcQD6A==",
+          "sequence": 1
+        }
+      ]
+    },
+    "IngressAck": {
+      "schemaVersion": "1.0",
+      "namespaceId": "ns_demo",
+      "gatewayId": "gw_demo",
+      "batchId": "batch_001",
+      "receiverId": "instance_demo",
+      "durability": "RAW_PERSISTED",
+      "items": [
+        {
+          "eventId": "boot_a:1",
+          "status": "ACCEPTED"
+        }
+      ],
+      "traceId": "trace_001"
+    },
+    "TaskRequest": {
+      "gatewayId": "gw_demo",
+      "type": "REBOOT",
+      "parameters": {
+        "reason": "maintenance test"
+      },
+      "expiresAt": "2026-11-07T10:05:00Z"
+    },
+    "Task": {
+      "taskId": "task_demo",
+      "gatewayId": "gw_demo",
+      "type": "REBOOT",
+      "state": "QUEUED",
+      "executionStage": "NONE",
+      "requestDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "createdAt": "2026-11-07T10:00:00Z",
+      "expiresAt": "2026-11-07T10:05:00Z",
+      "revision": 1
+    },
+    "Command": {
+      "schemaVersion": "1.0",
+      "namespaceId": "ns_demo",
+      "gatewayId": "gw_demo",
+      "taskId": "task_demo",
+      "type": "REBOOT",
+      "parameters": {
+        "reason": "maintenance test"
+      },
+      "createdAt": "2026-11-07T10:00:00Z",
+      "expiresAt": "2026-11-07T10:05:00Z",
+      "requestDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "TaskResultBatch": {
+      "schemaVersion": "1.0",
+      "namespaceId": "ns_demo",
+      "gatewayId": "gw_demo",
+      "results": [
+        {
+          "resultId": "result_demo",
+          "taskId": "task_demo",
+          "resultSequence": 3,
+          "state": "SUCCEEDED",
+          "observedAt": "2026-11-07T10:00:00Z",
+          "verification": "VERIFIED",
+          "details": {
+            "bootId": "boot_b"
+          }
+        }
+      ]
+    },
+    "TaskResultAck": {
+      "schemaVersion": "1.0",
+      "namespaceId": "ns_demo",
+      "gatewayId": "gw_demo",
+      "receiverId": "instance_demo",
+      "durability": "RESULT_PERSISTED",
+      "items": [
+        {
+          "taskId": "task_demo",
+          "resultId": "result_demo",
+          "status": "ACCEPTED"
+        }
+      ]
+    },
+    "GatewayStatus": {
+      "schemaVersion": "1.0",
+      "namespaceId": "ns_demo",
+      "gatewayId": "gw_demo",
+      "observedAt": "2026-11-07T10:00:00Z",
+      "firmwareVersion": "demo-1",
+      "reportedConfigurationRevision": 1,
+      "spoolBytes": 0,
+      "timeQuality": "SYNCED",
+      "health": "OK"
+    },
+    "CustomerBatch": {
+      "batchId": "delivery_batch_001",
+      "events": [
+        {
+          "deliveryId": "delivery_demo",
+          "outputId": "output_demo",
+          "namespaceId": "ns_demo",
+          "gatewayId": "gw_demo",
+          "sourceEventId": "boot_a:1",
+          "processingRevision": 1,
+          "recordKey": "0",
+          "targetId": "target_demo",
+          "targetVersion": "1",
+          "schemaVersion": "temperature-1",
+          "mappingVersion": "map-1",
+          "mode": "DECODE",
+          "correction": false,
+          "capturedAt": "2026-11-07T10:00:00Z",
+          "receivedAt": "2026-11-07T10:00:00Z",
+          "timeQuality": "SYNCED",
+          "quality": [],
+          "data": {
+            "temperature": 25.0,
+            "temperatureUnit": "Cel",
+            "humidity": 10.0,
+            "humidityUnit": "%"
+          }
+        }
+      ]
+    },
+    "CustomerAck": {
+      "batchId": "delivery_batch_001",
+      "targetId": "target_demo",
+      "targetVersion": "1",
+      "durability": "CUSTOMER_INBOX_PERSISTED",
+      "items": [
+        {
+          "deliveryId": "delivery_demo",
+          "status": "ACCEPTED"
+        }
+      ]
+    },
+    "RuleBundleCreate": {
+      "name": "demo route",
+      "defaultAction": "QUARANTINE",
+      "rules": [
+        {
+          "ruleId": "rule_demo",
+          "priority": 100,
+          "match": {
+            "modelIds": [
+              "DEMO-GW"
+            ],
+            "protocolVersions": [
+              "demo-v1"
+            ],
+            "packetTypes": [
+              "sensor"
+            ]
+          },
+          "action": "DECODE",
+          "parserId": "demo_sensor",
+          "parserVersion": "1.0.0",
+          "schemaVersion": "temperature-1",
+          "targetVersions": [
+            {
+              "targetId": "target_demo",
+              "version": "1",
+              "mappingVersion": "map-1",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    "ErrorResponse": {
+      "error": {
+        "code": "IDEMPOTENCY_CONFLICT",
+        "message": "Same key with different request",
+        "retryable": false,
+        "traceId": "trace_001"
+      }
+    }
+  },
+  "notes": [
+    "All listed retain=false; MQTT PUBACK is not application custody.",
+    "MQTT5 session/message expiry and in-flight limits depend on verified SKU; application TTL remains required.",
+    "Dual MQTT connections use different client IDs where supported; shared CPU/network still measured.",
+    "Customer envelope is reference; exact mapping must preserve dedup/correction information."
+  ]
+}
