@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>蓝牙网关平台 AI 辅助接入与页面优化策略</title>
+<style>
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:24px}
+body{margin:0;color:#202a33;background:#fff;font:16px/1.9 "Microsoft YaHei","Noto Sans CJK SC",Arial,sans-serif}
+.layout{max-width:1460px;margin:auto;display:grid;grid-template-columns:246px minmax(0,1fr)}
+aside{position:sticky;top:0;height:100vh;overflow:auto;padding:34px 20px;background:#f5f7f8;border-right:1px solid #e0e5e8}
+.nav-title{font-size:16px;font-weight:700;color:#000;margin:0 0 6px}.edition{font-size:12px;color:#53616d;margin:0 0 22px}
+nav{display:grid;gap:4px}nav a{font-size:13px;line-height:1.55;padding:7px 8px;color:#344551;text-decoration:none;border-radius:4px}
+nav a:hover,nav a:focus{background:#e3ebef;color:#004976}nav a[aria-current=true]{background:#e3ebef;font-weight:700}
+main{min-width:0;padding:52px clamp(26px,4vw,66px) 64px;max-width:1130px}
+.toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;color:#53616d;font-size:13px;margin-bottom:24px}
+button{font:inherit;color:#194e6f;background:white;border:1px solid #bacad5;border-radius:5px;padding:7px 16px;cursor:pointer}
+button:hover{background:#f1f6f9}a{color:#005b85;text-underline-offset:3px;overflow-wrap:anywhere}
+h1,h2,h3{color:#000;line-height:1.4;font-weight:700;word-break:normal}
+h1{font-size:31px;margin:0 0 20px;max-width:850px}h2{font-size:24px;margin:55px 0 20px;scroll-margin-top:25px}
+h3{font-size:19px;margin:34px 0 13px}p{margin:0 0 18px;overflow-wrap:anywhere}
+.table-scroll{width:100%;overflow-x:auto;margin:20px 0 25px}
+table{width:100%;border-collapse:collapse;min-width:640px;font-size:14px;line-height:1.75}
+th,td{border:1px solid #d9d9d9;padding:12px 14px;vertical-align:middle;text-align:left;overflow-wrap:anywhere}
+th{background:#e7edf2;color:#000;font-weight:700}tbody tr:nth-child(even){background:#f8fafb}
+td:first-child{min-width:105px;max-width:210px}thead{display:table-header-group}
+pre{font:14px/1.8 Consolas,"Microsoft YaHei",monospace;white-space:pre;overflow-x:auto;padding:20px;background:#f5f7f8;border:1px solid #d9dfe3}
+footer{margin-top:45px;font-size:12px;color:#62707b;overflow-wrap:anywhere}
+:focus-visible{outline:3px solid #1677a3;outline-offset:2px}
+@media(max-width:900px){.layout{grid-template-columns:1fr}aside{position:relative;height:auto;max-height:280px;padding:20px;border-right:0;border-bottom:1px solid #e0e5e8}
+nav{grid-template-columns:repeat(2,minmax(0,1fr))}main{padding:30px 20px 48px}h1{font-size:26px}h2{font-size:22px;margin-top:42px}}
+@media(max-width:480px){body{font-size:15px}nav{grid-template-columns:1fr}aside{max-height:230px}h1{font-size:24px}.toolbar{align-items:flex-start}table{font-size:13px}
+.table-scroll:before{content:"左右滑动查看完整表格";display:block;color:#62707b;font-size:12px;margin-bottom:6px}}
+@media print{@page{size:A4;margin:18mm 16mm}html{scroll-behavior:auto}.layout{display:block;max-width:none}aside,.toolbar{display:none}
+body{font-size:10.5pt;line-height:1.7}main{padding:0;max-width:none}h1{font-size:22pt}h2{font-size:16pt;margin-top:26pt;break-after:avoid}
+h3{font-size:12.5pt;break-after:avoid}p{orphans:3;widows:3}table{font-size:9pt;min-width:0}th,td{padding:7pt}
+tr{break-inside:avoid}.table-scroll{overflow:visible}pre{white-space:pre-wrap;font-size:9pt;break-inside:avoid}a{color:#202a33}footer{font-size:8pt}}
+</style></head><body><div class="layout">
+<aside aria-label="文档目录"><p class="nav-title">AI 辅助接入策略</p><p class="edition">V1.0 · 2026年11月8日<br>方案文档 · 新增功能待开发</p><nav><a href="#section-1">1 产品目标与实施决策</a>
+<a href="#section-2">2 当前软件能做什么</a>
+<a href="#section-3">3 用户操作流程</a>
+<a href="#section-4">4 页面结构和入口规划</a>
+<a href="#section-5">5 AI 自动提取的对象</a>
+<a href="#section-6">6 解析引擎和从设备识别</a>
+<a href="#section-7">7 连接能力与嵌入式协议边界</a>
+<a href="#section-8">8 大模型 API 与部署方案</a>
+<a href="#section-9">9 服务端对象和接口草案</a>
+<a href="#section-10">10 其他页面的 AI 优化</a>
+<a href="#section-11">11 易用性和交互验收</a>
+<a href="#section-12">12 数据保护和运行可靠性</a>
+<a href="#section-13">13 开发阶段和工作量</a>
+<a href="#section-14">14 测试与验收标准</a>
+<a href="#section-15">15 建议冻结的首期范围</a>
+<a href="#section-16">16 代码依据与边界记录</a>
+<a href="#section-17">17 官方资料与适用说明</a></nav></aside>
+<main><div class="toolbar"><span>本地部署蓝牙网关管理平台 · 产品与研发方案</span><button type="button" onclick="window.print()">打印文档</button></div>
+<h1>蓝牙网关平台 AI 辅助接入与页面优化策略</h1>
+<p>版本 1.0　日期 2026年11月8日　适用基线 服务器 0.3.0 与 API 1.9.0</p>
+<p>本文面向产品负责人、前后端开发、嵌入式开发和测试人员，规划如何把设备说明书、协议说明和客户接口资料转成可验证、可复用的配置。平台仍安装在客户服务器上，服务自有蓝牙网关，由客户开发业务应用；不增加定位业务。</p>
+<p>建议新增可选的 AI 辅助服务，把“查资料、抄字段、拼配置”改为“导入资料、核对差异、验证发布”。需要接入大模型推理接口；既可连接客户选择的云端 API，也可连接客户内网模型服务。已发布的解析器、连接规则和转发规则在运行时使用确定性程序，不依赖大模型在线。</p>
+<p>本文件是下一阶段的整体策略和开发输入。文中新增页面、数据库对象、API、DSL 和 AI 能力均为规划，未在当前软件中实现。本次仅更新设计文档，不改变本地运行实例、网关配置或现有规则。</p>
+<h2 id="section-1">1 产品目标与实施决策</h2>
+<p>用户希望从设备快速接入，而不是学习模型提示词或填写十几组协议参数。产品应围绕接入任务提供按钮和向导：在解析页面导入协议，在连接页面选择设备模板，在转发页面导入客户接口；普通用户无需进入通用聊天界面。</p>
+<p>首期交付目标是：对于有清晰资料、单包且无厂商应用层加密的 BLE 设备，自动形成从设备型号档案、解析字段草稿、连接操作模板、测试样例和路由建议。资料不完整时保留已提取的部分，仅要求补充阻塞项；超出能力的协议明确显示所缺模块。</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="对照表，可横向滚动"><table><thead><tr><th scope="col">决策项</th><th scope="col">建议</th></tr></thead><tbody><tr><td>AI 放在哪里</td><td>配置生成、资料问答、故障分析层；不进入逐包采集、持久确认、解析投递路径</td></tr><tr><td>默认启用方式</td><td>基础安装不要求模型；管理员配置模型服务并启用后出现可执行的 AI 入口</td></tr><tr><td>客户数据去向</td><td>默认不向外部模型发送资料；按实例设置允许的服务与发送范围，调用前展示摘要</td></tr><tr><td>接入技术</td><td>Go 编排服务与提供商适配层；文档提取和 OCR 使用隔离 worker；前端保持 Vue 3</td></tr><tr><td>解析执行</td><td>受限声明式协议 DSL，经确定性验证和不可变版本发布后运行</td></tr><tr><td>页面结构</td><td>保留 7 大类；新增 3 页，合计 26 个业务页和 1 个登录页</td></tr><tr><td>产品商业关系</td><td>继续硬件收费；云端模型使用客户自己的 API 凭据和额度，内网模型由客户部署或选配交付</td></tr><tr><td>发布权责</td><td>AI 生成草稿；有权限用户确认并发布；物理连接、写入和启用自动规则是独立执行动作</td></tr></tbody></table></div>
+<p>“减少人工填写”不等于要求用户逐字段再确认一遍。资料证据一致、样例通过的普通字段可成组接受；只有冲突、缺失、与实机不符以及会改变设备状态的操作需要突出确认。</p>
+<h2 id="section-2">2 当前软件能做什么</h2>
+<p>核查以当前源码和路由为准。旧版 frontend-pages.json 中部分能力说明早于 0.3.0，不能用其历史限制替代当前实现。</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="对照表，可横向滚动"><table><thead><tr><th scope="col">领域</th><th scope="col">当前已实现</th><th scope="col">为本功能需要新增</th></tr></thead><tbody><tr><td>管理前端</td><td>24 页，含 18 个菜单页、5 个上下文页和登录页</td><td>共享导入流程、证据审阅、型号模板库和模型服务设置</td></tr><tr><td>解析器</td><td>demo_sensor、reference_sensor、ble_ad 两个版本，共 4 个内置版本；已有试算</td><td>协议 DSL、编译验证、动态版本注册、设备档案绑定</td></tr><tr><td>解析路由</td><td>按网关型号、分组、protocolHint 和报文类型匹配</td><td>从设备身份、服务或特征 UUID、厂商标识、协议版本等条件及采集上下文</td></tr><tr><td>GATT</td><td>连接、断开、读、写、订阅；定向发现和订阅句柄证据</td><td>资料生成的连接模板与证据对照；完整服务树需另扩展固件和接口</td></tr><tr><td>安全连接</td><td>UNENCRYPTED 和 BONDED_ENCRYPTED，后者复用已预置绑定</td><td>配对、Passkey、IRK 和绑定管理并非现有能力</td></tr><tr><td>自动连接</td><td>显式对端和网关规则，静态地址，独立启停</td><td>从已验证模板生成默认关闭的草稿；不从说明书猜现场地址</td></tr><tr><td>客户转发</td><td>HTTP/MQTT、不可变目标版本、应用确认、顶层字段映射</td><td>客户接口文档导入、映射建议及服务端试算和确认契约检查</td></tr><tr><td>AI 与文件处理</td><td>尚无模型调用、协议资料上传和模型档案</td><td>文档存储、提取、证据索引、模型适配、异步任务、审计和预算</td></tr></tbody></table></div>
+<p>最重要的前置建设是从设备协议绑定。同一个网关可以连接温湿度计、电表等不同设备，现有规则中的 modelIds 指网关型号。把 AI 识别的从设备型号填到该字段，或者把整个网关的数据套用同一个私有解析器，都可能造成错误解码。必须先建立从设备身份与协议档案之间的确定性关系。</p>
+<h2 id="section-3">3 用户操作流程</h2>
+<h3>3.1 一次导入形成一份可复用档案</h3>
+<p>一次上传可包含产品说明书、通信协议、接口补充说明和报文样例。系统保存它们的关联关系和版本，分别提取广播解析、GATT 服务、特征操作及字段含义，再合并成一份设备型号档案。后续新增同型号设备时选择模板，仅补现场对象和范围。</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="对照表，可横向滚动"><table><thead><tr><th scope="col">步骤</th><th scope="col">用户看到和操作的内容</th><th scope="col">系统自动处理</th></tr></thead><tbody><tr><td>1 选择资料</td><td>拖入文件，选择已有型号或新建；显示当前发送策略</td><td>检查格式和大小、计算哈希、去重、识别文字或扫描件</td></tr><tr><td>2 确认设备</td><td>核对厂家、型号、适用固件版本及资料版本</td><td>分类资料，抽取型号和协议；冲突来源并列显示</td></tr><tr><td>3 审阅草稿</td><td>默认只显示缺失、冲突、不支持项；可展开所有字段</td><td>生成解析、连接和识别条件草稿，逐字段关联原文证据</td></tr><tr><td>4 样例验证</td><td>选择已有报文、粘贴 HEX 或上传样例；查看差异</td><td>检查偏移、边界、CRC、单位和结构，运行有效及异常样例</td></tr><tr><td>5 发布模板</td><td>查看版本差异、用途和验证等级，确认创建版本</td><td>冻结资料、DSL、测试、连接模板和运行时要求</td></tr><tr><td>6 应用到现场</td><td>选择实际对端、网关和范围，预览待创建对象</td><td>生成独立应用计划；按权限调用现有或新增配置接口</td></tr></tbody></table></div>
+<p>没有真实硬件时也可以完成资料导入和离线验证，档案标记为“样例已验证”。“实机已验证”必须关联真实设备、固件版本、时间和任务结果；模型生成的测试或模拟器通过不能代替这个状态。</p>
+<p>发布模板不会自动连接设备、启用规则或覆盖现网版本。应用计划把“创建草稿”“激活解析规则”“执行一次读取”“启用自动连接”作为清晰的独立步骤，用户可只完成当前需要的步骤。</p>
+<h3>3.2 用户只补充模型无法知道的信息</h3>
+<p>应自动提取厂家、型号、资料版本、字段偏移与编码、单位、UUID、操作格式和文档样例。真实 MAC、地址类型、授权网关、资源范围、当前连接、客户凭据和现场运行频率必须来自现场数据、已有配置或用户选择。</p>
+<p>说明书只有功能描述而没有二进制协议时，页面提示“已识别设备信息，缺少通信协议表”，保留已有结果并支持追加资料。不得根据“支持温度测量”自行生成温度字段偏移。多个固件版本格式不同时，建立独立版本和适用条件，不能合并成一个模糊配置。</p>
+<h3>3.3 导入任务可恢复</h3>
+<p>任务在服务器保存，关闭页面后可从型号库继续。显示真实阶段、已处理页数、等待人工处理项和模型请求状态；没有可靠进度时不展示虚构百分比。失败支持只重试失败步骤，用户修订字段不会被重新生成静默覆盖。</p>
+<p>模型拒绝、超时、预算不足或网络故障时保留提取内容和人工编辑入口。取消任务停止后续调用；已发出的模型请求可能产生费用，迟到结果只能保留为未采用记录，不能自动发布。</p>
+<h2 id="section-4">4 页面结构和入口规划</h2>
+<p>新增页面编号续接 P24 至 P26。页数按业务路由统计，403、404、重定向及抽屉、页签、向导步骤不重复计数。</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="对照表，可横向滚动"><table><thead><tr><th scope="col">功能大类</th><th scope="col">现有页面</th><th scope="col">本次新增</th><th scope="col">优化后数量</th></tr></thead><tbody><tr><td>运行概览</td><td>P01</td><td>无</td><td>1</td></tr><tr><td>网关设备</td><td>P02 至 P04</td><td>无</td><td>3</td></tr><tr><td>蓝牙连接</td><td>P05 至 P07</td><td>P24 型号模板库、P25 导入审阅工作台</td><td>5</td></tr><tr><td>数据处理</td><td>P08 至 P12</td><td>无</td><td>5</td></tr><tr><td>客户转发</td><td>P13 至 P15</td><td>无</td><td>3</td></tr><tr><td>任务与升级</td><td>P16 至 P18</td><td>无</td><td>3</td></tr><tr><td>系统管理</td><td>P19 至 P23</td><td>P26 模型服务设置</td><td>6</td></tr><tr><td>登录</td><td>P00</td><td>无</td><td>1</td></tr><tr><td>合计</td><td>24 页</td><td>3 页</td><td>27 页</td></tr></tbody></table></div>
+<p>保持 7 个业务大类。菜单页由 18 增至 20；上下文页由 5 增至 6；登录仍为独立页面。P25 是共用工作台，P10 和 P14 等页面可携带任务类型与来源对象跳入，返回时保留原页面筛选条件和草稿。</p>
+<h3>4.1 六个主要业务入口</h3>
+<div class="table-scroll" tabindex="0" role="region" aria-label="对照表，可横向滚动"><table><thead><tr><th scope="col">页面</th><th scope="col">入口及位置</th><th scope="col">布局优化与完成后的去向</th></tr></thead><tbody><tr><td>P05 蓝牙对端</td><td>顶部“从设备资料添加”，登记抽屉内“选择型号模板”</td><td>列表增加型号、模板版本、验证等级；资料不能代填现场 MAC；完成后绑定已授权的真实对端</td></tr><tr><td>P06 GATT 连接与操作</td><td>顶部“按模板连接”，操作区“导入接口说明”</td><td>左侧对端和连接，中部按“读取温度”等业务名称组织操作，右侧显示 UUID、当前发现证据和结果；高级参数可展开</td></tr><tr><td>P07 自动连接规则</td><td>顶部“从模板创建规则”</td><td>先选模板、对端和网关，再显示服务匹配与执行条件；默认关闭；启用前展示覆盖范围、冷却和容量约束</td></tr><tr><td>P10 解析器与试算</td><td>顶部主按钮“导入说明书生成解析方案”</td><td>左侧资料及字段树，中部字段表和 HEX 联动高亮，右侧输出与问题；测试成功后进入版本发布</td></tr><tr><td>P11 解析规则包</td><td>新建区“使用已验证设备模板”</td><td>生成路由草稿、显示多型号冲突和命中样本；明确“从设备型号”和“网关型号”分别是什么；沿用验证与激活流程</td></tr><tr><td>P14 目标版本与字段映射</td><td>顶部“导入客户接口说明”</td><td>左侧源字段，中部映射和单位转换，右侧目标样例、必填缺项与 ACK 契约；创建新的不可变目标版本</td></tr></tbody></table></div>
+<p>P06 只展示硬件实际支持的操作。GW32 当前写入仅支持 WITH_RESPONSE，单次长度不超过 min(512, ATT_MTU−3)，订阅最多 4 条；资料要求超过范围时显示能力差异，不让 AI 自动拆包或切换不支持的写入模式。</p>
+<h3>4.2 P24 型号模板库</h3>
+<p>规划路由 /ui/device-models，置于“蓝牙连接”菜单。这里的型号指从设备协议档案，不替代网关型号清单或签名 DeviceManifest。</p>
+<p>上方放“导入资料”、名称搜索和状态筛选。主体按厂家、型号、适用固件、档案版本、解析能力、连接能力、验证等级、引用数量展示。右侧详情抽屉包含资料、解析字段、连接模板、测试证据、版本差异、应用范围六个页签；底部提供“应用到对端”“复制为新版本”“继续导入”。</p>
+<p>草稿、已验证、已发布、已弃用分别显示。弃用只禁止新的引用；已有规则继续固定使用原版本，页面列出仍在引用的对象。客户之间不自动共享资料或模板；实例内跨项目推广需要管理员显式操作。</p>
+<h3>4.3 P25 导入审阅工作台</h3>
+<p>规划路由 /ui/import-jobs/:jobId，作为上下文页面。客户接口导入也复用此工作台，通过任务类型区分；结果发布到目标配置草稿，不写成从设备型号。菜单高亮采用显式页面归属，避免 /ui/system/ai 同时点亮“系统运维”和“模型服务设置”。</p>
+<p>宽屏采用三栏，建议比例约为 28%、44%、28%。左栏显示原文页或表格与版本来源；中栏编辑结构化草稿；右栏显示待处理问题、样例和验证结果。点击字段时左侧定位来源，点击 HEX 字节时中间定位字段。顶部显示六步流程、型号或目标名称、任务状态；底部固定“保存草稿”“验证”“下一步”及返回原页面。</p>
+<p>窄屏改为“原文、配置、验证”三个页签，保留当前字段、问题编号和步骤。缺失项要解释“缺什么、为什么阻塞、如何补充”，可追加文件、选取真实样本或手动补值。已确认字段与模型建议冲突时展示差异，由用户选择保留或替换。</p>
+<p>字段来源状态使用“文档明确”“用户提供”“推断待确认”“来源冲突”“当前不支持”。不把模型自报的 95% 置信度当作发布依据。普通用户默认只处理问题列表；开发者可展开原始结构和高级协议参数。</p>
+<h3>4.4 P26 模型服务设置</h3>
+<p>规划路由 /ui/system/ai，置于“系统管理”。仅管理员可以配置服务地址、模型标识、凭据引用、出站允许范围、文档发送策略和额度。其他有使用权限的人员只看到服务可用性、资料发送范围和剩余额度提示。</p>
+<p>页面分“服务连接”“隐私与范围”“配额与运行”三个页签。提供云端服务、内网服务、关闭 AI 三种明确模式；连接测试使用无业务资料的最小请求，并提示可能计费。密钥只提交一次，服务端加密存储，浏览器不回填明文。</p>
+<p>管理员设置能力探测结果：文本、图像、JSON Schema、上下文限制、流式响应等。测试通过只说明接口与最小结构可用，不等于设备协议解析质量已验收。服务变更后先对固定样例集回归，再允许新任务使用；历史档案保留当时的模型与提示版本。</p>
+<h2 id="section-5">5 AI 自动提取的对象</h2>
+<p>设备档案至少包含标识、广播协议、GATT 协议、测试样例、兼容条件和证据六部分。广播解析与 GATT 特征值解析分别建模，再由同一型号档案关联；设备连接操作和数据解析可以独立发布、独立禁用。</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="对照表，可横向滚动"><table><thead><tr><th scope="col">对象</th><th scope="col">自动提取内容</th><th scope="col">发布前检查</th></tr></thead><tbody><tr><td>设备标识</td><td>厂家、型号、硬件与固件范围、协议版本</td><td>不把示例 MAC 或营销名称当唯一身份</td></tr><tr><td>广播结构</td><td>AD 类型、Company ID、Service Data UUID、帧头、包型</td><td>明确字段相对完整广播、AD value 还是厂商负载的偏移</td></tr><tr><td>数据字段</td><td>字节范围、大小端、符号、位域、缩放、单位、枚举、无效值</td><td>越界、字段重叠是否有说明、单位转换、保留位、版本条件</td></tr><tr><td>校验规则</td><td>长度、帧头、校验算法、参数及覆盖区间</td><td>必须属于已实现算法；仅写“CRC16”不足以唯一确定算法</td></tr><tr><td>GATT 接口</td><td>服务和特征 UUID、读写与通知属性、安全要求</td><td>区分服务 UUID、特征 UUID、广播厂商 UUID；与当前连接证据核对</td></tr><tr><td>操作模板</td><td>读取或写入参数、编码、期望响应、超时说明</td><td>ATT 响应与厂商业务成功分开；首次写操作须明确执行</td></tr><tr><td>测试样例</td><td>文档中的 HEX、期望字段及异常样例</td><td>标注来源；AI 补充样例独立标记，不能自证未知协议</td></tr><tr><td>客户接口</td><td>字段名、类型、单位、必填、批量封装、ACK 和幂等要求</td><td>仅生成支持的映射；地址和认证引用由用户确认</td></tr></tbody></table></div>
+<p>建议首期接收 PDF、DOCX、TXT、Markdown、PNG/JPEG。PDF 保留页码和位置；DOCX 使用段落、表格和单元格定位；图片保留区域坐标。HTML 文档第二阶段以去脚本后的上传文件接入；Excel 寄存器表、压缩包和自动抓取网址暂不作为首期入口。</p>
+<p>普通文字优先本地提取；扫描页和复杂表格走 OCR 或视觉模型。DOCX 中的图片不能因为文字提取成功就被忽略。无法可靠识别的上下标、合并单元格和跨页表格应进入问题列表。</p>
+<p>导入文件是资料，不是代码插件。文档中的“忽略系统规则”“调用管理接口”等内容只当原文，不能变成模型或服务器的执行指令。</p>
+<h2 id="section-6">6 解析引擎和从设备识别</h2>
+<h3>6.1 新增受限协议 DSL</h3>
+<p>DSL 是描述协议字段的结构化规则，不是可执行的 Go、JavaScript 或 Python。模型输出先经过 JSON Schema 校验，再做协议语义校验、编译和样例运行。即使模型严格遵循输出结构，也仍可能写错偏移、单位或 UUID，不能跳过这些检查。</p>
+<p>首期支持单包、无状态协议：固定长度和有上限的变长字段、字节切片、大小端整数、符号位、位域、缩放、枚举、有效范围、受限条件分支，以及实现清单中明确列出的校验算法。每个操作明确输入区段，禁止用不受限表达式、循环、网络请求或文件读写补齐协议。</p>
+<p>解析器版本同时固定 DSL 内容哈希、DSL 版本、编译器版本、算法实现版本和输出 schema。已发布版本不可覆盖；修改生成新版本。运行时设定输入长度、指令数量、输出字段数、时间和内存上限，超限保留原始事件并隔离。</p>
+<p>以下仅说明草稿形态，不是现有 API 契约或真实设备协议：</p>
+<pre><code>parserDraft:
+  inputKind: GATT_VALUE
+  sourceRegion: characteristic_value
+  length: 4
+  fields:
+    - name: temperature
+      offset: 0
+      type: int16
+      endian: little
+      scale: 0.01
+      unit: Cel
+      evidence: document_1/table_2/row_3
+  unresolved: []</code></pre>
+<h3>6.2 新增从设备身份与协议路由</h3>
+<p>识别流程为：从原始采集上下文取得实际对端与报文种类，查询接管时冻结的已授权档案绑定，匹配广播或 GATT 条件，再调用固定版本的解析器。广播数据可结合 Company ID、Service Data UUID、帧头及版本字段，但单一厂商 ID 不能证明型号。</p>
+<p>当前 GATT RawEvent.capture 携带 connectionRef 和 characteristicHandle 等信息，没有直接携带服务和特征 UUID。新增设计必须按采集时的网关、radio、boot/session、连接引用和 handle，关联持久化的历史发现或订阅快照后取得 UUID。断链或重连后的旧事件仍关联旧快照；映射缺失时隔离等待有依据的处理，不能查询当前连接猜解。若改为报文直接携带 UUID，须协调升级 RawEvent schema、固件、摘要和重放兼容性，不能向严格的 1.1 契约直接追加字段。</p>
+<p>为现有规则新增独立的 peripheralModelRef、peerBindings 和 captureMatch 等设计字段，不复用网关 modelIds。精确绑定优先级、规则冲突和默认隔离行为必须确定性定义。多重型号候选、关键上下文缺失、设备版本不符时进入隔离区，并展示匹配失败的原因。</p>
+<p>解析输入扩展为 raw bytes 加只读采集上下文；保留原 eventId、来源和采集时间，模型不能重写身份。原始接管事务依据当时已激活的配置快照固定规则包、绑定、档案与解析器引用，再写入处理作业；worker 重试不能重新读取最新可变绑定。历史连接映射属于采集证据，按其独立身份关联，并将所采用快照的引用固定到处理依赖。因映射缺失而隔离的事件，在补足有效证据后通过显式重解析处理，不能悄悄改变旧结果。重放按冻结版本执行，显式重解析才产生新的处理 revision。旧任务和 outbox 不被新模板重新解释。</p>
+<h3>6.3 分层处理和性能边界</h3>
+<p>建议数据路径为：</p>
+<pre><code>网关上传 → 原始事件持久化 → RAW_PERSISTED
+                          ↓
+                从设备身份和协议匹配
+                          ↓
+               固定版本解析器或原样转发
+                          ↓
+                固定版本字段映射与 outbox
+                          ↓
+                   客户应用持久确认</code></pre>
+<p>AI 在另一条配置路径工作：</p>
+<pre><code>文件导入 → 本地提取与证据索引 → 模型生成草稿
+                                  ↓
+                      确定性校验和样例测试
+                                  ↓
+                         用户发布不可变版本
+                                  ↓
+                       进入现有配置发布机制</code></pre>
+<p>资料导入失败、模型 API 断开或额度耗尽不能阻塞原始事件接管和客户投递。AI worker 采用独立进程、并发队列和资源配额，数据库操作保持短事务；原始文件不以大 BLOB 写入高频数据数据库。</p>
+<h2 id="section-7">7 连接能力与嵌入式协议边界</h2>
+<p>现有两条通信链路继续分工：ESP32 与 nRF 之间承载采集和控制，网关与服务器之间承载上报、持久确认和任务结果。首版自动连接规则走 NRF54；手动 GATT 按签名能力清单选择 NRF54 或 ESP32，分别由 ESP 转发给 nRF 或在 ESP 本机执行。导入说明书不改变这个控制链路。</p>
+<p>文档生成的 UUID 是候选协议要求。连接和订阅实际使用的 handle 必须来自当前连接的发现结果，断开重连后重新验证。首期使用已有定向发现和结果证据；“列出全部服务、特征和描述符”需要新增固件能力、消息契约和服务器查询接口，单独排期。</p>
+<p>已有 BONDED_ENCRYPTED 只能复用预置绑定。资料提出配对码、数值比较或动态 MAC 时，可以识别要求并展示，但不能标记为已支持。RPA/NRPA、IRK 身份解析和绑定管理需服务器与固件共同扩展。BLE 链路加密和厂商应用层加密应分别表达；密钥只保存在凭据系统，不进入模型提示。</p>
+<p>多步骤握手、周期轮询、应用层分包重组、厂商解密和业务响应确认也需要专门的运行时支持。首期遇到这些协议时保留结构化资料，标记“待适配”，不生成看似可用的单包解析器。</p>
+<p>P06 的写入确认摘要显示真实对象、作用范围、业务含义、编码后的值、当前连接证据、验证方式和超时处理。任务结果不确定时维持 UNKNOWN，不让 AI 自动重新写入或强制标为成功。幂等键、任务状态、应用 ACK 和原始事件可靠传输机制继续由现有确定性服务负责。</p>
+<h2 id="section-8">8 大模型 API 与部署方案</h2>
+<h3>8.1 是否需要增加接口</h3>
+<p>需要增加服务器端的“模型服务适配接口”，以及前端调用的“导入和草稿管理 API”。浏览器只请求本平台；由服务器调用所配置的模型。客户使用云端模型时需要对应 API 账户、凭据和额度；现有软件登录账号不提供推理能力。采用内网模型时同样通过 HTTP 接口调用，但无需向公网模型发送资料。</p>
+<p>至少定义 generateStructured、analyzePages、healthCheck 和 usageReport 四类适配能力。不同提供商的文件、图像、结构化输出、取消和用量返回格式不同，不能只替换 baseURL 就声称完全兼容。适配层统一结果、错误码、引用和费用元数据，同时保留能力差异。</p>
+<h3>8.2 三种可交付模式</h3>
+<div class="table-scroll" tabindex="0" role="region" aria-label="对照表，可横向滚动"><table><thead><tr><th scope="col">模式</th><th scope="col">适用客户</th><th scope="col">组成与影响</th></tr></thead><tbody><tr><td>AI 关闭</td><td>完全隔离且不配置模型的客户</td><td>导入已发布模板、人工编辑和现有管理功能继续可用；不承诺自动理解未知文档</td></tr><tr><td>客户云端 API</td><td>允许按策略出站，希望尽快接入的客户</td><td>客户提供凭据；本地先提取和裁剪资料，只发送授权范围；无需为推理购置 GPU</td></tr><tr><td>客户内网模型</td><td>资料必须留在内网或已有推理资源的客户</td><td>连接内网 HTTP 服务；OCR和模型能力均需验收；模型权重、许可证、显存和维护另行评估</td></tr></tbody></table></div>
+<p>研发首期建议选一个支持结构化输出和视觉输入的供应商完成适配，并保留第二提供商及内网适配契约。交付包不默认捆绑大型模型或 GPU 运行环境。模型选择依据项目样例集的字段正确率、拒绝错误能力、延迟和成本，不按参数量或通用榜单决定。</p>
+<p>OpenAI 的 PDF 输入在支持视觉的模型上可以处理文字和页面图像；非 PDF 文件的文字提取不等于处理了内嵌图表。Structured Outputs 可以约束响应结构，但结构正确并不保证内容正确。<a href="https://developers.openai.com/api/docs/guides/file-inputs" target="_blank" rel="noopener noreferrer">OpenAI 文件输入</a>；<a href="https://developers.openai.com/api/docs/guides/structured-outputs" target="_blank" rel="noopener noreferrer">结构化输出</a>。</p>
+<p>百炼提供 OpenAI 兼容接口，严格 JSON Schema 支持与具体模型有关，需区分仅保证合法 JSON 的模式和约束结构的模式。<a href="https://help.aliyun.com/zh/model-studio/compatibility-of-openai-with-dashscope" target="_blank" rel="noopener noreferrer">百炼接口兼容</a>；<a href="https://help.aliyun.com/zh/model-studio/qwen-structured-output" target="_blank" rel="noopener noreferrer">百炼结构化输出</a>。</p>
+<p>vLLM 和 Ollama 提供本地 HTTP 服务及结构化输出能力，API 兼容各有范围，需要逐项验证图像、文件和 schema 支持。Ollama 本地兼容示例中的 API Key 可以被忽略，不能把填写密钥当成生产鉴权已具备。<a href="https://docs.vllm.ai/en/stable/serving/online_serving/openai_compatible_server/" target="_blank" rel="noopener noreferrer">vLLM 服务接口</a>；<a href="https://docs.ollama.com/api/openai-compatibility" target="_blank" rel="noopener noreferrer">Ollama 兼容范围</a>。</p>
+<h3>8.3 技术模块建议</h3>
+<div class="table-scroll" tabindex="0" role="region" aria-label="对照表，可横向滚动"><table><thead><tr><th scope="col">模块</th><th scope="col">技术路线</th><th scope="col">选择理由</th></tr></thead><tbody><tr><td>前端与审阅</td><td>现有 Vue 3、TypeScript、Element Plus；PDF 预览组件本地打包</td><td>保持现有工程与离线部署方式，不依赖外部 CDN</td></tr><tr><td>AI 编排与业务接口</td><td>现有 Go 服务，独立 AI service 包及 worker 角色</td><td>复用鉴权、审计、幂等与部署能力</td></tr><tr><td>文档提取与 OCR</td><td>可选隔离 Python worker，固定依赖版本；转换器禁宏和外链</td><td>文档生态与业务执行隔离，限制解析器风险和资源占用</td></tr><tr><td>模型调用</td><td>Go HTTP 客户端和提供商适配器</td><td>首期不引入复杂 Agent 框架，便于控制请求和审计</td></tr><tr><td>检索与证据</td><td>SQLite 元数据、文件对象存储、按章节和字段检索</td><td>单份文档导入无需先部署向量数据库；跨资料检索以后再评估</td></tr><tr><td>协议执行</td><td>Go 的 DSL 校验、编译及受限解释器</td><td>可离线、可重放，可测量逐包开销</td></tr><tr><td>可选内网推理</td><td>vLLM 或 Ollama 等客户选择的服务</td><td>不与平台发行包绑定；以接口和能力测试验收</td></tr></tbody></table></div>
+<p>首期采用“按文档结构检索相关章节，再调用模型生成对应部分”的方式。重复导入以文档哈希、提取器版本、模型配置和提示版本定位结果；不可跨未授权项目共享缓存。大文档按协议章节拆分，不截断后假装已读全文。</p>
+<h3>8.4 容量和成本</h3>
+<p>模型容量主要由每日导入数量、页数、扫描页比例、并发人员和模型响应时间决定，不由网关数直接决定。网关数仍决定数据面容量，二者分开压测和预算。不得为了 AI 功能降低当前原始事件和 outbox 的磁盘保留能力。</p>
+<p>建议初始保护参数为每任务最多 5 个文件、合计 50 MiB、200 页；每用户同时 1 个运行任务、每实例 2 个模型任务，超额排队。它们是待压测的产品默认值，不是当前实现或硬件容量承诺。大客户可以配置更高限制；文档页数不等于模型实际支持的上下文大小。</p>
+<p>费用按提取页数、OCR 页数、输入和输出 token、实际模型单价及失败调用统计。提交前显示估算区间，完成后显示已知用量；供应商不返回精确费用时显示估算。设任务额度、日额度和管理员通知阈值，预算不足停止新调用，保留草稿。按网关数量不能准确估算 AI 费用。</p>
+<h2 id="section-9">9 服务端对象和接口草案</h2>
+<p>以下是供详细设计使用的新增逻辑对象和接口方向，尚未写入当前 OpenAPI。最终字段、迁移编号和权限名称需要在实现阶段冻结并补充契约测试。</p>
+<h3>9.1 数据库与文件对象</h3>
+<div class="table-scroll" tabindex="0" role="region" aria-label="对照表，可横向滚动"><table><thead><tr><th scope="col">逻辑对象</th><th scope="col">关键字段</th><th scope="col">生命周期与约束</th></tr></thead><tbody><tr><td>ai_provider_configs</td><td>providerId、endpoint、model、capabilities、secretRef、policy、revision</td><td>管理库；凭据独立加密；更新使用版本前置条件</td></tr><tr><td>source_documents</td><td>documentId、scopeId、ownerId、sha256、format、size、revision、storageRef</td><td>原文在受控文件目录；同范围去重；权限校验后下载</td></tr><tr><td>document_evidence</td><td>evidenceId、documentId、page/section/table/cell、bbox、text、extractorVersion</td><td>可定位原文；内容不可被模型改写成原始证据</td></tr><tr><td>ai_jobs</td><td>jobId、scopeId、kind、state、phase、ownerId、requestKey、lease、error、usage</td><td>管理库持久队列；崩溃后按阶段恢复；有限重试</td></tr><tr><td>ai_job_runs</td><td>runId、jobId、providerConfigRevision、model、promptVersion、requestDigest、usage</td><td>记录每次尝试；默认不记录完整敏感提示和原文</td></tr><tr><td>device_models 和 model_versions</td><td>modelId、version、firmwareRange、state、evidenceRefs、verificationLevel</td><td>厂家和型号档案；发布版本不可覆盖</td></tr><tr><td>protocol_drafts</td><td>draftId、jobId、revision、parserSpec、connectionSpec、issues</td><td>支持人工修订和差异；乐观锁防止覆盖</td></tr><tr><td>parser_versions</td><td>parserId、version、dslHash、compilerVersion、schemaRef、artifactRef</td><td>编译后不可变；worker 验证摘要与运行时兼容性</td></tr><tr><td>protocol_test_cases 和 test_runs</td><td>input、captureContext、expected、sourceType、result、runtimeVersion</td><td>文档、人工和实机来源分开；保存异常样例</td></tr><tr><td>peripheral_bindings</td><td>peerId、scopeId、modelVersion、identityMatch、revision</td><td>绑定真实身份；跨范围绑定拒绝；历史版本保留</td></tr><tr><td>gatt_discovery_snapshots</td><td>gatewayId、radio、boot/session、connectionRef、handle、serviceUuid、characteristicUuid、evidenceRef</td><td>持久化历史发现与订阅映射；断链后保留，覆盖离线补传和重放所需期限</td></tr><tr><td>ai_apply_plans</td><td>planId、sourceVersions、targetRefs、steps、state、operationKeys</td><td>明确待创建对象、分步状态和恢复点，不假设跨库原子事务</td></tr><tr><td>ai_reviews 和 usage_records</td><td>actorId、draftRevision、decision、evidenceDigest、usage、at</td><td>审核与额度记录可审计；与已有审计事件关联</td></tr></tbody></table></div>
+<p>管理元数据放 management.db，编译产物和原文放受控本地目录，通过摘要引用。pipeline.db 仅保存作业需要的已发布版本引用或快照，不存模型会话。维护备份需包含档案和产物、证据元数据及密钥，恢复时验证缺失引用；原文保留期限按客户策略配置。</p>
+<p>删除原文时保留必要的文件哈希、已发布配置和审核记录，明确显示“原文已删除”。若客户要求删除全部证据文本，删除动作应覆盖索引和模型侧文件；已运行配置不应因此被静默改写。外部提供商的删除与保留策略必须单独核实。</p>
+<h3>9.2 管理 API</h3>
+<div class="table-scroll" tabindex="0" role="region" aria-label="对照表，可横向滚动"><table><thead><tr><th scope="col">拟新增接口</th><th scope="col">作用</th></tr></thead><tbody><tr><td>GET /api/v1/ai/status</td><td>普通授权用户读取服务可用性、发送政策和本人额度摘要，不暴露管理员配置</td></tr><tr><td>GET/POST /api/v1/ai/providers</td><td>查看脱敏服务配置或创建服务；ADMIN</td></tr><tr><td>PATCH /api/v1/ai/providers/{id}</td><td>修改服务策略；If-Match；禁止返回明文凭据</td></tr><tr><td>POST /api/v1/ai/providers/{id}/checks</td><td>使用最小无业务样本测试能力</td></tr><tr><td>POST /api/v1/source-documents</td><td>multipart 上传；限制大小和格式，返回哈希与 documentId</td></tr><tr><td>GET /api/v1/source-documents/{id}/evidence</td><td>查询已授权文档的结构和证据定位</td></tr><tr><td>POST /api/v1/ai/import-jobs</td><td>传 documentIds、taskKind、scope、sourceContext；202 返回 jobId</td></tr><tr><td>GET /api/v1/ai/import-jobs</td><td>按权限列出可继续的任务，游标分页</td></tr><tr><td>GET /api/v1/ai/import-jobs/{id}</td><td>阶段、问题、用量、草稿引用；首期轮询</td></tr><tr><td>POST /api/v1/ai/import-jobs/{id}/cancellation</td><td>请求取消；已开始调用可能仍计费</td></tr><tr><td>GET/PATCH /api/v1/protocol-drafts/{id}</td><td>读取和保存结构化修订；If-Match</td></tr><tr><td>POST /api/v1/protocol-drafts/{id}/validations</td><td>确定性检查和样例测试，返回 validationId</td></tr><tr><td>POST /api/v1/protocol-drafts/{id}/publications</td><td>依据精确草稿 revision 和验证结果发布模板版本</td></tr><tr><td>GET /api/v1/device-models</td><td>授权范围内的型号、版本、验证等级和引用摘要</td></tr><tr><td>POST /api/v1/ai/apply-plans</td><td>生成待执行步骤与影响摘要；不产生物理命令</td></tr><tr><td>POST /api/v1/ai/apply-plans/{id}/executions</td><td>用户明确执行的配置步骤；再次检查权限和版本</td></tr></tbody></table></div>
+<p>创建和执行类接口使用与现有设计一致的幂等机制。草稿修改后旧验证不能用于发布；发布携带 draftRevision、validationId 和内容摘要。上传重试用哈希去重；模型重试按明确策略和预算执行，不因浏览器刷新重复收费。</p>
+<p>拟新增错误码包括 DOCUMENT_UNSUPPORTED、EXTRACTION_INCOMPLETE、MODEL_UNAVAILABLE、AI_BUDGET_EXCEEDED、EVIDENCE_CONFLICT、PROTOCOL_UNSUPPORTED、VALIDATION_STALE、CAPABILITY_MISMATCH、BINDING_AMBIGUOUS。界面同时给出可执行恢复方式，不只展示技术码。</p>
+<h3>9.3 状态与权限</h3>
+<p>导入任务状态建议为 QUEUED、EXTRACTING、GENERATING、NEEDS_REVIEW、VALIDATING、READY、FAILED、CANCELED。NEEDS_REVIEW 可以回到生成或验证，但重新生成必须保留人工修订差异。模板生命周期独立为 DRAFT、VALIDATED、PUBLISHED、DEPRECATED；“档案已发布”和“现网已激活”分别展示。</p>
+<p>沿用现有五类角色，不为 AI 再增加一套身份系统。建议新增 document:read/write、ai:use、profile:read/write、profile:publish 等权限，并在现有角色中明确配置。ADMIN 管服务与发布；DEVELOPER 可在授权范围导入、编辑、试算；DEVICE_ADMIN 可选择已发布模板、绑定和执行现有授权设备操作；OPERATOR 只使用被授权的诊断与只读解释；AUDITOR 只看有权查看的审核摘要。该扩展仍需正式更新权限表。</p>
+<p>资料权限、原始数据权限和模型使用权限要分别验证。DEVELOPER 看得到某份文档，不代表有权看另一项目报文；AUDITOR 的日志权限不自动授予原文下载。发布采用实例级规则时仍满足现有实例权限要求，不能因为新增 AI 角色能力而绕过它。</p>
+<p>应用计划按“创建不可变版本、验证依赖、准备规则、最后显式激活”的顺序执行。中途失败保留步骤和已创建对象 ID，可幂等恢复；不覆盖已经被人修改的配置。模型服务账户没有 task:create、secret:read 或数据库直写权限，物理任务由正常用户请求触发。</p>
+<h2 id="section-10">10 其他页面的 AI 优化</h2>
+<p>采用对象上下文中的“解释、生成草稿、给出下一步”入口，统一右侧辅助抽屉。回答需要引用当前对象、时间和证据；不在每个页面增加独立聊天机器人。已有规则能确定的状态和告警优先由程序计算，模型负责解释。下表 P1、P2 表示这些扩展能力的相对优先级，并非全部纳入九周首期；首期范围以第 13 至 15 节为准。</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="对照表，可横向滚动"><table><thead><tr><th scope="col">页面</th><th scope="col">建议辅助能力</th><th scope="col">必须保留的边界</th><th scope="col">优先级</th></tr></thead><tbody><tr><td>P01 运行概览</td><td>解释异常摘要，串联网关、积压与失败原因</td><td>只用实际指标；缺少全量统计时标明样本范围</td><td>P1</td></tr><tr><td>P02 P03 网关</td><td>根据健康和任务记录生成排查建议</td><td>不把“在线”推断为所有传感器正常；不自动重启</td><td>P1</td></tr><tr><td>P04 网关配置</td><td>把“降低上报频率”等描述转为配置差异</td><td>单位、范围和固件能力检查；用户确认后提交</td><td>P2</td></tr><tr><td>P08 P09 数据事件</td><td>解释报文字节、字段来源和异常位置</td><td>原始数据访问权限与外发策略生效；不补造未采集字段</td><td>P1</td></tr><tr><td>P12 隔离与重解析</td><td>汇总错误类型，建议已有解析版本或待补资料</td><td>不自动批量重解析；先选样本、预览影响，再走既有流程</td><td>P1</td></tr><tr><td>P13 P14 客户转发</td><td>导入接口说明、生成映射和接收样例</td><td>不生成可执行签名脚本；地址、凭据和应用确认须核实</td><td>P1</td></tr><tr><td>P15 投递记录</td><td>解释超时、ACK 不匹配及去重要求</td><td>不把 HTTP 200 或 MQTT PUBACK 当作客户持久接管</td><td>P1</td></tr><tr><td>P16 P17 命令任务</td><td>用普通语言解释阶段、失败证据和排查步骤</td><td>UNKNOWN 不自动重试；不虚构执行成功</td><td>P1</td></tr><tr><td>P18 固件与制品</td><td>对比版本说明、归纳兼容条件</td><td>AI 文本不替代签名、型号适配和真实升级验证</td><td>P2</td></tr><tr><td>P19 项目与分组</td><td>解释范围对资源可见性的影响</td><td>不根据自然语言自动扩大授权</td><td>P2</td></tr><tr><td>P20 账号与凭据</td><td>解释角色差异与最小权限建议</td><td>账号、密码、令牌创建和撤销仍用明确表单</td><td>P2</td></tr><tr><td>P21 系统运维</td><td>生成脱敏诊断说明、备份恢复操作指引</td><td>按实际版本给步骤；离线维护仍按当前 CLI 约束</td><td>P1</td></tr><tr><td>P22 审计日志</td><td>汇总指定时间与范围内变更，关联发布记录</td><td>保留原始记录，标明查询范围和遗漏，不修改日志</td><td>P2</td></tr><tr><td>P23 对接指南</td><td>基于本地当前版本文档问答，生成客户端示例</td><td>引用章节和 API 版本；示例不含真实凭据，不自动运行</td><td>P1</td></tr></tbody></table></div>
+<p>不将客户业务预测、定位分析、自动计费或无人值守的任意设备操作放进本期。这些需要独立业务目标和验证，当前平台的重点仍是设备接入、数据可靠性与客户集成。</p>
+<h2 id="section-11">11 易用性和交互验收</h2>
+<p>页面文案使用“导入设备资料”“生成解析草稿”“读取一次验证”等具体动作，避免要求用户理解 token、向量库或模型工具调用。技术参数放在高级区，普通视图展示字段名称、单位、来源和异常。</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="对照表，可横向滚动"><table><thead><tr><th scope="col">场景</th><th scope="col">交互要求</th></tr></thead><tbody><tr><td>从错误页面开始</td><td>识别上传资料类型，提示转到适合流程并保留文件与已填信息</td></tr><tr><td>模型服务未配置</td><td>入口说明管理员设置路径；仍可选已发布模板或手工编辑</td></tr><tr><td>资料中有多个型号</td><td>分别生成候选，用户选本次目标；不把版本字段混在一起</td></tr><tr><td>资料缺少关键参数</td><td>问题集中排序，一次列明阻塞项；补传文件后局部重算</td></tr><tr><td>字段存在冲突</td><td>同屏显示双方原文与位置；用户选择并填写简短理由</td></tr><tr><td>操作期间离开页面</td><td>保存服务端草稿和 jobId；返回可继续，不能只依赖浏览器缓存</td></tr><tr><td>新版资料再次导入</td><td>提取增量差异、标出受影响测试和规则引用；新建版本</td></tr><tr><td>一份模板绑定多台设备</td><td>同型号复用；逐项检查范围与能力，批量动作需新增明确接口与预览</td></tr><tr><td>AI 建议错误</td><td>单字段修改、恢复人工值、反馈错误；修订可沉淀为本客户模板</td></tr><tr><td>无网和模型故障</td><td>可读资料、编辑草稿、试算已编译规则；展示可恢复的未完成步骤</td></tr></tbody></table></div>
+<p>键盘操作应能完成步骤切换、问题定位和确认；错误不能只靠颜色表达。返回上一页、刷新、并发编辑和会话过期均不得丢失已保存草稿。首次导入强调流程，熟练用户可以从型号库直接复用，避免每台设备重复走全套向导。</p>
+<h2 id="section-12">12 数据保护和运行可靠性</h2>
+<p>外部 API 模式在提交前显示接收方、将发送的文件或页段、数据类别和估算用量；管理员可以预先制定允许策略，用户不必每一步重复确认。客户选择仅内网模式后，服务器必须在出站策略上阻止公网模型调用，而不是只隐藏按钮。</p>
+<p>云服务“不用于训练”与“零留存”分别核实。例如 OpenAI 的数据控制包含滥用监测和部分功能的应用状态；store:false 不能泛化为全部文件、日志和功能均零留存。设置页应分别展示推理位置、文件位置和提供商保留策略。<a href="https://developers.openai.com/api/docs/guides/your-data" target="_blank" rel="noopener noreferrer">OpenAI 数据控制</a>。</p>
+<p>凭据、设备密钥和令牌不进入模型上下文；日志只记录必要摘要、错误与用量。文档提取进程禁宏、禁外链执行、限制文件系统和网络权限；限制压缩膨胀、页数、图片尺寸、转换时间和临时空间。下载文件需鉴权，不暴露公开静态目录。</p>
+<p>模型输出经 schema 与语义校验后进入草稿库。文档里的 URL、命令和管理指令不能直接执行；如后续允许 URL 导入，须防止访问本机管理接口、内网未授权地址和云元数据服务。模型供应商地址由管理员配置并限制，普通用户不能用导入内容改变请求目的地。</p>
+<p>AI 作业使用短事务、租约和可恢复步骤，不能长期持有管理库锁。发布解析器时先检查所有目标 worker 是否支持 DSL 和算法版本，再激活规则；任一不兼容节点阻止激活并给出差异。旧内置解析器持续可用。</p>
+<p>AI 关闭或故障时，原始事件落盘确认、重传去重、命令结果确认、outbox 投递及客户 ACK 的行为保持不变。模型不会根据“看起来已成功”修改这些状态。</p>
+<h2 id="section-13">13 开发阶段和工作量</h2>
+<p>建议以 2 名后端、1 名前端、1 名测试为主，产品和嵌入式按需参与。以下为约 9 周的初步计划，假设不新增动态地址、配对或厂商加密协议；实际排期以样例资料和接口冻结结果校准。</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="对照表，可横向滚动"><table><thead><tr><th scope="col">阶段</th><th scope="col">时间</th><th scope="col">交付和完成条件</th></tr></thead><tbody><tr><td>A 基础契约</td><td>第 1 至 2 周</td><td>设备档案、身份匹配、DSL 最小集、证据格式、模型能力契约与样例集；通过设计评审</td></tr><tr><td>B 解析导入闭环</td><td>第 3 至 5 周</td><td>上传提取、一个模型适配器、任务恢复、P24 P25 P26 与 P10；实现最小 DSL 编译运行、从设备绑定路由和测试级应用流程，单包解析从导入走到模拟转发</td></tr><tr><td>C 连接和对接</td><td>第 6 至 7 周</td><td>P05 P06 P07 P11 的模板应用；定向发现证据；P14 接口导入和映射检查；真实设备按型号试验</td></tr><tr><td>D 质量与交付</td><td>第 8 至 9 周</td><td>多设备混接、权限、故障、成本、性能和离线回归；Linux 安装包、操作手册、回滚演练</td></tr><tr><td>后续增强</td><td>独立排期</td><td>运维问答、跨资料检索、完整 GATT 服务树、配对和动态身份、分包与厂商适配</td></tr></tbody></table></div>
+<p>实施顺序优先打通一条真实链路：选一个广播单包设备和一个简单 GATT 设备，导入资料、生成草稿、样例验证、发布、绑定、接收和转发。成功后扩展字段类型和协议组合，再增加更多页面的解释助手。</p>
+<p>P1 的页面辅助能力可在已有证据服务上逐步增加，不必等待全部页面重做。复杂协议和完整发现树需要嵌入式协议同步设计，不计入单纯前端或 AI API 对接工作量。</p>
+<h2 id="section-14">14 测试与验收标准</h2>
+<p>建立脱敏且获准使用的基准集，建议初版至少 20 份覆盖不同协议的资料，其中包含扫描件、表格、多版本冲突、缺页和明确不支持的协议。每个支持协议至少保留 3 个有效样例与 3 个异常样例；温度符号、大小端、CRC、UUID 角色等由人工标注，不以模型答案充当标准答案。</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="对照表，可横向滚动"><table><thead><tr><th scope="col">验收领域</th><th scope="col">必须证明的结果</th></tr></thead><tbody><tr><td>自动提取</td><td>每个发布的关键字段有文档或人工来源；缺失字段不能被默认猜测填满</td></tr><tr><td>易用性</td><td>对选定支持协议，比较同一任务的人工填写数量和完成时间；目标是必填项减少至少 60%，以实测报告判定</td></tr><tr><td>协议正确性</td><td>固定基准集预期输出全量比对；负数、长度、边界、无效值、CRC 错误等按规则拒绝或隔离</td></tr><tr><td>多设备识别</td><td>同网关多型号及相同 UUID 情况下不误套协议；歧义样例隔离；测试集中错误型号发布为零</td></tr><tr><td>GATT</td><td>物理操作使用当前连接证据，历史事件按采集时快照解析；重连不复用旧句柄；超出安全模式、写长和订阅数量限制的操作被阻止</td></tr><tr><td>写入与启用</td><td>导入和生成不会触发任务；明确执行后才创建任务；响应不确定不自动重放</td></tr><tr><td>版本与重放</td><td>修改资料或模板不会改旧处理输出；回放可重现；显式重解析保留 revision 与差异</td></tr><tr><td>数据面隔离</td><td>模型断网、429、超时和 worker 崩溃时原始接管与投递继续；没有已确认事件丢失</td></tr><tr><td>权限与隐私</td><td>跨项目、越权证据下载、提示注入、密钥外发和不允许的出站请求均被阻止</td></tr><tr><td>任务恢复</td><td>刷新、服务重启、重复提交和取消后迟到结果不重复发布；已保存人工修改不丢失</td></tr><tr><td>部署与兼容</td><td>AI 关闭可运行；既有内置解析器与旧协议回归通过；备份恢复含模板依赖</td></tr></tbody></table></div>
+<p>对 AI 质量分别报告“有来源字段的正确率”“关键字段错误数”“缺失项识别率”“支持协议覆盖率”和“人工修改量”，不能用单一综合准确率掩盖危险错误。拒绝不支持协议属于正确行为，应单独计数。</p>
+<p>性能测试在相同数据负载下对比 AI 关闭与开启。首期建议把数据接管 p95 延迟回退不超过 5% 作为待验证目标，并要求无新增丢失；若达不到，调整 worker 资源或独立部署。文档处理时间按页数、扫描比例和模型分别报告，不能承诺所有 200 页文档固定几秒完成。</p>
+<p>真实硬件联调至少记录设备型号、固件、资料版本、网关版本、捕获样本、连接和任务证据。没有实机记录的版本只能标为文档或样例验证。</p>
+<h2 id="section-15">15 建议冻结的首期范围</h2>
+<p>首期包含可选模型服务、文档上传与证据、设备档案、受限单包 DSL、从设备协议绑定、共享导入工作台、样例验证、模板版本发布，以及六个核心页面的入口和应用流程。模型不参与逐包解析，人工编辑仍可用。</p>
+<p>首期连接仅使用当前已有能力：静态身份、定向发现、读取、受限写入和订阅，支持现有预置绑定加密模式。客户接口导入只生成当前可表达的顶层映射和确认契约草稿；复杂签名、任意嵌套变换或私有加密显示待适配。</p>
+<p>样例资料、客户选择的模型服务、真实测试设备和允许发送的资料范围可以在开发准备阶段逐步确定，不阻碍先完成数据结构、接口契约、DSL 和模拟测试。没有真实资料时，必须把合成测试标明为合成，不能据此承诺具体厂商兼容。</p>
+<h2 id="section-16">16 代码依据与边界记录</h2>
+<p>本次核查基线为 codex/frontend-console 分支提交 fe9a45b2740da163e149dae2a49e2998a135abe7 的服务器 0.3.0。以下为仓库相对路径，具体行号随后续实现变化，以对应提交为准。</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="对照表，可横向滚动"><table><thead><tr><th scope="col">依据</th><th scope="col">本方案使用的事实</th></tr></thead><tbody><tr><td>frontend/src/router.ts</td><td>当前 P00 至 P23 路由与页面权限</td></tr><tr><td>server/docs/frontend-implementation.md</td><td>当前交付范围、前后端联调与部署说明</td></tr><tr><td>server/internal/platform/parsers.go</td><td>固定解析器目录、版本校验和确定性解析</td></tr><tr><td>server/internal/platform/pipeline.go</td><td>当前按网关、分组、协议提示和包型匹配，不具备从设备档案路由</td></tr><tr><td>server/internal/platform/pipeline_capture.go</td><td>当前严格的 capture 字段集与 GATT 事件上下文；没有直接上报服务和特征 UUID</td></tr><tr><td>server/internal/platform/control_gw32.go</td><td>GATT 安全、写长、订阅、发现和结果证据限制</td></tr><tr><td>server/internal/platform/autoconnect_api.go</td><td>对端静态身份与自动连接规则</td></tr><tr><td>server/internal/platform/auth.go</td><td>当前固定角色和权限，AI 权限尚未加入</td></tr><tr><td>server/internal/platform/mapping.go</td><td>当前可表达的客户字段映射</td></tr><tr><td>server/docs/gateway-uart-protocol.md</td><td>定向发现、连接句柄作用域和预置绑定的协议设计</td></tr><tr><td>server/docs/gateway-protocol.md</td><td>网关与服务器接入、持久确认和控制协议</td></tr></tbody></table></div>
+<p>嵌入式协议文档规定的能力仍需真实固件实施和硬件联调证明。本方案依据当前服务器实现与协议约束，不把协议草案或模拟器结果视为实机验收。</p>
+<p>本文件为内容源，ai-assistance-strategy.html 为可离线阅读和打印的同内容版本；ai-assistance-pages.json 为独立的规划目录，不覆盖当前已实现页面目录。通过 server/scripts/build-ai-strategy-html.py 重新生成 HTML，使用 --check 检查内容同步和页面计数。</p>
+<h2 id="section-17">17 官方资料与适用说明</h2>
+<p>资料核实日期为 2026年11月8日。以下用于确定 API 接入边界，不代表对模型效果、服务地区、价格或客户账户可用性的承诺。实施时应按所选提供商和模型重新核对限制。</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="对照表，可横向滚动"><table><thead><tr><th scope="col">官方来源</th><th scope="col">对本项目的用途</th></tr></thead><tbody><tr><td><a href="https://developers.openai.com/api/docs/guides/file-inputs" target="_blank" rel="noopener noreferrer">OpenAI 文件输入</a></td><td>区分 PDF 页面图像与非 PDF 文字提取，避免丢失协议图表</td></tr><tr><td><a href="https://developers.openai.com/api/docs/guides/structured-outputs" target="_blank" rel="noopener noreferrer">OpenAI 结构化输出</a></td><td>受约束结构、拒绝与不完整响应；语义仍需本地验证</td></tr><tr><td><a href="https://developers.openai.com/api/docs/guides/your-data" target="_blank" rel="noopener noreferrer">OpenAI 数据控制</a></td><td>区分训练使用、日志保留、文件状态及可用的数据控制</td></tr><tr><td><a href="https://developers.openai.com/api/docs/quickstart" target="_blank" rel="noopener noreferrer">OpenAI API 快速开始</a></td><td>服务器 API 凭据接入，不使用操作员浏览器登录会话</td></tr><tr><td><a href="https://help.aliyun.com/zh/model-studio/compatibility-of-openai-with-dashscope" target="_blank" rel="noopener noreferrer">百炼兼容接口</a></td><td>提供商 endpoint、地域与模型配置</td></tr><tr><td><a href="https://help.aliyun.com/zh/model-studio/qwen-structured-output" target="_blank" rel="noopener noreferrer">百炼结构化输出</a></td><td>JSON Object 与 JSON Schema 区别及模型支持差异</td></tr><tr><td><a href="https://docs.vllm.ai/en/stable/serving/online_serving/openai_compatible_server/" target="_blank" rel="noopener noreferrer">vLLM HTTP 服务</a></td><td>内网推理候选与 API 兼容边界</td></tr><tr><td><a href="https://docs.vllm.ai/en/stable/features/structured_outputs/" target="_blank" rel="noopener noreferrer">vLLM 结构化输出</a></td><td>固定推理版本和输出后端并执行回归</td></tr><tr><td><a href="https://docs.ollama.com/capabilities/structured-outputs" target="_blank" rel="noopener noreferrer">Ollama 结构化输出</a></td><td>本地 schema 输出与客户端验证</td></tr><tr><td><a href="https://docs.ollama.com/api/openai-compatibility" target="_blank" rel="noopener noreferrer">Ollama OpenAI 兼容</a></td><td>兼容子集与本地示例认证边界</td></tr></tbody></table></div>
+<p>本策略中的页面布局、模块拆分、初始限制、排期和验收阈值是针对本项目的工程建议，不是上述提供商承诺。未调用真实模型完成协议质量评测，也未据此声称已支持任意厂商说明书。</p>
+<footer>文档由 ai-assistance-strategy.md 生成，内容版本以仓库源文件为准。<br>源文件 SHA256 cfe8810c6623a82e4fa194f770b085301e9a7359a05d690013b25e02287cb6ec</footer>
+</main></div><script>
+const sections=[...document.querySelectorAll('h2[id]')];
+const observer=new IntersectionObserver(entries=>{entries.forEach(e=>{if(e.isIntersecting){document.querySelectorAll('nav a').forEach(a=>a.removeAttribute('aria-current'));const a=document.querySelector('nav a[href="#'+e.target.id+'"]');if(a)a.setAttribute('aria-current','true');}})},{rootMargin:'0px 0px -70% 0px'});
+sections.forEach(s=>observer.observe(s));
+</script></body></html>

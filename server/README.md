@@ -6,6 +6,8 @@
 
 完整管理前端已按 [前端总体规划](docs/frontend-plan.md) 实现：7 个功能大类、23 个业务页面加 1 个登录页，共 24 页；入口 `/ui/`，访问根目录自动进入控制台。Vue 构建产物随 Go 程序交付，客户运行时不需要 Node.js。结构化目录见 [frontend-pages.json](docs/frontend-pages.json)，开发与测试见 [前端 README](../frontend/README.md)。
 
+下一阶段的 [AI 辅助接入与页面优化策略](docs/ai-assistance-strategy.md) 规划说明书与接口资料导入、从设备解析和 GATT 模板生成、验证发布及其他页面辅助能力；包含 [离线阅读版](docs/ai-assistance-strategy.html) 和 [27 页规划目录](docs/ai-assistance-pages.json)。这是设计方案，新增 3 页及 AI 功能尚未实现，当前运行版本仍为上述 24 页。
+
 ## 当前可执行入口
 
 | 程序 | 用途 |

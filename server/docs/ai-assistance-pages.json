@@ -1,0 +1,383 @@
+{
+  "planVersion": "1.0",
+  "status": "proposal_not_implemented",
+  "date": "2026-11-08",
+  "baseline": {
+    "serverVersion": "0.3.0",
+    "apiVersion": "1.9.0",
+    "sourceCommit": "fe9a45b2740da163e149dae2a49e2998a135abe7"
+  },
+  "counts": {
+    "categories": 7,
+    "businessPages": 26,
+    "loginPages": 1,
+    "totalPages": 27,
+    "menuEntries": 20,
+    "contextualPages": 6
+  },
+  "countingRule": "Exclude 403/404/redirects; drawers, tabs and wizard steps are not pages.",
+  "groups": [
+    {
+      "id": "overview",
+      "name": "运行概览",
+      "pages": 1
+    },
+    {
+      "id": "gateways",
+      "name": "网关设备",
+      "pages": 3
+    },
+    {
+      "id": "bluetooth",
+      "name": "蓝牙连接",
+      "pages": 5
+    },
+    {
+      "id": "processing",
+      "name": "数据处理",
+      "pages": 5
+    },
+    {
+      "id": "forwarding",
+      "name": "客户转发",
+      "pages": 3
+    },
+    {
+      "id": "tasks",
+      "name": "任务与升级",
+      "pages": 3
+    },
+    {
+      "id": "system",
+      "name": "系统管理",
+      "pages": 6
+    }
+  ],
+  "pages": [
+    {
+      "id": "P00",
+      "title": "登录",
+      "group": "access",
+      "route": "/ui/login",
+      "menu": false,
+      "pageStatus": "implemented_baseline",
+      "aiStatus": "unchanged_or_later_assistance"
+    },
+    {
+      "id": "P01",
+      "title": "运行概览",
+      "group": "overview",
+      "route": "/ui/overview",
+      "menu": true,
+      "pageStatus": "implemented_baseline",
+      "aiStatus": "unchanged_or_later_assistance"
+    },
+    {
+      "id": "P02",
+      "title": "网关列表",
+      "group": "gateways",
+      "route": "/ui/gateways",
+      "menu": true,
+      "pageStatus": "implemented_baseline",
+      "aiStatus": "unchanged_or_later_assistance"
+    },
+    {
+      "id": "P03",
+      "title": "网关详情",
+      "group": "gateways",
+      "route": "/ui/gateways/:gatewayId",
+      "menu": false,
+      "pageStatus": "implemented_baseline",
+      "aiStatus": "unchanged_or_later_assistance"
+    },
+    {
+      "id": "P04",
+      "title": "网关配置",
+      "group": "gateways",
+      "route": "/ui/gateways/:gatewayId/configuration",
+      "menu": false,
+      "pageStatus": "implemented_baseline",
+      "aiStatus": "unchanged_or_later_assistance"
+    },
+    {
+      "id": "P05",
+      "title": "蓝牙对端",
+      "group": "bluetooth",
+      "route": "/ui/ble-peers",
+      "menu": true,
+      "pageStatus": "implemented_baseline",
+      "aiStatus": "planned",
+      "entry": {
+        "label": "从设备资料添加",
+        "taskKind": "DEVICE_PROFILE",
+        "destination": "P25",
+        "preserveSourceContext": true
+      },
+      "layoutChange": "同型号复用模板；真实地址、网关和范围由现场选择"
+    },
+    {
+      "id": "P06",
+      "title": "GATT连接与操作",
+      "group": "bluetooth",
+      "route": "/ui/gatt-connections",
+      "menu": true,
+      "pageStatus": "implemented_baseline",
+      "aiStatus": "planned",
+      "entry": {
+        "label": "按模板连接 / 导入接口说明",
+        "taskKind": "GATT_PROFILE",
+        "destination": "P25",
+        "preserveSourceContext": true
+      },
+      "layoutChange": "业务动作在中部，右侧显示当前连接发现证据；高级UUID参数折叠"
+    },
+    {
+      "id": "P07",
+      "title": "自动连接规则",
+      "group": "bluetooth",
+      "route": "/ui/auto-connect-rules",
+      "menu": true,
+      "pageStatus": "implemented_baseline",
+      "aiStatus": "planned",
+      "entry": {
+        "label": "从模板创建规则",
+        "taskKind": "AUTO_CONNECT",
+        "destination": "P25",
+        "preserveSourceContext": true
+      },
+      "layoutChange": "只补现场范围与条件；规则默认关闭，启用独立确认"
+    },
+    {
+      "id": "P08",
+      "title": "数据事件",
+      "group": "processing",
+      "route": "/ui/events",
+      "menu": true,
+      "pageStatus": "implemented_baseline",
+      "aiStatus": "unchanged_or_later_assistance"
+    },
+    {
+      "id": "P09",
+      "title": "事件详情",
+      "group": "processing",
+      "route": "/ui/gateways/:gatewayId/events/:eventId",
+      "menu": false,
+      "pageStatus": "implemented_baseline",
+      "aiStatus": "unchanged_or_later_assistance"
+    },
+    {
+      "id": "P10",
+      "title": "解析器与试算",
+      "group": "processing",
+      "route": "/ui/parsers",
+      "menu": true,
+      "pageStatus": "implemented_baseline",
+      "aiStatus": "planned",
+      "entry": {
+        "label": "导入说明书生成解析方案",
+        "taskKind": "PARSER_PROFILE",
+        "destination": "P25",
+        "preserveSourceContext": true
+      },
+      "layoutChange": "字段树、HEX高亮、输出和证据联动；验证后发布"
+    },
+    {
+      "id": "P11",
+      "title": "解析规则包",
+      "group": "processing",
+      "route": "/ui/rule-bundles",
+      "menu": true,
+      "pageStatus": "implemented_baseline",
+      "aiStatus": "planned",
+      "entry": {
+        "label": "使用已验证设备模板",
+        "taskKind": "ROUTE_PLAN",
+        "destination": "P25",
+        "preserveSourceContext": true
+      },
+      "layoutChange": "从设备绑定与网关型号分开；显示匹配样本、冲突和版本差异"
+    },
+    {
+      "id": "P12",
+      "title": "隔离与重解析",
+      "group": "processing",
+      "route": "/ui/quarantine",
+      "menu": true,
+      "pageStatus": "implemented_baseline",
+      "aiStatus": "unchanged_or_later_assistance"
+    },
+    {
+      "id": "P13",
+      "title": "转发目标",
+      "group": "forwarding",
+      "route": "/ui/targets",
+      "menu": true,
+      "pageStatus": "implemented_baseline",
+      "aiStatus": "unchanged_or_later_assistance"
+    },
+    {
+      "id": "P14",
+      "title": "目标版本与字段映射",
+      "group": "forwarding",
+      "route": "/ui/targets/:targetId",
+      "menu": false,
+      "pageStatus": "implemented_baseline",
+      "aiStatus": "planned",
+      "entry": {
+        "label": "导入客户接口说明",
+        "taskKind": "CUSTOMER_INTERFACE",
+        "destination": "P25",
+        "preserveSourceContext": true
+      },
+      "layoutChange": "源字段、映射、目标样例和ACK契约；仅创建不可变新版本"
+    },
+    {
+      "id": "P15",
+      "title": "投递记录",
+      "group": "forwarding",
+      "route": "/ui/deliveries",
+      "menu": true,
+      "pageStatus": "implemented_baseline",
+      "aiStatus": "unchanged_or_later_assistance"
+    },
+    {
+      "id": "P16",
+      "title": "命令任务",
+      "group": "tasks",
+      "route": "/ui/tasks",
+      "menu": true,
+      "pageStatus": "implemented_baseline",
+      "aiStatus": "unchanged_or_later_assistance"
+    },
+    {
+      "id": "P17",
+      "title": "任务详情",
+      "group": "tasks",
+      "route": "/ui/tasks/:taskId",
+      "menu": false,
+      "pageStatus": "implemented_baseline",
+      "aiStatus": "unchanged_or_later_assistance"
+    },
+    {
+      "id": "P18",
+      "title": "固件与签名制品",
+      "group": "tasks",
+      "route": "/ui/artifacts",
+      "menu": true,
+      "pageStatus": "implemented_baseline",
+      "aiStatus": "unchanged_or_later_assistance"
+    },
+    {
+      "id": "P19",
+      "title": "项目与分组",
+      "group": "system",
+      "route": "/ui/scopes",
+      "menu": true,
+      "pageStatus": "implemented_baseline",
+      "aiStatus": "unchanged_or_later_assistance"
+    },
+    {
+      "id": "P20",
+      "title": "账号与应用凭据",
+      "group": "system",
+      "route": "/ui/principals",
+      "menu": true,
+      "pageStatus": "implemented_baseline",
+      "aiStatus": "unchanged_or_later_assistance"
+    },
+    {
+      "id": "P21",
+      "title": "系统运维",
+      "group": "system",
+      "route": "/ui/system",
+      "menu": true,
+      "pageStatus": "implemented_baseline",
+      "aiStatus": "unchanged_or_later_assistance"
+    },
+    {
+      "id": "P22",
+      "title": "审计日志",
+      "group": "system",
+      "route": "/ui/audit",
+      "menu": true,
+      "pageStatus": "implemented_baseline",
+      "aiStatus": "unchanged_or_later_assistance"
+    },
+    {
+      "id": "P23",
+      "title": "接口与对接指南",
+      "group": "system",
+      "route": "/ui/integration",
+      "menu": true,
+      "pageStatus": "implemented_baseline",
+      "aiStatus": "unchanged_or_later_assistance"
+    },
+    {
+      "id": "P24",
+      "title": "型号模板库",
+      "group": "bluetooth",
+      "route": "/ui/device-models",
+      "menu": true,
+      "pageStatus": "proposed",
+      "aiStatus": "planned",
+      "layout": [
+        "顶部导入、搜索、状态筛选",
+        "主体型号与不可变版本列表",
+        "右侧资料、解析、连接、测试、差异和引用详情抽屉",
+        "底部应用到真实对端与复制新版本"
+      ],
+      "result": "发布档案不等于现网激活或执行任务"
+    },
+    {
+      "id": "P25",
+      "title": "导入审阅工作台",
+      "group": "bluetooth",
+      "route": "/ui/import-jobs/:jobId",
+      "menu": false,
+      "pageStatus": "proposed",
+      "aiStatus": "planned",
+      "layout": [
+        "顶部六步流程与服务端保存状态",
+        "桌面左侧原文证据28%、中部草稿44%、右侧问题和验证28%",
+        "窄屏切换原文、配置、验证页签",
+        "底部保存、验证、下一步与返回来源页面"
+      ],
+      "steps": [
+        "上传资料",
+        "确认设备或接口",
+        "审阅草稿",
+        "样例验证",
+        "发布模板或配置版本",
+        "应用到现场"
+      ],
+      "result": "生成可审阅草稿；无自动物理执行"
+    },
+    {
+      "id": "P26",
+      "title": "模型服务设置",
+      "group": "system",
+      "route": "/ui/system/ai",
+      "menu": true,
+      "pageStatus": "proposed",
+      "aiStatus": "planned",
+      "layout": [
+        "顶部运行模式与服务状态",
+        "服务连接页签",
+        "隐私与范围页签",
+        "配额与运行页签"
+      ],
+      "access": "ADMIN配置；普通授权用户只读取独立状态接口",
+      "result": "云API、内网服务或关闭AI；密钥仅服务器保存"
+    }
+  ],
+  "sharedWorkbench": "P25",
+  "criticalDependencies": [
+    "restricted_protocol_dsl",
+    "peripheral_identity_binding_and_routing",
+    "immutable_capture_time_gatt_mapping",
+    "document_evidence_and_async_jobs",
+    "provider_adapter_and_policy",
+    "deterministic_validation_and_version_publication"
+  ],
+  "navigationRule": "Use explicit page ownership for active menu; /system/ai must not also activate /system."
+}
