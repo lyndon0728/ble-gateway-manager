@@ -28,7 +28,7 @@ func main() {
 }
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("commands: init, provision-gateway, token, keygen, sign, backup, restore, reconcile-revisions")
+		return errors.New("commands: init, reset-admin-password, provision-gateway, token, keygen, sign, backup, restore, reconcile-revisions")
 	}
 	fs := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	dir := fs.String("data-dir", "data", "server data directory")
@@ -38,11 +38,15 @@ func run(args []string) error {
 	case "init":
 		name := fs.String("admin", "admin", "initial administrator login")
 		password := fs.String("password-file", "", "existing password file, or new random password will be written here")
+		localDefault := fs.Bool("local-default-admin", false, "explicit local initialization with admin / 123456 when no password file exists")
 		if e := fs.Parse(args[1:]); e != nil {
 			return e
 		}
 		if *password == "" {
 			return errors.New("--password-file required")
+		}
+		if *localDefault && *name != platform.LocalDefaultAdministratorName {
+			return errors.New("--local-default-admin requires --admin admin")
 		}
 		app, e := platform.New(platform.Config{DataDir: *dir, AllowInsecureDev: true, Role: "all", NamespaceID: *namespace})
 		if e != nil {
@@ -57,18 +61,41 @@ func run(args []string) error {
 			fmt.Println("Instance already initialized; existing credentials retained.")
 			return nil
 		}
-		if e = ensureToken(*password); e != nil {
+		if *localDefault {
+			if _, e = os.Stat(*password); os.IsNotExist(e) {
+				e = writeNew(*password, []byte(platform.LocalDefaultAdministratorPassword+"\n"))
+			}
+		} else {
+			e = ensureToken(*password)
+		}
+		if e != nil {
 			return e
 		}
 		secret, e := simkit.Secret(*password)
 		if e != nil {
 			return e
 		}
-		if e = app.Bootstrap(context.Background(), *name, secret); e != nil {
+		if *localDefault && secret == platform.LocalDefaultAdministratorPassword {
+			e = app.BootstrapLocalDefaultAdmin(context.Background())
+		} else {
+			e = app.Bootstrap(context.Background(), *name, secret)
+		}
+		if e != nil {
 			return e
 		}
 		fmt.Println("Initialized server data; administrator secret remains in the password file.")
 		return nil
+	case "reset-admin-password":
+		name := fs.String("admin", "admin", "existing active instance administrator login")
+		password := fs.String("password-file", "", "new password input file; local default mode atomically replaces this file")
+		localDefault := fs.Bool("local-default-admin", false, "explicitly reset the local admin to 123456 and update the password file")
+		if e := fs.Parse(args[1:]); e != nil {
+			return e
+		}
+		if *password == "" {
+			return errors.New("--password-file required")
+		}
+		return resetAdminPassword(*dir, *namespace, *name, *password, *localDefault)
 	case "provision-gateway":
 		id := fs.String("gateway", "gw_demo", "reference gateway ID")
 		profile := fs.String("profile", "reference-1", "reference-1 or gw32-profile-1 local simulation profile")

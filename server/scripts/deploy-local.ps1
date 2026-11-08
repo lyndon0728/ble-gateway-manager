@@ -36,7 +36,7 @@ Copy-Item -LiteralPath (Join-Path $serverRoot 'bin/gateway-server.exe') -Destina
 Copy-Item -LiteralPath (Join-Path $serverRoot 'bin/gatewayctl.exe') -Destination (Join-Path $runtime 'gatewayctl.exe') -Force
 Push-Location $runtime
 try{
-    & './gatewayctl.exe' init --data-dir data --password-file secrets/admin-password
+    & './gatewayctl.exe' init --data-dir data --password-file secrets/admin-password --local-default-admin
     if($LASTEXITCODE -ne 0){throw 'Initialization failed.'}
     $proc=Start-Process -FilePath $binary -ArgumentList @('--data-dir','data','--listen',"127.0.0.1:$Port",'--allow-insecure-dev') -WorkingDirectory $runtime -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $runtime 'server.out.log') -RedirectStandardError (Join-Path $runtime 'server.err.log')
     $base="http://127.0.0.1:$Port"

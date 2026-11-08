@@ -21,7 +21,7 @@
 
 ## Windows 本机验证
 
-新版控制台独立后台部署：运行 `scripts/deploy-local.ps1`，访问 `http://127.0.0.1:18780/ui/`；密码保存在 `server/.local/frontend-local/secrets/admin-password`。该实例使用独立数据目录，不预置模拟网关；以 `-Action Status` 查看状态，以 `-Action Stop` 停止。前端源码修改后先在仓库根目录运行 `pnpm --dir frontend build`。
+新版控制台独立后台部署：运行 `scripts/deploy-local.ps1`，访问 `http://127.0.0.1:18780/ui/`；首次安装默认账号 `admin`、默认密码 `123456`，初始化密码文件为 `server/.local/frontend-local/secrets/admin-password`。已有实例及自定义密码文件不会被默认值覆盖。该实例使用独立数据目录，不预置模拟网关；以 `-Action Status` 查看状态，以 `-Action Stop` 停止。前端源码修改后先在仓库根目录运行 `pnpm --dir frontend build`。
 
 需要 [go.mod](go.mod) 指定的 Go。PowerShell 脚本也能找到工作区 `.tools/go/bin/go.exe`。
 
@@ -31,7 +31,7 @@ cd server
 .\scripts\run-local.ps1
 ```
 
-打开 `http://127.0.0.1:8080/`，账号 `admin`，初始密码保存在 `server/secrets/admin-password`。安装脚本不会在终端打印密码。再次启动保留已有账号、数据和密钥。HTTP 开关仅允许显式回环 IP，不能用此方式开放生产服务。
+打开 `http://127.0.0.1:8080/`，本地首次安装默认账号 `admin`、默认密码 `123456`，初始化密码文件为 `server/secrets/admin-password`。再次启动保留已有账号、自定义密码、数据和密钥。HTTP 开关仅允许显式回环 IP，不能用此方式开放生产服务。
 
 可以运行完整本机验收脚本，它使用单独的临时目录和 18080/19090 端口：
 

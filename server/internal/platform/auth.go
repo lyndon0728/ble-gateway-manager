@@ -294,6 +294,19 @@ func (a *App) Bootstrap(ctx context.Context, name, password string) error {
 	if len(name) < 1 || len(password) < 12 || len(password) > 256 {
 		return errors.New("administrator name and 12-256 character password required")
 	}
+	return a.bootstrapAdministrator(ctx, name, password)
+}
+
+// BootstrapLocalDefaultAdmin is deliberately separate from the ordinary password
+// policy. Only an explicit local-development initializer may opt into it.
+func (a *App) BootstrapLocalDefaultAdmin(ctx context.Context) error {
+	if !a.Config.AllowInsecureDev {
+		return errors.New("local default administrator requires explicit local development mode")
+	}
+	return a.bootstrapAdministrator(ctx, LocalDefaultAdministratorName, LocalDefaultAdministratorPassword)
+}
+
+func (a *App) bootstrapAdministrator(ctx context.Context, name, password string) error {
 	hash, e := passwordHash(password)
 	if e != nil {
 		return e

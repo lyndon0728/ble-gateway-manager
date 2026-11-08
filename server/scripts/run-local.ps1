@@ -4,7 +4,7 @@ $serverRoot = Split-Path -Parent $PSScriptRoot
 if (-not (Test-Path -LiteralPath (Join-Path $serverRoot 'bin/gateway-server.exe'))) { & "$PSScriptRoot/build.ps1" }
 Push-Location $serverRoot
 try {
-    & './bin/gatewayctl.exe' init --data-dir data --password-file secrets/admin-password
+    & './bin/gatewayctl.exe' init --data-dir data --password-file secrets/admin-password --local-default-admin
     if ($LASTEXITCODE -ne 0) { throw 'Initialization failed.' }
     & './bin/gatewayctl.exe' provision-gateway --data-dir data --gateway gw_demo --token-file secrets/gw-demo-token
     if ($LASTEXITCODE -ne 0) { throw 'Gateway provisioning failed.' }

@@ -56,7 +56,7 @@
 
 ## 本地部署
 
-入口为 `server/scripts/deploy-local.ps1`；默认访问 `http://127.0.0.1:18780/ui/`，账号 admin，密码仅保存在 `server/.local/frontend-local/secrets/admin-password`。实例在后台运行，使用自己的 `data` 目录，不把 UI 测试数据放入交付实例。
+入口为 `server/scripts/deploy-local.ps1`；默认访问 `http://127.0.0.1:18780/ui/`，本地首次安装默认账号 `admin`、默认密码 `123456`，初始化密码文件为 `server/.local/frontend-local/secrets/admin-password`。已有账号及自定义密码文件保留；重启不重置密码。实例在后台运行，使用自己的 `data` 目录，不把 UI 测试数据放入交付实例。
 
 Start / Status / Stop 检查 PID、可执行文件路径和启动时间，避免停止其他进程。重新启动保留数据与凭据。当前是本机回环部署，非开机自启 Windows 服务；客户生产服务器沿用 TLS 和现有 Linux 部署流程。构建和操作命令见 [前端 README](../../frontend/README.md)。
 

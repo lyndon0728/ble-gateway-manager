@@ -13,7 +13,7 @@ pnpm --dir frontend build
 .\server\scripts\deploy-local.ps1 -SkipBuild
 ```
 
-访问 `http://127.0.0.1:18780/ui/`。账号为 `admin`，密码文件为 `server/.local/frontend-local/secrets/admin-password`。后台进程在脚本结束后继续运行，数据目录为 `server/.local/frontend-local/data`。
+访问 `http://127.0.0.1:18780/ui/`。本地首次部署的默认账号为 `admin`，默认密码为 `123456`，初始化密码文件为 `server/.local/frontend-local/secrets/admin-password`。已有实例或已有自定义密码文件会保留原密码，不在重启时恢复默认值。后台进程在脚本结束后继续运行，数据目录为 `server/.local/frontend-local/data`。
 
 ```powershell
 .\server\scripts\deploy-local.ps1 -Action Status
@@ -21,6 +21,14 @@ pnpm --dir frontend build
 ```
 
 重复 Start 保留账号和数据。更新程序时先 Stop，再构建，最后 Start。此入口是本机回环部署，不注册开机服务；正式客户安装使用服务器现有 TLS / Linux 安装流程。
+
+已有本地实例如需明确恢复 `admin / 123456`，先停止实例，再执行一次性重置；旧浏览器会话会同时失效，其他账号和业务数据保留：
+
+```powershell
+.\server\scripts\deploy-local.ps1 -Action Stop
+.\server\bin\gatewayctl.exe reset-admin-password --data-dir server/.local/frontend-local/data --password-file server/.local/frontend-local/secrets/admin-password --local-default-admin
+.\server\scripts\deploy-local.ps1 -SkipBuild
+```
 
 产物写入 `server/internal/platform/assets/ui` 并嵌入 Go 可执行文件。客户运行时不需要 Node.js、pnpm 或外网 CDN。仓库保留构建产物，纯 Go 构建亦可使用；修改前端源码后必须重新执行前端构建。浏览器深链接刷新由 Go 返回 SPA 入口；不存在的 JS/CSS 仍返回 404。
 
