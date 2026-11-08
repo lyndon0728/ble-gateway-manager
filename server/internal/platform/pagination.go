@@ -23,7 +23,7 @@ func pageKey(v any) string {
 		return Hash(v)
 	}
 	ids := map[string]any{}
-	for _, key := range []string{"principalId", "gatewayId", "scopeId", "credentialId", "taskId", "auditId", "bundleId", "targetId", "parserId", "eventId", "outputId", "deliveryId", "processingId", "operationId", "version", "namespaceId", "recordKey", "peerId", "ruleId", "connectionRef", "artifactId", "jobId", "resultId", "subscriptionId", "triggerId"} {
+	for _, key := range []string{"principalId", "gatewayId", "scopeId", "credentialId", "taskId", "auditId", "bundleId", "targetId", "parserId", "eventId", "outputId", "deliveryId", "processingId", "operationId", "version", "namespaceId", "recordKey", "peerId", "ruleId", "connectionRef", "artifactId", "jobId", "resultId", "subscriptionId", "triggerId", "modelId", "documentId", "providerId", "bindingId", "planId", "draftId", "validationId", "snapshotId"} {
 		if v, ok := m[key]; ok {
 			ids[key] = v
 		}

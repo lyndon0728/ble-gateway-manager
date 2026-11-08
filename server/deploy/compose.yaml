@@ -1,6 +1,6 @@
 name: ble-gateway
 x-app: &app
-  image: ${GW_IMAGE:-ble-gateway-server:0.3.0}
+  image: ${GW_IMAGE:-ble-gateway-server:0.4.0}
   build:
     context: ..
     dockerfile: deploy/Dockerfile
@@ -32,6 +32,7 @@ x-env: &env
   GW_BROKER_PASSWORD_FILE: /run/secrets/broker-password
   GW_ALLOWED_TARGET_HOSTS: ${GW_ALLOWED_TARGET_HOSTS:-}
   GW_MAX_QUEUE_BYTES: ${GW_MAX_QUEUE_BYTES:-1073741824}
+  GW_AI_DOCUMENT_MAX_BYTES: ${GW_AI_DOCUMENT_MAX_BYTES:-268435456}
 services:
   init:
     <<: *app

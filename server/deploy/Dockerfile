@@ -9,9 +9,10 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/gateway-server ./c
  && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/gateway-simulator ./cmd/gateway-simulator \
  && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/customer-simulator ./cmd/customer-simulator
 FROM alpine:3.24
-RUN apk add --no-cache ca-certificates tzdata \
+RUN apk add --no-cache ca-certificates tzdata poppler-utils \
  && addgroup -g 10001 gateway && adduser -D -H -u 10001 -G gateway gateway
 COPY --from=build /out/ /usr/local/bin/
+ENV GW_AI_PDFTOTEXT=/usr/bin/pdftotext GW_AI_PDFTOPPM=/usr/bin/pdftoppm
 USER 10001:10001
 WORKDIR /app
 EXPOSE 8443

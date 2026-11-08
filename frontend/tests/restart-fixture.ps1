@@ -1,9 +1,9 @@
-param([switch]$SkipBuild)
+param([switch]$SkipBuild,[ValidatePattern('^[a-zA-Z0-9_-]+$')][string]$Instance='frontend-e2e')
 $ErrorActionPreference='Stop'
 $repoRoot=Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$serverRoot=Join-Path $repoRoot 'server';$runtime=Join-Path $serverRoot '.local/frontend-e2e';$stateFile=Join-Path $runtime 'fixture.json'
+$serverRoot=Join-Path $repoRoot 'server';$runtime=Join-Path $serverRoot ".local/$Instance";$stateFile=Join-Path $runtime 'fixture.json'
 $state=Get-Content -LiteralPath $stateFile -Raw|ConvertFrom-Json
-& "$PSScriptRoot/fixture.ps1" -Action Stop
+& "$PSScriptRoot/fixture.ps1" -Action Stop -Instance $Instance
 if(-not $SkipBuild){& "$serverRoot/scripts/build.ps1"}
 $children=[Collections.Generic.List[object]]::new()
 function Child([string]$Name,[string[]]$Arguments,[string]$Tag){$path=Join-Path $serverRoot "bin/$Name.exe";$p=Start-Process -FilePath $path -ArgumentList $Arguments -WorkingDirectory $runtime -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $runtime "$Tag.out.log") -RedirectStandardError (Join-Path $runtime "$Tag.err.log");$children.Add(@{pid=$p.Id;path=$path;startedAt=$p.StartTime.ToUniversalTime().ToString('o')});return $p}

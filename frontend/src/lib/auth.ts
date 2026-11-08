@@ -4,10 +4,10 @@ export type Principal={principalId:string;name:string;type:string;state:string;r
 export const session=reactive<{principal:Principal|null;scopes:any[];ready:boolean}>({principal:null,scopes:[],ready:false})
 const roles:Record<string,string[]>={
  ADMIN:['*'],
- DEVICE_ADMIN:['scope:read','gateway:read','gateway:write','gateway:configure','gateway:reboot','diagnostics:run','gatt:read','gatt:manage','gatt:execute','firmware:deploy','task:read','task:create','task:cancel','artifact:read','artifact:write','operation:read','system:read','parser:read','target:read'],
+ DEVICE_ADMIN:['profile:read','scope:read','gateway:read','gateway:write','gateway:configure','gateway:reboot','diagnostics:run','gatt:read','gatt:manage','gatt:execute','firmware:deploy','task:read','task:create','task:cancel','artifact:read','artifact:write','operation:read','system:read','parser:read','target:read'],
  OPERATOR:['scope:read','gateway:read','gatt:read','gateway:configure','gateway:reboot','diagnostics:run','task:read','task:create','task:cancel','data:read','delivery:read','delivery:retry','operation:read','system:read','artifact:read'],
- DEVELOPER:['scope:read','gateway:read','gatt:read','task:read','data:read','data:raw','data:reprocess','delivery:read','delivery:retry','parser:read','parser:test','rule:read','target:read','operation:read'],
- AUDITOR:['scope:read','gateway:read','gatt:read','task:read','audit:read','operation:read','system:read','rule:read','target:read','parser:read']
+ DEVELOPER:['document:read','document:write','ai:use','profile:read','profile:write','scope:read','gateway:read','gatt:read','task:read','data:read','data:raw','data:reprocess','delivery:read','delivery:retry','parser:read','parser:test','rule:read','target:read','operation:read'],
+ AUDITOR:['profile:read','scope:read','gateway:read','gatt:read','task:read','audit:read','operation:read','system:read','rule:read','target:read','parser:read']
 }
 export function can(permission:string,scopeId?:string){
  const principal=session.principal;if(!principal)return false

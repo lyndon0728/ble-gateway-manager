@@ -365,6 +365,7 @@ func (a *App) AcceptIngress(ctx context.Context, namespace, gateway string, batc
 	reservedBytes := int64(65536)
 	items := []pipeMap{}
 	now := pnow()
+	protocolContexts := map[string]pipeMap{}
 	for i, v := range events {
 		e := v.(map[string]any)
 		eventID := ps(e, "eventId")
@@ -387,7 +388,18 @@ func (a *App) AcceptIngress(ctx context.Context, namespace, gateway string, batc
 			return nil, err
 		}
 		meta := pipeMap{"rawEvent": e, "modelId": model, "groupId": group, "ingressSchemaVersion": version}
-		estimatedBytes := int64(2*(len(decoded[i])+len(pipeJSON(meta))) + 4096)
+		captureIdentity := po(e, "capture")
+		protocolKey := pipeHash(pipeMap{"kind": captureIdentity["kind"], "radio": captureIdentity["radio"], "connectionRef": captureIdentity["connectionRef"], "characteristicHandle": captureIdentity["characteristicHandle"], "addressType": captureIdentity["addressType"], "address": captureIdentity["address"]})
+		protocolContext, cached := protocolContexts[protocolKey]
+		if !cached {
+			var contextErr error
+			protocolContext, contextErr = a.freezeCaptureProtocolContext(ctx, gateway, e)
+			if contextErr != nil {
+				return nil, contextErr
+			}
+			protocolContexts[protocolKey] = protocolContext
+		}
+		estimatedBytes := int64(2*(len(decoded[i])+len(pipeJSON(meta))+len(pipeJSON(protocolContext))) + 4096)
 		capacityCode := pipelineStorageCheck(disk, reservedBytes+estimatedBytes, limit)
 		if used+int64(len(decoded[i])) > limit {
 			capacityCode = "QUEUE_FULL"
@@ -416,7 +428,7 @@ func (a *App) AcceptIngress(ctx context.Context, namespace, gateway string, batc
 		if err != nil {
 			return nil, err
 		}
-		_, err = tx.ExecContext(ctx, "INSERT INTO processing_jobs(processing_id,event_key,revision,bundle_id,state,next_attempt_at_ms,created_at_ms) VALUES(?,?,1,?,'pending',?,?)", pipeStable("processing", []any{key, 1}), key, bundle, now, now)
+		_, err = tx.ExecContext(ctx, "INSERT INTO processing_jobs(processing_id,event_key,revision,bundle_id,state,next_attempt_at_ms,created_at_ms,protocol_context_json) VALUES(?,?,1,?,'pending',?,?,?)", pipeStable("processing", []any{key, 1}), key, bundle, now, now, pipeJSON(protocolContext))
 		if err != nil {
 			return nil, err
 		}
@@ -431,9 +443,9 @@ func (a *App) AcceptIngress(ctx context.Context, namespace, gateway string, batc
 }
 
 type pipeJob struct {
-	ID, Key, Bundle, Namespace, Gateway, Event, Meta, Manifest string
-	Revision, Lease, Accepted                                  int64
-	Raw                                                        []byte
+	ID, Key, Bundle, Namespace, Gateway, Event, Meta, Manifest, ProtocolContext string
+	Revision, Lease, Accepted                                                   int64
+	Raw                                                                         []byte
 }
 
 func (a *App) ProcessOne(ctx context.Context) (bool, error) {
@@ -444,7 +456,7 @@ func (a *App) ProcessOne(ctx context.Context) (bool, error) {
 	}
 	defer tx.Rollback()
 	var j pipeJob
-	err = tx.QueryRowContext(ctx, `SELECT j.processing_id,j.event_key,j.bundle_id,j.revision,j.lease_token,e.namespace_id,e.gateway_id,e.event_id,e.accepted_at_ms,r.payload,r.metadata_json,b.manifest_json FROM processing_jobs j JOIN event_receipts e ON e.event_key=j.event_key JOIN raw_events r ON r.event_key=j.event_key JOIN pipeline_bundles b ON b.bundle_id=j.bundle_id WHERE ((j.state IN ('pending','retry_wait') AND j.next_attempt_at_ms<=?) OR (j.state='leased' AND j.lease_until_ms<?)) AND (j.reprocess_id IS NULL OR EXISTS(SELECT 1 FROM reprocess_jobs rp WHERE rp.reprocess_id=j.reprocess_id AND rp.state IN ('pending','running') AND COALESCE(json_extract(rp.cursor_json,'$.nextReleaseAtMs'),0)<=?)) ORDER BY j.created_at_ms,j.processing_id LIMIT 1`, now, now, now).Scan(&j.ID, &j.Key, &j.Bundle, &j.Revision, &j.Lease, &j.Namespace, &j.Gateway, &j.Event, &j.Accepted, &j.Raw, &j.Meta, &j.Manifest)
+	err = tx.QueryRowContext(ctx, `SELECT j.processing_id,j.event_key,j.bundle_id,j.revision,j.lease_token,e.namespace_id,e.gateway_id,e.event_id,e.accepted_at_ms,r.payload,r.metadata_json,b.manifest_json,COALESCE(j.protocol_context_json,'{}') FROM processing_jobs j JOIN event_receipts e ON e.event_key=j.event_key JOIN raw_events r ON r.event_key=j.event_key JOIN pipeline_bundles b ON b.bundle_id=j.bundle_id WHERE ((j.state IN ('pending','retry_wait') AND j.next_attempt_at_ms<=?) OR (j.state='leased' AND j.lease_until_ms<?)) AND (j.reprocess_id IS NULL OR EXISTS(SELECT 1 FROM reprocess_jobs rp WHERE rp.reprocess_id=j.reprocess_id AND rp.state IN ('pending','running') AND COALESCE(json_extract(rp.cursor_json,'$.nextReleaseAtMs'),0)<=?)) ORDER BY j.created_at_ms,j.processing_id LIMIT 1`, now, now, now).Scan(&j.ID, &j.Key, &j.Bundle, &j.Revision, &j.Lease, &j.Namespace, &j.Gateway, &j.Event, &j.Accepted, &j.Raw, &j.Meta, &j.Manifest, &j.ProtocolContext)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
@@ -650,6 +662,9 @@ func pipelineWire(j pipeJob, rule pipeMap, rec ParsedRecord, t, rawEvent pipeMap
 func evaluatePipeline(j pipeJob) (pipeMap, []ParsedRecord, error) {
 	manifest := pm(j.Manifest)
 	meta := pm(j.Meta)
+	if j.ProtocolContext != "" {
+		meta["protocolContext"] = pm(j.ProtocolContext)
+	}
 	raw := po(meta, "rawEvent")
 	matches := []pipeMap{}
 	packetType := "unknown"
@@ -672,6 +687,9 @@ func evaluatePipeline(j pipeJob) (pipeMap, []ParsedRecord, error) {
 		if !pcontains(m["modelIds"], ps(meta, "modelId")) || !pcontains(m["groupIds"], ps(meta, "groupId")) || !pcontains(m["protocolVersions"], hint) || !pcontains(m["packetTypes"], packetType) {
 			continue
 		}
+		if !protocolRuleMatch(m, manifest, meta, j.Raw) {
+			continue
+		}
 		matches = append(matches, rule)
 	}
 	if len(matches) == 0 {
@@ -691,7 +709,7 @@ func evaluatePipeline(j pipeJob) (pipeMap, []ParsedRecord, error) {
 		}
 		return rule, []ParsedRecord{{Key: "0", Data: pipeMap{}, Quality: []string{}}}, nil
 	case "DECODE":
-		records, err := ParsePayload(ps(rule, "parserId"), ps(rule, "parserVersion"), j.Raw)
+		records, err := parseFrozenProtocol(rule, manifest, meta, j.Raw)
 		annotateServiceUUIDSource(records, j.Event)
 		return rule, records, err
 	default:

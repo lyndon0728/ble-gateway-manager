@@ -34,7 +34,7 @@ import (
 //go:embed all:assets/*
 var Assets embed.FS
 
-const Version = "0.3.0"
+const Version = "0.4.0"
 
 type Config struct {
 	DataDir, ListenAddr, Role, NamespaceID, InstanceID, NodeID, PublicURL string
@@ -98,6 +98,7 @@ type App struct {
 	schemas              map[string]*jsonschema.Schema
 	master               []byte
 	mu                   sync.Mutex
+	aiDocumentMu         sync.Mutex
 	pageMu               sync.Mutex
 	pages                map[string]pageSnapshot
 	loginSlots           chan struct{}
@@ -326,6 +327,8 @@ func (a *App) Run(ctx context.Context) {
 		go func() { defer workers.Done(); a.StartControl(ctx) }()
 		workers.Add(1)
 		go func() { defer workers.Done(); a.StartAutoConnect(ctx) }()
+		workers.Add(1)
+		go func() { defer workers.Done(); a.RunAI(ctx) }()
 	}
 	if a.Config.Role != "manager" {
 		workers.Add(1)
@@ -363,6 +366,8 @@ func (a *App) Handler() http.Handler {
 	a.RegisterFrontendAPI(r)
 	a.RegisterControl(r)
 	a.RegisterPipeline(r)
+	a.RegisterAI(r)
+	a.RegisterProtocol(r)
 	r.Get("/", a.console)
 	r.Get("/ui", a.console)
 	r.Get("/ui/*", a.frontend)

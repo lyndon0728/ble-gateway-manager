@@ -3,7 +3,7 @@
 set -euo pipefail
 server_root=$(cd "$(dirname "$0")/.." && pwd)
 output=${1:?Usage: package-offline.sh NEW_OUTPUT_DIRECTORY}
-image=${GW_IMAGE:-ble-gateway-server:0.3.0}
+image=${GW_IMAGE:-ble-gateway-server:0.4.0}
 broker=${MOSQUITTO_IMAGE:-eclipse-mosquitto:2.0.22}
 [[ ! -e "$output" ]] || { echo 'Output directory must not exist.' >&2; exit 1; }
 mkdir -p "$output/deploy/mosquitto" "$output/scripts" "$output/docs" "$output/contracts"
@@ -20,6 +20,9 @@ cp "$server_root/frontend-dependencies.json" "$output/"
 cp "$server_root/internal/platform/assets/ui/third-party-licenses.txt" "$output/frontend-licenses.txt"
 cp -R "$server_root/licenses" "$output/licenses"
 cp "$server_root/docs/"*.md "$output/docs/"
+cp "$server_root/docs/"*.json "$output/docs/"
+cp "$server_root/docs/"*.html "$output/docs/"
+cp -R "$server_root/docs/examples" "$output/docs/"
 cp "$server_root/internal/platform/assets/openapi.json" "$server_root/internal/platform/assets/message-contracts.schema.json" "$server_root/internal/platform/assets/mqtt-contracts.json" "$output/contracts/"
 printf 'GW_IMAGE=%s\nMOSQUITTO_IMAGE=%s\n' "$image" "$broker" > "$output/deploy/.env"
 docker image inspect --format '{{.Id}} {{json .RepoDigests}}' "$image" "$broker" > "$output/IMAGE-IDENTITIES.txt"

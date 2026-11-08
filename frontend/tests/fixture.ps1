@@ -1,10 +1,10 @@
-param([ValidateSet('Start','Stop','Restart')][string]$Action='Start',[int]$Port=18781,[int]$CustomerPort=19191,[switch]$SkipBuild)
+param([ValidateSet('Start','Stop','Restart')][string]$Action='Start',[int]$Port=18781,[int]$CustomerPort=19191,[switch]$SkipBuild,[ValidatePattern('^[a-zA-Z0-9_-]+$')][string]$Instance='frontend-e2e')
 $ErrorActionPreference='Stop'
 $repoRoot=Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $serverRoot=Join-Path $repoRoot 'server'
-$runtime=Join-Path $serverRoot '.local/frontend-e2e'
+$runtime=Join-Path $serverRoot ".local/$Instance"
 $stateFile=Join-Path $runtime 'fixture.json'
-if($Action -eq 'Restart'){& "$PSScriptRoot/restart-fixture.ps1" -SkipBuild:$SkipBuild;return}
+if($Action -eq 'Restart'){& "$PSScriptRoot/restart-fixture.ps1" -SkipBuild:$SkipBuild -Instance $Instance;return}
 if($Action -eq 'Stop'){
     if(Test-Path -LiteralPath $stateFile){$state=Get-Content -LiteralPath $stateFile -Raw|ConvertFrom-Json;foreach($child in $state.children){$proc=Get-Process -Id $child.pid -ErrorAction SilentlyContinue;if($proc){if([IO.Path]::GetFullPath($proc.Path) -ne [IO.Path]::GetFullPath($child.path) -or $proc.StartTime.ToUniversalTime().Ticks -ne ([DateTime]$child.startedAt).ToUniversalTime().Ticks){throw 'Fixture PID identity changed; refusing to stop a different process.'};Stop-Process -Id $proc.Id;$proc.WaitForExit()}}}
     Write-Host 'Stopped frontend integration fixture; evidence retained.';return

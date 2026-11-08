@@ -430,6 +430,9 @@ func (a *App) applyGW32Result(ctx context.Context, tx *sql.Tx, command, result m
 			return e
 		}
 		_, e = tx.ExecContext(ctx, "UPDATE connection_claims SET state='active',connection_ref=?,updated_at_ms=? WHERE namespace_id=? AND task_id=?", ref, Now(), a.Config.NamespaceID, task)
+		if e == nil {
+			e = a.rememberProtocolDiscovery(ctx, tx, command, result)
+		}
 		return e
 	}
 	if state == "succeeded" && op == "GATT_DISCONNECT" {
@@ -455,6 +458,9 @@ func (a *App) applyGW32Result(ctx context.Context, tx *sql.Tx, command, result m
 			subscriptionState = "closed"
 		}
 		_, e = tx.ExecContext(ctx, "INSERT INTO gatt_subscriptions(namespace_id,gateway_id,connection_ref,service_uuid,characteristic_uuid,characteristic_handle,mode,state,updated_at_ms) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(namespace_id,gateway_id,connection_ref,service_uuid,characteristic_uuid) DO UPDATE SET characteristic_handle=excluded.characteristic_handle,mode=excluded.mode,state=excluded.state,updated_at_ms=excluded.updated_at_ms", a.Config.NamespaceID, gateway, ref, gw32CanonicalUUID(Str(params, "serviceUuid")), gw32CanonicalUUID(Str(params, "characteristicUuid")), Num(details, "characteristicHandle"), Str(params, "mode"), subscriptionState, Now())
+		if e == nil {
+			e = a.rememberProtocolDiscovery(ctx, tx, command, result)
+		}
 		return e
 	}
 	if gw32ConnectionTask(op, params) && (state == "succeeded" || state == "failed" || state == "expired" || state == "cancelled") {

@@ -12,6 +12,7 @@ export const routes=[
  page('/targets','P13','转发目标',targets,'target:read',true),page('/targets/:targetId','P14','目标版本与字段映射',targets,'target:read',true),page('/deliveries','P15','投递记录',()=>import('./pages/DeliveryPages.vue'),'delivery:read'),
  page('/tasks','P16','命令任务',tasks,'task:read'),page('/tasks/:taskId','P17','任务详情',tasks,'task:read'),page('/artifacts','P18','固件与签名制品',tasks,'artifact:read',true),
  page('/scopes','P19','项目与分组',system,'scope:read'),page('/principals','P20','账号与应用凭据',system,'identity:write',true),page('/system','P21','系统运维',system,'system:read',true),page('/audit','P22','审计日志',system,'audit:read'),page('/integration','P23','接口与对接指南',system),
+ page('/device-models','P24','型号模板库',()=>import('./pages/DeviceModelsPage.vue'),'profile:read'),page('/import-jobs/:jobId','P25','导入审阅工作台',()=>import('./pages/ImportWorkbenchPage.vue'),'profile:write'),page('/system/ai','P26','模型服务设置',()=>import('./pages/AISettingsPage.vue'),'identity:write',true),
  {path:'/',redirect:()=>session.ready?landing():'/login'},page('/forbidden','forbidden','暂无访问权限',()=>import('./pages/MessagePage.vue')),
  {path:'/:pathMatch(.*)*',component:()=>import('./pages/MessagePage.vue'),meta:{title:'页面未找到'}}
 ]

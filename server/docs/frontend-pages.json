@@ -1,15 +1,16 @@
 {
   "planVersion": "1.0",
+  "implementation": {"serverVersion": "0.4.0", "apiVersion": "1.10.0", "date": "2026-11-08", "aiScope": "first_phase", "details": "ai-implementation.md"},
   "baseline": {"serverVersion": "0.2.0", "apiVersion": "1.8.0", "sourceCommit": "fa2174a6d83a7cc63b4168f4c182fd4831725602"},
-  "counts": {"categories": 7, "businessPages": 23, "loginPages": 1, "totalPages": 24, "menuEntries": 18, "contextualPages": 5},
+  "counts": {"categories": 7, "businessPages": 26, "loginPages": 1, "totalPages": 27, "menuEntries": 20, "contextualPages": 6},
   "groups": [
     {"id":"overview","name":"运行概览","pages":1},
     {"id":"gateways","name":"网关设备","pages":3},
-    {"id":"bluetooth","name":"蓝牙连接","pages":3},
+    {"id":"bluetooth","name":"蓝牙连接","pages":5},
     {"id":"processing","name":"数据处理","pages":5},
     {"id":"forwarding","name":"客户转发","pages":3},
     {"id":"tasks","name":"任务与升级","pages":3},
-    {"id":"system","name":"系统管理","pages":5}
+    {"id":"system","name":"系统管理","pages":6}
   ],
   "pages": [
     {
@@ -60,6 +61,7 @@
     },
     {
       "id":"P05","title":"蓝牙对端","group":"bluetooth","route":"/ui/ble-peers","menu":true,"phase":3,"template":"table-drawer",
+      "aiStatus":"implemented_first_phase", "aiEntry":{"label":"从设备资料添加","taskKind":"DEVICE_PROFILE","destination":"P25","preserveSourceContext":true},
       "purpose":"登记允许参与自动连接的蓝牙对端及管理范围。",
       "layout":[{"zone":"上","content":"登记对端、刷新、本页搜索"},{"zone":"主","content":"对端名称、规范地址、地址类型、范围、状态、版本表格"},{"zone":"右","content":"登记/修改抽屉，地址与类型只在登记时可编辑"},{"zone":"下","content":"游标翻页；从所选对端进入自动规则或连接页"}],
       "tabs":[],"fields":["displayName","deviceAddress","addressType","scopeId","state","revision"],"actions":["登记对端","修改名称","启用/停用","查看相关规则"],
@@ -69,6 +71,7 @@
     },
     {
       "id":"P06","title":"GATT连接与操作","group":"bluetooth","route":"/ui/gatt-connections","menu":true,"phase":3,"template":"connection-console",
+      "aiStatus":"implemented_first_phase", "aiEntry":{"label":"按模板连接 / 导入接口说明","taskKind":"GATT_PROFILE","destination":"P25","preserveSourceContext":true},
       "purpose":"查看连接引用并创建受控的读写、订阅和断开任务。",
       "layout":[{"zone":"上","content":"网关选择、刷新、新建连接"},{"zone":"主","content":"连接表：对端、radio、connectionRef、安全状态、MTU、ACTIVE/CLOSED/UNKNOWN"},{"zone":"右","content":"所选活连接操作区：读、写、订阅、取消订阅、断开；服务与特征UUID手动输入"},{"zone":"下","content":"本次操作任务链接、结果和错误；订阅通知跳到事件页查看"}],
       "tabs":["连接摘要","执行操作"],"fields":["gatewayId","radio","connectionRef","deviceAddress","securityState","attMtu","serviceUuid","characteristicUuid"],"actions":["连接","读","写","订阅","取消订阅","断开","查看任务"],
@@ -78,6 +81,7 @@
     },
     {
       "id":"P07","title":"自动连接规则","group":"bluetooth","route":"/ui/auto-connect-rules","menu":true,"phase":3,"template":"table-drawer",
+      "aiStatus":"implemented_first_phase", "aiEntry":{"label":"从模板创建规则","taskKind":"AUTO_CONNECT","destination":"P25","preserveSourceContext":true},
       "purpose":"明确授权哪些网关可依据服务UUID连接哪个已登记对端。",
       "layout":[{"zone":"上","content":"新建规则、刷新、本页名称/启停筛选"},{"zone":"主","content":"规则表：名称、对端、网关范围、UUID、优先级、启停、revision"},{"zone":"右","content":"分步抽屉：对端与网关→匹配条件→安全与时效→启用确认"},{"zone":"下","content":"规则解释摘要、版本冲突提示和关联任务入口"}],
       "tabs":[],"fields":["name / peerId / gatewayIds","serviceUuid / wireBits / characteristicUuid","minRssi / priority","security","maxAgeMs / cooldownMs","enabled / revision"],"actions":["创建规则","修改规则","启用/停用","进入相关网关任务"],
@@ -105,6 +109,7 @@
     },
     {
       "id":"P10","title":"解析器与试算","group":"processing","route":"/ui/parsers","menu":true,"phase":2,"template":"split-editor",
+      "aiStatus":"implemented_first_phase", "aiEntry":{"label":"导入说明书生成解析方案","taskKind":"PARSER_PROFILE","destination":"P25","preserveSourceContext":true},
       "purpose":"查看已安装可信解析器并用样例报文检查字段解析。",
       "layout":[{"zone":"上","content":"解析器目录、版本选择、运行试算"},{"zone":"左","content":"已安装解析器/版本及协议、模型、输入限制"},{"zone":"主","content":"样例输入和测试上下文；Hex输入先本地转换为契约所需Base64"},{"zone":"右","content":"结构化outputs、错误定位、实现摘要和耗时"},{"zone":"下","content":"预期值对比；进入规则包配置入口"}],
       "tabs":["输入样例","预期输出"],"fields":["parserId / version","schemaVersion","modelIds / protocolVersions","maxInputBytes","payloadBase64","outputs / errors"],"actions":["选择版本","运行试算","复制输出"],
@@ -114,6 +119,7 @@
     },
     {
       "id":"P11","title":"解析规则包","group":"processing","route":"/ui/rule-bundles","menu":true,"phase":2,"template":"master-detail",
+      "aiStatus":"implemented_first_phase", "aiEntry":{"label":"使用已验证设备模板","taskKind":"ROUTE_PLAN","destination":"P25","preserveSourceContext":true},
       "purpose":"按不可变版本管理透传、解析、隔离规则及目标引用。",
       "layout":[{"zone":"上","content":"新建规则包、刷新、当前节点激活信息"},{"zone":"左","content":"包ID、状态、摘要、规则数量列表"},{"zone":"主","content":"选中包的优先级规则表与默认动作"},{"zone":"右","content":"新包/复制包编辑抽屉：匹配范围、动作、解析器版本、目标版本"},{"zone":"下","content":"校验结果、激活确认、当前activationRevision；显示激活操作结果"}],
       "tabs":["规则","校验结果","激活信息"],"fields":["bundleId / contentDigest / state","priority / match","action","parserId / parserVersion / schemaVersion","targetVersions","defaultAction"],"actions":["创建新包","复制为新包","校验","激活"],
@@ -141,6 +147,7 @@
     },
     {
       "id":"P14","title":"目标版本与字段映射","group":"forwarding","route":"/ui/targets/:targetId","menu":false,"phase":2,"template":"mapping-editor",
+      "aiStatus":"implemented_first_phase", "aiEntry":{"label":"导入客户接口说明","taskKind":"CUSTOMER_INTERFACE","destination":"P25","preserveSourceContext":true},
       "purpose":"配置HTTP/MQTT、应用确认与确定性字段映射，形成新目标版本。",
       "layout":[{"zone":"上","content":"目标名称、只读版本选择、复制为新版本"},{"zone":"左","content":"连接与确认、容量、字段映射三个分区"},{"zone":"主","content":"连接参数表单或source→target映射表，支持scale/offset/unit及常量"},{"zone":"右","content":"新版本差异和示例映射预览；明确标注本地示例计算"},{"zone":"下","content":"创建新版本、查看摘要、转到规则包引用该版本"}],
       "tabs":["连接与确认","容量限制","字段映射"],"fields":["endpoint / protocol / ackMode","payloadTopic / ackTopic","secretRef / tlsTrustRef","maxBatchEvents / maxInflightEvents / maxQueueBytes","mappingVersion / fields / constants / wrapKey"],"actions":["复制为新版本","创建秘密引用","预览映射样例","创建版本"],
@@ -228,6 +235,9 @@
       "api":["GET /openapi.json"],"access":"已登录；相关动作跳转后分别检查权限。",
       "constraints":["文档和组件资源随安装包离线提供，不依赖外网CDN。","示例不填真实令牌；不内置可向任意客户地址发请求的浏览器调试代理。","设备上报API是协议资料，不是管理页面向设备身份接口发假数据的按钮。"],
       "acceptance":"断网环境仍可阅读与下载契约；文档使用当前1.8.0 API并区分上行1.0/1.1和控制1.0。"
-    }
+    },
+    {"id":"P24","title":"型号模板库","group":"bluetooth","route":"/ui/device-models","menu":true,"pageStatus":"implemented","aiStatus":"implemented_first_phase","layout":["顶部导入、搜索、已发布型号与导入任务页签","主体已发布模板列表","详情抽屉包含概述、解析、连接与映射、样例与证据","选择真实对端创建绑定，预览应用计划或跳转对应表单"],"result":"发布档案不等于现网激活或执行任务"},
+    {"id":"P25","title":"导入审阅工作台","group":"bluetooth","route":"/ui/import-jobs/:jobId","menu":false,"pageStatus":"implemented","aiStatus":"implemented_first_phase","layout":["顶部六步流程与服务端保存状态","桌面左侧原文证据、中部配置草稿、右侧问题与验证","窄屏切换原文、配置、验证页签","保存、运行验证、确认发布与返回来源页面"],"steps":["上传资料","确认设备或接口","审阅草稿","样例验证","发布模板或配置版本","应用到现场"],"result":"生成可审阅草稿；无自动物理执行"},
+    {"id":"P26","title":"模型服务设置","group":"system","route":"/ui/system/ai","menu":true,"pageStatus":"implemented","aiStatus":"implemented_first_phase","layout":["顶部AI服务状态、启用数、本人今日请求数和PDF能力","主体服务列表及最近连接测试结果","设置抽屉内的连接、隐私与范围、配额与运行页签"],"access":"ADMIN配置；普通授权用户只读取独立状态接口","result":"云API、内网服务或关闭AI；密钥仅服务器保存"}
   ]
 }

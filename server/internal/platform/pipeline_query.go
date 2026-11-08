@@ -252,6 +252,9 @@ func (a *App) stageReplayBundle(ctx context.Context, id string) error {
 	if state != "validated" && state != "released" {
 		return errors.New("reprocess bundle must be validated")
 	}
+	if err := verifyFrozenProtocolRuntime(pm(raw)); err != nil {
+		return err
+	}
 	if hash != pipeHash(pm(raw)) {
 		return errors.New("bundle digest mismatch")
 	}
@@ -310,7 +313,20 @@ func (a *App) pipelinePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := pnow()
-	selection := pipeMap{"eventKeys": keys, "selector": selector, "bundleId": req["bundleId"], "expiresAtMs": now + 15*60000}
+	contexts := pipeMap{}
+	for _, key := range keys {
+		var metadata, gateway string
+		if e := a.Pipeline.QueryRowContext(r.Context(), "SELECT r.metadata_json,e.gateway_id FROM raw_events r JOIN event_receipts e ON e.event_key=r.event_key WHERE r.event_key=?", key).Scan(&metadata, &gateway); e != nil {
+			continue
+		}
+		frozen, e := a.freezeCaptureProtocolContext(r.Context(), gateway, po(pm(metadata), "rawEvent"))
+		if e != nil {
+			pfail(w, r, 503, "STORE_UNAVAILABLE", e.Error())
+			return
+		}
+		contexts[key] = frozen
+	}
+	selection := pipeMap{"eventKeys": keys, "selector": selector, "bundleId": req["bundleId"], "expiresAtMs": now + 15*60000, "protocolContexts": contexts}
 	digest := pipeHash(selection)
 	selection["selectionDigest"] = digest
 	disk, diskErr := a.pipelineStorageStats()
@@ -340,7 +356,7 @@ func (a *App) pipelinePreview(w http.ResponseWriter, r *http.Request) {
 		if a.Pipeline.QueryRowContext(r.Context(), "SELECT payload,metadata_json FROM raw_events WHERE event_key=?", key).Scan(&raw, &meta) != nil {
 			continue
 		}
-		rule, out, e := evaluatePipeline(pipeJob{Raw: raw, Meta: meta, Manifest: manifest})
+		rule, out, e := evaluatePipeline(pipeJob{Raw: raw, Meta: meta, Manifest: manifest, ProtocolContext: pipeJSON(po(contexts, key))})
 		sample := pipeMap{"eventKey": key, "action": ps(rule, "action"), "newRecordCount": len(out)}
 		if e != nil {
 			sample["error"] = e.Error()
@@ -465,7 +481,8 @@ func (a *App) pipelineReprocess(w http.ResponseWriter, r *http.Request) {
 			pfail(w, r, 503, "STORE_UNAVAILABLE", err.Error())
 			return
 		}
-		_, err = tx.ExecContext(ctx, "INSERT INTO processing_jobs(processing_id,event_key,revision,bundle_id,reprocess_id,state,next_attempt_at_ms,created_at_ms) VALUES(?,?,?,?,?,'pending',?,?)", pipeStable("processing", []any{eventKey, rev}), eventKey, rev, bundle, id, now+int64(i)*1000/pn(req, "maxEventsPerSecond"), now)
+		protocolContext := po(po(selection, "protocolContexts"), eventKey)
+		_, err = tx.ExecContext(ctx, "INSERT INTO processing_jobs(processing_id,event_key,revision,bundle_id,reprocess_id,state,next_attempt_at_ms,created_at_ms,protocol_context_json) VALUES(?,?,?,?,?,'pending',?,?,?)", pipeStable("processing", []any{eventKey, rev}), eventKey, rev, bundle, id, now+int64(i)*1000/pn(req, "maxEventsPerSecond"), now, pipeJSON(protocolContext))
 		if err != nil {
 			pfail(w, r, 503, "STORE_UNAVAILABLE", err.Error())
 			return

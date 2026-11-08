@@ -41,10 +41,10 @@ var roleToDB = map[string]string{"ADMIN": "instance_admin", "DEVICE_ADMIN": "dev
 var dbToRole = map[string]string{"instance_admin": "ADMIN", "device_admin": "DEVICE_ADMIN", "operator": "OPERATOR", "developer": "DEVELOPER", "auditor": "AUDITOR"}
 var rolePermissions = map[string][]string{
 	"ADMIN":        {"*"},
-	"DEVICE_ADMIN": {"scope:read", "gateway:read", "gateway:write", "gateway:configure", "gateway:reboot", "diagnostics:run", "gatt:read", "gatt:manage", "gatt:execute", "firmware:deploy", "task:read", "task:create", "task:cancel", "artifact:read", "artifact:write", "operation:read", "system:read", "parser:read", "target:read"},
+	"DEVICE_ADMIN": {"scope:read", "gateway:read", "gateway:write", "gateway:configure", "gateway:reboot", "diagnostics:run", "gatt:read", "gatt:manage", "gatt:execute", "firmware:deploy", "task:read", "task:create", "task:cancel", "artifact:read", "artifact:write", "operation:read", "system:read", "parser:read", "target:read", "profile:read"},
 	"OPERATOR":     {"scope:read", "gateway:read", "gatt:read", "gateway:configure", "gateway:reboot", "diagnostics:run", "task:read", "task:create", "task:cancel", "data:read", "delivery:read", "delivery:retry", "operation:read", "system:read", "artifact:read"},
-	"DEVELOPER":    {"scope:read", "gateway:read", "gatt:read", "task:read", "data:read", "data:raw", "data:reprocess", "delivery:read", "delivery:retry", "parser:read", "parser:test", "rule:read", "target:read", "operation:read"},
-	"AUDITOR":      {"scope:read", "gateway:read", "gatt:read", "task:read", "audit:read", "operation:read", "system:read", "rule:read", "target:read", "parser:read"},
+	"DEVELOPER":    {"scope:read", "gateway:read", "gatt:read", "task:read", "data:read", "data:raw", "data:reprocess", "delivery:read", "delivery:retry", "parser:read", "parser:test", "rule:read", "target:read", "operation:read", "ai:use", "document:read", "document:write", "profile:read", "profile:write"},
+	"AUDITOR":      {"scope:read", "gateway:read", "gatt:read", "task:read", "audit:read", "operation:read", "system:read", "rule:read", "target:read", "parser:read", "profile:read"},
 }
 
 func TokenHash(token string) string {

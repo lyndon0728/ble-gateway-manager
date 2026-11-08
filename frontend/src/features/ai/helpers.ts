@@ -1,0 +1,18 @@
+import {api} from '@/lib/api'
+export type AIRecord=Record<string,any>
+export const enc=(value:unknown)=>encodeURIComponent(String(value??''))
+export const clone=<T>(value:T):T=>JSON.parse(JSON.stringify(value))
+export const jobLabels:Record<string,string>={QUEUED:'等待处理',GENERATING:'正在生成',NEEDS_REVIEW:'待审阅',READY:'已就绪',FAILED:'处理失败',CANCELED:'已取消',DRAFT:'草稿',VALIDATED:'验证通过',PUBLISHED:'已发布',PREPARED:'待确认',READY_TO_APPLY:'可应用'}
+export const taskLabels:Record<string,string>={DEVICE_PROFILE:'设备型号',PARSER_PROFILE:'报文解析',GATT_PROFILE:'GATT 接口',AUTO_CONNECT:'自动连接',ROUTE_PLAN:'解析路由',CUSTOMER_INTERFACE:'客户接口'}
+export const verificationLabel=(value:string)=>({SAMPLE_VERIFIED:'样例已验证',DOCUMENT_REVIEWED:'资料已审阅',HARDWARE_VERIFIED:'实机已验证'}[value]||value||'未验证')
+export function validationMessage(item:AIRecord){const messages:Record<string,string>={MODEL_NAME_REQUIRED:'请填写具体设备型号或接口模板名称。',EMPTY_PROFILE:'至少需要一份解析、连接或映射方案。',UNRESOLVED_ISSUE:'请核实这项资料问题，并填写处理说明。',RESOLUTION_REQUIRED:'已解决的问题还需要记录核实依据。',SOURCE_PATH_REQUIRED:'请选择证据关联的配置范围。',USER_SOURCE_NOTE_REQUIRED:'人工依据至少需要 5 个字，说明参数来源。',EVIDENCE_UNVERIFIED:'引用未匹配上传原文；请重新选择真实证据，或记录人工核实依据。',SOURCE_STATE_INVALID:'这项来源尚未完成审阅，请明确选择文档原文或人工依据。',EVIDENCE_REQUIRED:'配置缺少可核查来源，请在左侧关联资料或记录人工依据。',LAYOUT_REVIEW_REQUIRED:'请为整个解析方案记录依据，覆盖长度、帧格式、字节序和校验规则。',INDEPENDENT_SAMPLE_REQUIRED:'至少需要一个已核对的文档或人工有效样例。请核对模型样例后明确更改其来源。',NEGATIVE_SAMPLE_REQUIRED:'至少需要一个编码正确、但因协议或映射要求应被拒绝的异常样例。'};return messages[item.code]||item.message||'请核对这一项配置'}
+export async function aiList(path:string){const items:AIRecord[]=[];let cursor='';do{const p=await api(path+(path.includes('?')?'&':'?')+'limit=200'+(cursor?'&cursor='+enc(cursor):''));items.push(...(p.items||[]));cursor=p.nextCursor||'';if(items.length>=10000)break}while(cursor);return items}
+export function safeReturnTo(value:unknown){const path=String(value||'');return /^\/(ble-peers|gatt-connections|auto-connect-rules|parsers|rule-bundles|targets(?:\/[A-Za-z0-9_.:-]+)?|device-models)(?:\?[^#]*)?$/.test(path)?path:'/device-models'}
+export function emptyContent(){return {manufacturer:'',modelName:'',firmwareRange:'',parserSpec:null,connectionSpec:null,mappingSpec:null,tests:[],sources:[],issues:[]} as AIRecord}
+export function normalizeContent(value:AIRecord){for(const key of ['tests','sources','issues']){const entries=value?.[key];if(entries!==undefined&&(!Array.isArray(entries)||entries.some((item:any)=>!item||typeof item!=='object'||Array.isArray(item))))throw new Error(key+' 必须为对象数组，请修正高级结构后再采用。')}return {...emptyContent(),...clone(value||{}),tests:clone(value?.tests||[]),sources:clone(value?.sources||[]),issues:clone(value?.issues||[])}}
+export function draftStructureError(content:AIRecord){for(const key of ['parserSpec','mappingSpec']){const spec=content[key];if(spec&&(!Array.isArray(spec.fields)||spec.fields.some((f:any)=>!f||typeof f!=='object'||Array.isArray(f))))return (key==='parserSpec'?'解析字段':'映射字段')+'结构不完整，请打开高级结构修正后再使用字段编辑器。原始草稿已保留。'}return ''}
+export function hexToBase64(text:string){const value=text.replace(/\s+/g,'');if(!value||value.length%2||!/^[0-9a-f]+$/i.test(value))throw new Error('HEX 需为完整字节，可用空格分隔');return btoa(String.fromCharCode(...(value.match(/../g)||[]).map(v=>parseInt(v,16))))}
+export function base64ToHex(value:string){try{return [...atob(value)].map(c=>c.charCodeAt(0).toString(16).padStart(2,'0')).join(' ').toUpperCase()}catch{return ''}}
+export function parserFromModel(model:AIRecord){return model?.parserRef}
+export function connectionFromModel(model:AIRecord){return model?.content?.connectionSpec||null}
+export function mappingFromModel(model:AIRecord){return model?.content?.mappingSpec||null}

@@ -115,9 +115,17 @@ try {
     const queryResponse = page.waitForResponse(r => new URL(r.url()).pathname === '/api/v1/audit-events')
     await page.getByRole('button', { name: '查询时间区间', exact: true }).click(); const response = await queryResponse
     expect(response.status()).toBe(200); const url = new URL(response.url()); expect(!!url.searchParams.get('from') && !!url.searchParams.get('to')).toBe(true)
-    const events = (await response.json()).items; expect(events.some(e => e.action === 'diagnostic.export')).toBe(true)
-    expect(events.every(e => ['SUCCESS', 'DENIED', 'FAILED'].includes(e.outcome))).toBe(true)
-    await page.locator('.el-table__row').filter({ hasText: 'diagnostic.export' }).last().click()
+    let batch = await response.json(), pages = 1
+    const matching = e => e.action === 'diagnostic.export' && e.resourceId === report.created.operationId
+    while (!batch.items.some(matching) && batch.nextCursor && pages < 101) {
+      expect(batch.items.every(e => ['SUCCESS', 'DENIED', 'FAILED'].includes(e.outcome))).toBe(true)
+      const pending = page.waitForResponse(r => new URL(r.url()).pathname === '/api/v1/audit-events' && new URL(r.url()).searchParams.has('cursor'))
+      await page.getByRole('button', { name: '下一批', exact: true }).click(); const next = await pending; expect(next.ok()).toBe(true); batch = await next.json(); pages++
+    }
+    expect(batch.items.some(matching)).toBe(true)
+    expect(batch.items.every(e => ['SUCCESS', 'DENIED', 'FAILED'].includes(e.outcome))).toBe(true)
+    report.auditPages = pages
+    await page.locator('.el-table__row').filter({ hasText: report.created.operationId }).click()
     await expect(drawer().getByText('记录的变更', { exact: true })).toBeVisible()
     await page.screenshot({ path: path.join(evidence, 'audit-detail.png'), fullPage: true })
   })

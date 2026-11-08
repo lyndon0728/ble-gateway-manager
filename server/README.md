@@ -2,11 +2,11 @@
 
 这是服务于自有网关、由客户开发业务应用的服务器实现。软件运行在客户服务器上，提供设备管理、可靠上下行、按规则解析或原样转发、持久投递与应用确认；不包含定位功能，也不内置客户业务系统。
 
-当前软件版本为 `0.3.0`，API 契约 `1.9.0`，兼容原 1.0 数据及 GW32 1.1 采集与控制扩展，新增完整管理前端与 13 个只读接口。服务器原有实现及运行边界见 [实现范围](docs/implementation-status.md)，0.3.0 前端与联调记录见 [前端实现说明](docs/frontend-implementation.md)。`REFERENCE_GW`、`reference_sensor` 和 GW32 模拟 profile 均不代表实机已验证。真实固件需要按 [网关协议](docs/gateway-protocol.md) 及 [UART 协议](docs/gateway-uart-protocol.md) 实现并联调；软件联调方式见 [1.1 对接说明](docs/protocol-v11-integration.md)。
+当前软件版本为 `0.4.0`，API 契约 `1.10.0`，兼容原 1.0 数据及 GW32 1.1 采集与控制扩展，新增 AI 资料导入、模板审阅发布、受限解析器及从设备绑定。服务器原有实现及运行边界见 [实现范围](docs/implementation-status.md)，0.3.0 前端与联调记录见 [前端实现说明](docs/frontend-implementation.md)。`REFERENCE_GW`、`reference_sensor` 和 GW32 模拟 profile 均不代表实机已验证。真实固件需要按 [网关协议](docs/gateway-protocol.md) 及 [UART 协议](docs/gateway-uart-protocol.md) 实现并联调；软件联调方式见 [1.1 对接说明](docs/protocol-v11-integration.md)。
 
-完整管理前端已按 [前端总体规划](docs/frontend-plan.md) 实现：7 个功能大类、23 个业务页面加 1 个登录页，共 24 页；入口 `/ui/`，访问根目录自动进入控制台。Vue 构建产物随 Go 程序交付，客户运行时不需要 Node.js。结构化目录见 [frontend-pages.json](docs/frontend-pages.json)，开发与测试见 [前端 README](../frontend/README.md)。
+完整管理前端已按 [前端总体规划](docs/frontend-plan.md) 及 AI 首期策略实现：7 个功能大类、26 个业务页面加 1 个登录页，共 27 页；入口 `/ui/`，访问根目录自动进入控制台。Vue 构建产物随 Go 程序交付，客户运行时不需要 Node.js。结构化目录见 [frontend-pages.json](docs/frontend-pages.json)，开发与测试见 [前端 README](../frontend/README.md)。
 
-下一阶段的 [AI 辅助接入与页面优化策略](docs/ai-assistance-strategy.md) 规划说明书与接口资料导入、从设备解析和 GATT 模板生成、验证发布及其他页面辅助能力；包含 [离线阅读版](docs/ai-assistance-strategy.html) 和 [27 页规划目录](docs/ai-assistance-pages.json)。这是设计方案，新增 3 页及 AI 功能尚未实现，当前运行版本仍为上述 24 页。
+本版已完成 [AI 辅助接入与页面优化策略](docs/ai-assistance-strategy.md) 的首期闭环；详情和使用方式见 [0.4.0 实现说明](docs/ai-implementation.md) 及 [验证记录](docs/ai-validation.md)。模型服务先采用通用兼容接口，客户可稍后在“系统管理 → 模型服务设置”中配置；未配置时仍能人工编辑和复用模板。历史策略和 [离线阅读版](docs/ai-assistance-strategy.html) 保留后续增强计划，不能视为全部功能均已实现。
 
 ## 当前可执行入口
 
@@ -72,6 +72,6 @@ sudo bash scripts/install-linux.sh
 
 ## 本版能力边界
 
-已实现的路径通过 Go 单元/集成测试和本机端到端脚本验证。测试范围、执行结果由实际运行命令和报告决定。当前内置解析器是固定代码，支持参考传感帧、四字节演示帧和 BLE AD 结构；不支持上传任意脚本执行。多输出解析器需要扩展组替换协议后再交付。
+已实现的路径通过 Go 单元/集成测试和本机端到端脚本验证。测试范围、执行结果由实际运行命令和报告决定。保留参考传感帧、四字节演示帧和 BLE AD 内置解析器，并支持已验证发布的受限单包 DSL；不支持上传任意脚本执行。多输出解析器需要扩展组替换协议后再交付。
 
 GATT 和固件升级任务的设备侧能力必须由实际型号声明；参考网关只声明 CONFIGURE、REBOOT、DIAGNOSTICS。设备清单与制品具备验签、hash 和兼容性校验，实际无线动作、固件写入、启动回滚需要固件实现。服务器安装升级不能用上传文件替代停机维护与迁移验收。跨主机扩容、自动主备切换、万级设备容量保证和断电硬件测试不在本次本机验证结论内。

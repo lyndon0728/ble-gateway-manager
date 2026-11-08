@@ -44,7 +44,8 @@ func parserDigest(id, version string) string {
 	return pipeHash([]string{"builtin", implementation, id, version})
 }
 func (a *App) pipelineParsers(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.Require(w, r, "parser:read"); !ok {
+	p, ok := a.Require(w, r, "parser:read")
+	if !ok {
 		return
 	}
 	items := []pipeMap{}
@@ -56,10 +57,17 @@ func (a *App) pipelineParsers(w http.ResponseWriter, r *http.Request) {
 		}
 		items = append(items, pipeMap{"parserId": p["parserId"], "version": p["version"], "schemaVersion": schema, "modelIds": []string{}, "protocolVersions": []string{}, "implementationDigest": parserDigest(ps(p, "parserId"), ps(p, "version")), "state": "INSTALLED", "maxInputBytes": maxBytes, "maxOutputRecords": 1})
 	}
+	custom, err := a.protocolCatalog(r.Context(), p)
+	if err != nil {
+		pfail(w, r, 503, "PARSER_REGISTRY_UNAVAILABLE", err.Error())
+		return
+	}
+	items = append(items, custom...)
 	pjson(w, 200, pipePage(items, ""))
 }
 func (a *App) pipelineParserTest(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.Require(w, r, "parser:test"); !ok {
+	p, ok := a.Require(w, r, "parser:test")
+	if !ok {
 		return
 	}
 	req, ok := a.Decode(w, r, "ParserTest")
@@ -70,9 +78,15 @@ func (a *App) pipelineParserTest(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	raw, err := base64.StdEncoding.Strict().DecodeString(ps(req, "payloadBase64"))
 	var records []ParsedRecord
+	digest := parserDigest(id, ver)
 	if err == nil {
-		records, err = ParsePayload(id, ver, raw)
+		records, digest, err = a.parseRegisteredPayload(r.Context(), p, id, ver, raw)
 		annotateServiceUUIDSource(records, ps(po(req, "metadata"), "sourceEventId"))
+	}
+	var unavailable *ParserFailure
+	if digest == "" && errors.As(err, &unavailable) && unavailable.Code == "PARSER_UNKNOWN" {
+		pfail(w, r, 404, "PARSER_UNKNOWN", "published parser version not available")
+		return
 	}
 	outputs := []pipeMap{}
 	errs := []pipeMap{}
@@ -90,7 +104,7 @@ func (a *App) pipelineParserTest(w http.ResponseWriter, r *http.Request) {
 	if expected, exists := req["expected"]; exists && err == nil && pipeHash(expected) != pipeHash(outputs) {
 		errs = append(errs, pipeMap{"code": "EXPECTED_OUTPUT_MISMATCH", "message": "actual output does not equal expected output", "retryable": false, "traceId": pipeID("trace")})
 	}
-	pjson(w, 200, pipeMap{"passed": len(errs) == 0, "outputs": outputs, "errors": errs, "cpuTimeMicros": time.Since(start).Microseconds(), "implementationDigest": parserDigest(id, ver)})
+	pjson(w, 200, pipeMap{"passed": len(errs) == 0, "outputs": outputs, "errors": errs, "cpuTimeMicros": time.Since(start).Microseconds(), "implementationDigest": digest})
 }
 
 func (a *App) pipelineSecret(w http.ResponseWriter, r *http.Request) {
@@ -360,7 +374,7 @@ func (a *App) pipelineBundles(w http.ResponseWriter, r *http.Request) {
 	pjson(w, 200, a.cursorPage(items, next, c))
 }
 func pipeMatchOverlap(x, y pipeMap) bool {
-	for _, k := range []string{"modelIds", "groupIds", "protocolVersions", "packetTypes"} {
+	for _, k := range []string{"modelIds", "groupIds", "protocolVersions", "packetTypes", "peerIds", "protocolBindingIds", "captureKinds", "serviceUuids", "characteristicUuids"} {
 		a, b := pl(x, k), pl(y, k)
 		if len(a) == 0 || len(b) == 0 {
 			continue
@@ -396,9 +410,6 @@ func (a *App) compileBundle(ctx context.Context, tx *sql.Tx, req pipeMap) (pipeM
 				return nil, errors.New("same-priority rules overlap")
 			}
 		}
-		if ps(rule, "action") == "DECODE" && !parserKnown(ps(rule, "parserId"), ps(rule, "parserVersion"), ps(rule, "schemaVersion")) {
-			return nil, errors.New("parser/schema dependency not installed")
-		}
 		seenTarget := map[string]bool{}
 		for _, t := range pl(rule, "targetVersions") {
 			ref := t.(map[string]any)
@@ -423,6 +434,9 @@ func (a *App) compileBundle(ctx context.Context, tx *sql.Tx, req pipeMap) (pipeM
 	}
 	m := pm(pipeJSON(req))
 	m["targets"] = targets
+	if err := freezeProtocolDependencies(ctx, tx, m); err != nil {
+		return nil, err
+	}
 	return m, nil
 }
 func (a *App) pipelineBundleCreate(w http.ResponseWriter, r *http.Request) {
@@ -591,6 +605,9 @@ func (a *App) pipelineBundleActivate(w http.ResponseWriter, r *http.Request) {
 	pjson(w, 202, result)
 }
 func (a *App) activatePipelineBundle(ctx context.Context, id, raw, hash string, expected int64) error {
+	if err := verifyFrozenProtocolRuntime(pm(raw)); err != nil {
+		return err
+	}
 	if pipeHash(pm(raw)) != hash {
 		return errors.New("bundle digest mismatch")
 	}

@@ -115,7 +115,7 @@ func TestMigrationsUpgradeV1PreservesManagementAndRawCustody(t *testing.T) {
 
 func TestMigrationsRejectModifiedChecksumsAndFutureVersions(t *testing.T) {
 	for _, schema := range []string{"management.sql", "pipeline.sql"} {
-		for _, mode := range []string{"v1-checksum", "v2-checksum", "future"} {
+		for _, mode := range []string{"v1-checksum", "v2-checksum", "v3-checksum", "future"} {
 			t.Run(schema+"/"+mode, func(t *testing.T) {
 				path := filepath.Join(t.TempDir(), "state.db")
 				db, e := openDB(path, schema)
@@ -127,8 +127,10 @@ func TestMigrationsRejectModifiedChecksumsAndFutureVersions(t *testing.T) {
 					_, e = db.Exec("UPDATE schema_migrations SET checksum='altered' WHERE version=1")
 				case "v2-checksum":
 					_, e = db.Exec("UPDATE schema_migrations SET checksum='altered' WHERE version=2")
+				case "v3-checksum":
+					_, e = db.Exec("UPDATE schema_migrations SET checksum='altered' WHERE version=3")
 				case "future":
-					_, e = db.Exec("INSERT INTO schema_migrations VALUES(3,'future',?,'9.0.0')", Now())
+					_, e = db.Exec("INSERT INTO schema_migrations VALUES(4,'future',?,'9.0.0')", Now())
 				}
 				if e != nil {
 					t.Fatal(e)
@@ -139,7 +141,7 @@ func TestMigrationsRejectModifiedChecksumsAndFutureVersions(t *testing.T) {
 					opened.Close()
 					t.Fatal("unsafe schema accepted")
 				}
-				if !strings.Contains(e.Error(), map[string]string{"v1-checksum": "checksum", "v2-checksum": "checksum", "future": "newer"}[mode]) {
+				if !strings.Contains(e.Error(), map[string]string{"v1-checksum": "checksum", "v2-checksum": "checksum", "v3-checksum": "checksum", "future": "newer"}[mode]) {
 					t.Fatal(e)
 				}
 			})

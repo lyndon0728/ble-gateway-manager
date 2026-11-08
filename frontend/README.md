@@ -1,6 +1,6 @@
 # 蓝牙网关管理控制台
 
-Vue 3 + TypeScript + Vite + Element Plus，7 大类 / 24 页面 / 18 个侧栏入口。采用同源 Cookie 会话、CSRF、资源范围授权、ETag 和幂等任务接口。业务对象来自真实服务器；没有浏览器内的模拟数据库。
+Vue 3 + TypeScript + Vite + Element Plus，7 大类 / 27 页面 / 20 个侧栏入口。采用同源 Cookie 会话、CSRF、资源范围授权、ETag 和幂等任务接口。业务对象来自真实服务器；没有浏览器内的模拟数据库。
 
 ## 构建与运行
 
@@ -38,10 +38,11 @@ pnpm --dir frontend build
 
 | 位置 | 用途 |
 | --- | --- |
-| `src/App.vue`、`src/router.ts` | 7 大类导航、24 页面、权限与会话恢复 |
+| `src/App.vue`、`src/router.ts` | 7 大类导航、27 页面、权限与会话恢复 |
 | `src/pages` | 业务页面及上下文详情 |
 | `src/features/gateway` | 配置差异、输入校验、任务身份 |
 | `src/features/pipeline` | 解析、版本化规则、客户映射与重解析 |
+| `src/features/ai` | 资料上传、服务状态、模板复用与草稿辅助 |
 | `src/features/system` | 中文对接指南、契约一致的消息示例 |
 | `src/lib` | 同源 API、CSRF、角色范围、分页、格式 |
 | `tests` | API 行为测试、浏览器流程与隔离测试进程 |
@@ -57,12 +58,14 @@ pnpm --dir frontend test:e2e
 .\frontend\tests\fixture.ps1 -Action Stop
 ```
 
-fixture 启动真正的 Go 服务器、GW32 与参考网关模拟器、客户持久接收器，使用 `server/.local/frontend-e2e`。它不接触本地交付实例。也可设置 `GW_TEST_FIXTURE` 指向该目录的 `fixture.json`；账号密码只从文件读取。首次 Start 要求空目录，避免覆盖证据；已有 fixture 更新程序使用 `fixture.ps1 -Action Restart`。测试是串行流程，同一网关同一时刻只允许一个控制任务。
+fixture 启动真正的 Go 服务器、GW32 与参考网关模拟器、客户持久接收器，使用 `server/.local/frontend-e2e`。它不接触本地交付实例。也可设置 `GW_TEST_FIXTURE` 指向该目录的 `fixture.json`；账号密码只从文件读取。通过 `-Instance` 可使用新的隔离目录（仅字母、数字、下划线和连字符）；默认目录不变。首次 Start 要求空目录，避免覆盖证据；已有 fixture 更新程序使用 `fixture.ps1 -Action Restart`。测试是串行流程，同一网关同一时刻只允许一个控制任务。
 
-测试报告和截图位于 `frontend/test-results` 以及 `server/.testdata/frontend-*-e2e`，均不进入 Git。`tests/smoke.e2e.mjs` 检查路由、320/736/1024 像素布局、角色访问、会话恢复与网络错误；另外三个脚本验证网关控制、解析投递、系统管理。敏感令牌不写入报告或截图。
+测试报告和截图位于 `frontend/test-results` 以及 `server/.testdata/frontend-*-e2e`，均不进入 Git。`tests/smoke.e2e.mjs` 检查路由、320/736/1024 像素布局、角色访问、会话恢复与网络错误；另外四个脚本验证网关控制、解析投递、系统管理及 AI 导入。AI 脚本启动本机模拟兼容接口，不调用真实外部模型。敏感令牌不写入报告或截图。
 
 ## 交付边界
 
 已确认配置是设备已验证变更的累计视图，不是完整运行时回读。未知字段不自动提交；实际下行结果以任务验证为准。协议、BLE 物理动作、固件写入和回滚仍需真实硬件联调。MQTT 目标表单可以配置与保存，真实 Broker/TLS 的传输验收按部署环境另行执行。
 
 逐页布局与验收标准见 [总体规划](../server/docs/frontend-plan.md)，接口和交付边界见 [实现说明](../server/docs/frontend-implementation.md)。
+
+本版 AI 页面和兼容接口配置见 [0.4.0 实现说明](../server/docs/ai-implementation.md)。当前尚未配置真实模型，API 密钥仅在设置页提交，不能写入前端源码。
