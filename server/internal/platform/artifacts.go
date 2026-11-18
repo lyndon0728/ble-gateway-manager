@@ -23,6 +23,18 @@ import (
 var artifactIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$`)
 var artifactHashPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
 
+func firmwareComponent(m map[string]any) (string, error) {
+	raw, present := m["component"]
+	if !present {
+		return "GATEWAY", nil
+	}
+	component, ok := raw.(string)
+	if !ok || component != "GATEWAY" && component != "NRF54" {
+		return "", Problem(422, "INVALID_FIRMWARE_COMPONENT", "firmware component must be GATEWAY or NRF54")
+	}
+	return component, nil
+}
+
 func (a *App) artifactView(ctx context.Context, q ctlQuery, id string) (map[string]any, error) {
 	var kind, digest, state, version, compat string
 	var size int64
@@ -93,6 +105,13 @@ func VerifyArtifactManifest(raw, signature []byte, keys map[string]string) (map[
 	}
 	if !artifactHashPattern.MatchString(Str(m, "sha256")) || Str(m, "name") == "" || len(Str(m, "name")) > 128 || Str(m, "version") == "" || len(Str(m, "version")) > 64 {
 		return nil, Problem(422, "INVALID_ARTIFACT_MANIFEST", "signed name, version, and SHA-256 are required")
+	}
+	component, err := firmwareComponent(m)
+	if err != nil {
+		return nil, err
+	}
+	if component == "NRF54" && (Str(m, "kind") != "FIRMWARE" || Str(m, "imageFormat") != "MCUBOOT_SIGNED_BIN") {
+		return nil, Problem(422, "INVALID_ARTIFACT_MANIFEST", "NRF54 firmware requires signed component and MCUBOOT_SIGNED_BIN image format")
 	}
 	for _, key := range []string{"compatibleModels", "hardwareVersions", "fromFirmwareVersions"} {
 		if x, present := m[key]; present {
@@ -212,6 +231,10 @@ func (a *App) uploadArtifact(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) checkFirmware(ctx context.Context, q ctlQuery, id string, g map[string]any, expected string) error {
+	return a.checkFirmwareComponent(ctx, q, id, g, expected, "GATEWAY")
+}
+
+func (a *App) checkFirmwareComponent(ctx context.Context, q ctlQuery, id string, g map[string]any, expected, component string) error {
 	var kind, state, compat, version string
 	e := q.QueryRowContext(ctx, "SELECT kind,state,compatibility_json,version FROM artifacts WHERE artifact_id=?", id).Scan(&kind, &state, &compat, &version)
 	if e != nil || kind != "firmware" || state != "verified" {
@@ -221,8 +244,21 @@ func (a *App) checkFirmware(ctx context.Context, q ctlQuery, id string, g map[st
 		return Problem(422, "FIRMWARE_VERSION_MISMATCH", "expected firmware must equal signed artifact version")
 	}
 	var c map[string]any
-	_ = json.Unmarshal([]byte(compat), &c)
-	for k, v := range map[string]string{"compatibleModels": Str(g, "model"), "hardwareVersions": Str(g, "hardwareVersion"), "fromFirmwareVersions": Str(g, "firmwareVersion")} {
+	if e = json.Unmarshal([]byte(compat), &c); e != nil {
+		return Problem(422, "INVALID_ARTIFACT_MANIFEST", "firmware compatibility metadata is invalid")
+	}
+	signedComponent, e := firmwareComponent(c)
+	if e != nil || signedComponent != component {
+		return Problem(422, "FIRMWARE_COMPONENT_MISMATCH", "task component must equal the signed firmware component")
+	}
+	if component == "NRF54" && Str(c, "imageFormat") != "MCUBOOT_SIGNED_BIN" {
+		return Problem(422, "FIRMWARE_IMAGE_FORMAT_MISMATCH", "NRF54 requires a signed MCUboot application image")
+	}
+	checks := map[string]string{"compatibleModels": Str(g, "model"), "hardwareVersions": Str(g, "hardwareVersion")}
+	if component == "GATEWAY" {
+		checks["fromFirmwareVersions"] = Str(g, "firmwareVersion")
+	}
+	for k, v := range checks {
 		list := List(c, k)
 		if len(list) == 0 && k != "compatibleModels" {
 			continue
@@ -236,6 +272,11 @@ func (a *App) checkFirmware(ctx context.Context, q ctlQuery, id string, g map[st
 		if !match {
 			return Problem(422, "FIRMWARE_INCOMPATIBLE", "firmware compatibility mismatch: "+k)
 		}
+	}
+	if component == "NRF54" && len(List(c, "fromFirmwareVersions")) > 0 {
+		// Registry firmwareVersion describes the gateway host, not the nRF.
+		// Never compare it as if it were authenticated nRF version evidence.
+		return Problem(422, "FIRMWARE_COMPONENT_VERSION_UNKNOWN", "NRF54 source-version constraints require separately verified component inventory")
 	}
 	return nil
 }

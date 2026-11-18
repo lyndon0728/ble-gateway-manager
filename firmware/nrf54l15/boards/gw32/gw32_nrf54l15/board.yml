@@ -1,0 +1,6 @@
+board:
+  name: gw32_nrf54l15
+  full_name: GW32 October 2026 nRF54L15 coprocessor
+  vendor: others
+  socs:
+    - name: nrf54l15

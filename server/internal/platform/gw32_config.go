@@ -249,7 +249,7 @@ func gw32AdvertisingShape(m map[string]any) error {
 	if e := gw32Bool(m, "enabled"); e != nil {
 		return e
 	}
-	if v, ok := m["mode"]; ok && v != "NONCONNECTABLE" && v != "SCANNABLE_NONCONNECTABLE" {
+	if v, ok := m["mode"]; ok && v != "NONCONNECTABLE" && v != "SCANNABLE_NONCONNECTABLE" && v != "CONNECTABLE_SCANNABLE" {
 		return gw32Invalid("invalid advertising mode")
 	}
 	if v, ok := m["intervalMs"]; ok && !gw32Range(v, 100, 10240) {
@@ -582,7 +582,13 @@ func (a *App) validateGatewayConfiguration(ctx context.Context, tx *sql.Tx, g ma
 				if e = gw32Require(g, prefix+"BLE_ADV"); e != nil {
 					return e
 				}
-				return gw32AdvertisingShape(Obj(merged, "advertising"))
+				advertising := Obj(merged, "advertising")
+				if Str(advertising, "mode") == "CONNECTABLE_SCANNABLE" {
+					if e = gw32Require(g, prefix+"BLE_PERIPHERAL"); e != nil {
+						return e
+					}
+				}
+				return gw32AdvertisingShape(advertising)
 			}
 			if e = gw32Require(g, prefix+"BLE_SCAN"); e != nil {
 				return e

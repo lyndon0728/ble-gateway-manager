@@ -1,0 +1,72 @@
+/dts-v1/;
+
+#include <nordic/nrf54l15_cpuapp.dtsi>
+#include <zephyr/dt-bindings/gpio/gpio.h>
+#include <zephyr/dt-bindings/regulator/nrf5x.h>
+#include "gw32_nrf54l15-pinctrl.dtsi"
+
+/ {
+	model = "GW32 nRF54L15 QFAA AT2401C October 2026";
+	compatible = "gw32,nrf54l15-coprocessor";
+	chosen {
+		zephyr,sram = &cpuapp_sram;
+		zephyr,flash = &cpuapp_rram;
+		zephyr,flash-controller = &rram_controller;
+		zephyr,code-partition = &slot0_partition;
+	};
+	aliases { gw-uart = &uart20; };
+
+	/* NCS v3.2.1 compatible; MPSL owns these pins and their timing. */
+	nrf_radio_fem: at2401c {
+		compatible = "generic-fem-two-ctrl-pins";
+		ctx-gpios = <&gpio1 9 GPIO_ACTIVE_HIGH>;
+		crx-gpios = <&gpio1 10 GPIO_ACTIVE_HIGH>;
+		/* Datasheet 0.8 us is typical. 10 us is a bench starting value. */
+		ctx-settle-time-us = <10>;
+		crx-settle-time-us = <10>;
+		tx-gain-db = <22>;
+		rx-gain-db = <14>;
+	};
+};
+
+#include <nordic/nrf54l15_partition.dtsi>
+
+&cpuapp_sram { status = "okay"; };
+&clock { status = "okay"; };
+&hfxo {
+	load-capacitors = "external";
+	/* Conservative initial allowance, requires XOSTART/XOTUNED measurement. */
+	startup-time-us = <2000>;
+};
+&regulators { status = "okay"; };
+&vregmain {
+	status = "okay";
+	regulator-initial-mode = <NRF5X_REG_MODE_LDO>;
+};
+&gpio0 { status = "okay"; };
+&gpio1 { status = "okay"; };
+&gpio2 { status = "okay"; };
+&gpiote20 { status = "okay"; };
+&gpiote30 { status = "okay"; };
+&grtc {
+	owned-channels = <0 1 2 3 4 5 6 7 8 9 10 11>;
+	child-owned-channels = <3 4 7 8 9 10 11>;
+	status = "okay";
+};
+&uart20 {
+	status = "okay";
+	current-speed = <1000000>;
+	hw-flow-control;
+	pinctrl-0 = <&gw_uart_default>;
+	pinctrl-1 = <&gw_uart_sleep>;
+	pinctrl-names = "default", "sleep";
+};
+&radio { status = "okay"; };
+&temp { status = "okay"; };
+&dppic10 { status = "okay"; };
+&dppic20 { status = "okay"; };
+&dppic30 { status = "okay"; };
+&ppib11 { status = "okay"; };
+&ppib21 { status = "okay"; };
+&ppib22 { status = "okay"; };
+&ppib30 { status = "okay"; };

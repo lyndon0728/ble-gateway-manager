@@ -1,0 +1,33 @@
+mainmenu "GW32 nRF54L15 BLE coprocessor"
+
+config GW_RADIO_VERIFIED
+	bool "Enable BLE operation on the selected hardware"
+	default y if BOARD_NRF54L15DK
+	default n
+	help
+	  The official DK is usable for software development immediately. For
+	  GW32 custom hardware, enable only after validating the schematic
+	  revision, oscillator startup and FEM timing and RF output power.
+	  With this disabled the UART management protocol remains available
+	  and BLE commands report unsupported; no radio capability is advertised.
+
+config GW_DFU
+	bool "ESP UART firmware upgrade with signed MCUboot images"
+	default n
+	depends on BOOTLOADER_MCUBOOT && MCUBOOT_BOOTLOADER_MODE_SWAP_USING_OFFSET
+	depends on IMG_MANAGER && IMG_ENABLE_IMAGE_CHECK
+	help
+	  Receive firmware only into the secondary slot. A trusted, board-specific
+	  signing key and a MCUboot sysbuild are required. A normal application
+	  build does not advertise UART DFU capability.
+
+config GW_DFU_CONFIRM_TIMEOUT_MS
+	int "Trial firmware confirmation timeout (ms)"
+	default 120000
+	range 30000 600000
+	depends on GW_DFU
+	help
+	  Reset an unconfirmed trial image if ESP does not explicitly confirm it
+	  after checking its version and health. MCUboot reverts on the next boot.
+
+source "Kconfig.zephyr"

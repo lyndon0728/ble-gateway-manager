@@ -363,7 +363,16 @@ func (a *App) newTask(ctx context.Context, tx *sql.Tx, actor, key string, req ma
 	}
 	if op == "FIRMWARE_UPGRADE" {
 		artifactID = Str(params, "artifactId")
-		if e = a.checkFirmware(ctx, tx, Str(params, "artifactId"), g, Str(params, "expectedFirmwareVersion")); e != nil {
+		component, componentError := firmwareComponent(params)
+		if componentError != nil {
+			return 0, "", nil, componentError
+		}
+		if component == "NRF54" {
+			if e = gw32Require(g, "NRF54_UART_DFU_1"); e != nil {
+				return 0, "", nil, e
+			}
+		}
+		if e = a.checkFirmwareComponent(ctx, tx, Str(params, "artifactId"), g, Str(params, "expectedFirmwareVersion"), component); e != nil {
 			return 0, "", nil, e
 		}
 		risk = "readback"
@@ -770,6 +779,32 @@ func (a *App) acceptTaskResult(ctx context.Context, tx *sql.Tx, g string, v map[
 		}
 		if operation == "FIRMWARE_UPGRADE" && (Str(v, "verification") != "VERIFIED" || Str(details, "firmwareVersion") != Str(params, "expectedFirmwareVersion")) {
 			return reject("FIRMWARE_NOT_VERIFIED")
+		}
+		if operation == "FIRMWARE_UPGRADE" {
+			component, componentError := firmwareComponent(params)
+			if componentError != nil {
+				return reject("FIRMWARE_NOT_VERIFIED")
+			}
+			if _, present := details["component"]; present && Str(details, "component") != component {
+				return reject("FIRMWARE_COMPONENT_MISMATCH")
+			}
+			if component == "NRF54" {
+				confirmed, _ := details["bootConfirmed"].(bool)
+				if Str(details, "component") != "NRF54" || !confirmed || !gw32ConnectionPattern.MatchString(Str(details, "nrfBootId")) {
+					return reject("NRF54_FIRMWARE_NOT_VERIFIED")
+				}
+				var expectedImageHash string
+				e = tx.QueryRowContext(ctx, "SELECT a.sha256 FROM command_tasks t JOIN artifacts a ON a.artifact_id=t.artifact_id WHERE t.task_id=? AND a.kind='firmware'", task).Scan(&expectedImageHash)
+				if errors.Is(e, sql.ErrNoRows) {
+					return reject("NRF54_FIRMWARE_ARTIFACT_MISSING")
+				}
+				if e != nil {
+					return nil, e
+				}
+				if !artifactHashPattern.MatchString(Str(details, "imageSha256")) || Str(details, "imageSha256") != expectedImageHash {
+					return reject("NRF54_FIRMWARE_IMAGE_MISMATCH")
+				}
+			}
 		}
 		if operation == "GATT_WRITE" && Str(params, "verification") != "NONE" && Str(v, "verification") != "VERIFIED" {
 			return reject("WRITE_NOT_VERIFIED")

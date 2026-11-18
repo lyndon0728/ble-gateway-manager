@@ -27443,6 +27443,10 @@
       "TaskParamsFirmware": {
         "type": "object",
         "properties": {
+          "component": {
+            "type": "string",
+            "enum": ["GATEWAY", "NRF54"]
+          },
           "artifactId": {
             "type": "string",
             "minLength": 1,
@@ -31397,7 +31401,8 @@
             "type": "string",
             "enum": [
               "NONCONNECTABLE",
-              "SCANNABLE_NONCONNECTABLE"
+              "SCANNABLE_NONCONNECTABLE",
+              "CONNECTABLE_SCANNABLE"
             ]
           },
           "intervalMs": {

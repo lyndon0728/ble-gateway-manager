@@ -1,0 +1,6 @@
+/build*/
+/tests/*.exe
+/tests/*.obj
+/tests/*.pdb
+/tests/*.o
+/.zig-cache/

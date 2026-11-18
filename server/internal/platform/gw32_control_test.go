@@ -116,6 +116,56 @@ func TestGW32ConfigurationMergeAndCapabilityGate(t *testing.T) {
 	}
 }
 
+func TestGW32ConnectableAdvertisingCapabilityGate(t *testing.T) {
+	a, actor := gw32Fixture(t)
+	tx, e := a.Management.BeginTx(t.Context(), nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer tx.Rollback()
+	g, e := a.gatewayView(t.Context(), tx, "gw_test")
+	if e != nil {
+		t.Fatal(e)
+	}
+	for _, target := range []string{"nrf54", "esp32"} {
+		prefix := strings.ToUpper(target) + "_"
+		advertising := map[string]any{"enabled": true, "mode": "CONNECTABLE_SCANNABLE", "intervalMs": 250, "advDataBase64": "AgEG", "scanResponseBase64": base64.StdEncoding.EncodeToString([]byte{2, 9, 'x'})}
+		patch := map[string]any{"radios": map[string]any{target: map[string]any{"advertising": advertising}}}
+		if e = ValidateGatewayConfiguration(patch); e != nil {
+			t.Fatal(target, e)
+		}
+		if e = a.Validate("ConfigurationUpdate", map[string]any{"expectedReportedRevision": 0, "configuration": patch, "expiresAt": Timestamp(Now() + 60000)}); e != nil {
+			t.Fatal("connectable mode absent from wire schema", e)
+		}
+		for _, capabilities := range [][]any{
+			{"CONFIGURE", "GW32_CONTROL_PROFILE_1", prefix + "BLE_ADV"},
+			{"CONFIGURE", "GW32_CONTROL_PROFILE_1", prefix + "BLE_PERIPHERAL"},
+			{"CONFIGURE", "GW32_CONTROL_PROFILE_1", prefix + "BLE_ADV", prefix + "BLE_PERIPHERAL"},
+		} {
+			g["capabilities"] = capabilities
+			e = a.validateGatewayConfiguration(t.Context(), tx, g, patch)
+			if (len(capabilities) == 4) != (e == nil) {
+				t.Fatalf("%s capabilities=%v error=%v", target, capabilities, e)
+			}
+		}
+		g["capabilities"] = []any{"CONFIGURE", "GW32_CONTROL_PROFILE_1", prefix + "BLE_ADV"}
+		advertising["mode"] = "SCANNABLE_NONCONNECTABLE"
+		if e = a.validateGatewayConfiguration(t.Context(), tx, g, patch); e != nil {
+			t.Fatal("legacy scannable mode must retain its previous capability requirement", target, e)
+		}
+	}
+	// The merged mode, not only a supplied mode field, must determine capability.
+	prior := map[string]any{"radios": map[string]any{"nrf54": map[string]any{"advertising": map[string]any{"mode": "CONNECTABLE_SCANNABLE"}}}}
+	if _, e = tx.ExecContext(t.Context(), "INSERT INTO gateway_configs(config_id,gateway_id,revision,desired_json,content_hash,state,created_by,created_at_ms) VALUES(?,?,2,?,?,'verified',?,?)", ID("cfg"), "gw_test", encode(prior), Hash(prior), actor, Now()); e != nil {
+		t.Fatal(e)
+	}
+	g["capabilities"] = []any{"CONFIGURE", "GW32_CONTROL_PROFILE_1", "NRF54_BLE_ADV"}
+	patch := map[string]any{"radios": map[string]any{"nrf54": map[string]any{"advertising": map[string]any{"enabled": true}}}}
+	if e = a.validateGatewayConfiguration(t.Context(), tx, g, patch); e == nil {
+		t.Fatal("partial update bypassed merged Peripheral capability check")
+	}
+}
+
 func TestGW32NetworkRequiresPriorDurableProbeResults(t *testing.T) {
 	a, actor := gw32Fixture(t)
 	configuration := map[string]any{"network": map[string]any{"uplinkOrder": []any{"ETHERNET", "WIFI_STA"}, "ethernet": map[string]any{"enabled": true, "ipv4": map[string]any{"mode": "DHCP"}}, "wifiSta": map[string]any{"enabled": true, "ssid": "site", "security": "WPA2_PSK", "credentialRef": "wifi-local-1", "ipv4": map[string]any{"mode": "DHCP"}}}}
