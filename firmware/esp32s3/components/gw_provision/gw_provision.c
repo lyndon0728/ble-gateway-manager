@@ -26,12 +26,13 @@
 #define AUTH_FAILURE_LIMIT 5U
 #define MAX_SESSION_MESSAGES 65536U
 
-extern const uint8_t index_start[] asm("_binary_assets_index_html_start");
-extern const uint8_t index_end[] asm("_binary_assets_index_html_end");
-extern const uint8_t script_start[] asm("_binary_assets_app_js_start");
-extern const uint8_t script_end[] asm("_binary_assets_app_js_end");
-extern const uint8_t style_start[] asm("_binary_assets_style_css_start");
-extern const uint8_t style_end[] asm("_binary_assets_style_css_end");
+/* IDF 5.5.6 EMBED_FILES uses the file basename, without its source directory. */
+extern const uint8_t index_start[] asm("_binary_index_html_start");
+extern const uint8_t index_end[] asm("_binary_index_html_end");
+extern const uint8_t script_start[] asm("_binary_app_js_start");
+extern const uint8_t script_end[] asm("_binary_app_js_end");
+extern const uint8_t style_start[] asm("_binary_style_css_start");
+extern const uint8_t style_end[] asm("_binary_style_css_end");
 
 static struct {
     httpd_handle_t server;
