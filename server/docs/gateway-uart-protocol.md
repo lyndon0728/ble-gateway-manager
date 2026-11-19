@@ -1,10 +1,10 @@
-# GW32I33V2 板内 UART 协议 1.1
+# GW32I33V2 板内 UART 协议 1.2
 
 关联文档：[详细需求清单](../../docs/gateway-requirements.md) · [系统流程与对接指南](../../docs/gateway-integration.md) · [ESP ↔ 服务器协议](gateway-protocol.md)。本文是板内二进制字段和状态机的权威定义。
 
-2026-11-19 三方统一采用 **[GW32-E2E-1.0](../../docs/gateway-end-to-end-standard.md)**；对应 [nRF 需求](../../docs/nrf54l15-requirements.md) / [开发文档](../../docs/nrf54l15-development.md) 与 [ESP 开发文档](../../docs/esp32s3-development.md)。本次文档对齐不改变帧版本、opcode、状态码或二进制字段。ESP `0.2.1` 已有持久化、采集、网络和升级执行源码及目标构建；尚缺的广播状态核对、硬件恢复、Peripheral 平台业务等见统一标准 C03～C05，不能把接口存在当成整机已经完成。
+2026-11-19 三方统一采用 **[GW32-E2E-1.1](../../docs/gateway-end-to-end-standard.md)**；对应 [nRF 需求](../../docs/nrf54l15-requirements.md) / [开发文档](../../docs/nrf54l15-development.md) 与 [ESP 开发文档](../../docs/esp32s3-development.md)。本次保留现有帧版本、opcode、状态码及其二进制布局，新增的 Beacon V2 能力位13、0x19～0x1B仅为规划合同，当前固件不得使用或声明。ESP `0.2.1` 已有持久化、采集、网络和升级执行源码及目标构建；尚缺的广播状态核对、硬件恢复、Peripheral 平台业务等见统一标准 C03～C05，不能把接口存在当成整机已经完成。
 
-**状态：nRF 固件 0.2.0 的实现接口与 ESP 对接规范。** 本文按 [nRF54L15 源码](../../firmware/nrf54l15/src) 核对；主机测试不能替代 NCS 目标编译、烧录和实板验证，目前尚未完成后三项。适用硬件为 2026 年 10 月 29 日 GW32I33V2 优化版，U1 为 ESP32-S3-WROOM-1-N8R8，U9 为 nRF54L15-QFAA-R；其他原理图版本必须先核对网表。本协议覆盖 ESP 主机控制 nRF 的扫描、Beacon 过滤、GATT Central、对外广播、Peripheral 数据通道及 UART DFU。协议 1.1 保留线上帧版本 `01`，以 HELLO 能力位启用新增操作。ESP 的持久化、去重、联网和升级任务编排是对接方必须实现的责任，本文不表示已有生产级 ESP 固件。[固件构建与验证边界](../../firmware/nrf54l15/README.md) · [原理图 PDF（本地资料）](D:/chat/GW32_AT2401C_Optimized_20261029/GW32_Optimized_Final.pdf) · [最终网表（本地资料）](D:/chat/GW32_AT2401C_Optimized_20261029/evidence/final_v6.net) · [ESP 与服务器协议](gateway-protocol.md)
+**状态：既有1.1部分为 nRF 固件0.2.0的实现接口；文档1.2的 Beacon V2 章节为已确定开发合同、待实现。** 本文按 [nRF54L15 源码](../../firmware/nrf54l15/src) 核对；主机测试不能替代 NCS 目标编译、烧录和实板验证，目前尚未完成后三项。适用硬件为 2026 年 10 月 29 日 GW32I33V2 优化版，U1 为 ESP32-S3-WROOM-1-N8R8，U9 为 nRF54L15-QFAA-R；其他原理图版本必须先核对网表。本协议覆盖 ESP 主机控制 nRF 的扫描、Beacon 过滤、GATT Central、对外广播、Peripheral 数据通道及 UART DFU。协议 1.1 保留线上帧版本 `01`，以 HELLO 能力位启用新增操作。ESP 的持久化、去重、联网和升级任务编排是对接方必须实现的责任，本文不表示已有生产级 ESP 固件。[固件构建与验证边界](../../firmware/nrf54l15/README.md) · [原理图 PDF（本地资料）](D:/chat/GW32_AT2401C_Optimized_20261029/GW32_Optimized_Final.pdf) · [最终网表（本地资料）](D:/chat/GW32_AT2401C_Optimized_20261029/evidence/final_v6.net) · [ESP 与服务器协议](gateway-protocol.md)
 
 ## 串口参数
 
@@ -62,8 +62,9 @@ CRC32C Castagnoli 使用反射多项式 `0x82F63B78`，初值和最终异或均�
 | 10 | 广播独立启停、专用状态查询和运行中载荷更新，依赖 bit4 |
 | 11 | 可连接广播与本机 Peripheral 数据服务，依赖 bit4 |
 | 12 | ESP 经 UART 传送 MCUboot 签名镜像，支持测试启动、确认和回滚；仅相应 DFU 构建声明 |
+| 13 | **规划，当前为0**：Beacon V2字段组合、显式报告配对、完整配置读回与过滤状态，依赖bit1；0x19～0x1B全部实现并验收后声明 |
 
-其余位发送为 0。ESP 仅调用能力位覆盖的功能。HELLO 请求和响应均使用 `msg_id=0`。为兼容扫描版主机，nRF 启动后默认关闭广播和 GATT 订阅，只有收到新命令才启用。
+当前bit13及其余未实现位发送为0。ESP仅调用实际能力位覆盖的功能；新增位不可改变bit1所代表的旧规则语义。HELLO 请求和响应均使用 `msg_id=0`。为兼容扫描版主机，nRF 启动后默认关闭广播和 GATT 订阅，只有收到新命令才启用。
 
 当前射频已启用的实现声明 bit1/2/3/4/9/10/11，即 `0x00000E1E`；bit0 和 bit5–8 始终为 0，完整扩展广播接收与角色并行属于后续扩展。GW32 自定义板默认 `CONFIG_GW_RADIO_VERIFIED=n`，不启动 BLE、射频能力为 0。bit12 独立取决于 DFU 编译配置及实际双槽检查结果，不因射频禁用而自动清除。能力表示该构建提供的接口，不能作为板级射频、吞吐或安全认证已验收的证据。扫描基础命令及只读诊断仍可用于管理；射频未就绪时不能启用扫描或广播。
 
@@ -164,6 +165,86 @@ ESP 恢复 Flash 队列和去重状态后发起 `HELLO_REQ`。nRF 每次启动�
 | `value[n]`、`mask[n]` | 字节串 | 逐字节比较 `(data & mask) == (value & mask)`，mask 至少一位非零 |
 
 先执行基础 RSSI、服务 UUID 和厂商过滤，再按配置顺序查找第一条匹配规则。任一完整且同类型的 AD 结构匹配即命中该条，匹配结果不得跨两个 AD 结构拼接。无规则命中时，有 ALLOW 规则则丢弃，否则放行。这样可按 iBeacon 的厂商 ID、子类型、UUID、Major 和 Minor 过滤，也可按 Service Data 匹配 Eddystone 或自定义 Beacon。扫描配置和规则按同一个 revision 原子生效。规则生效时，旧 `SET_SCAN_CONFIG` 返回 `CONFLICT`，完整更新统一走 `SET_SCAN_PROFILE`。通过规则后的原始 AD 保持原样。
+
+### Beacon V2 组合掩码扩展（规划，待实现）
+
+统一业务语义及JSON字段以 [Beacon过滤规范](../../docs/beacon-filter-spec.md) 为准；实现顺序和C12关闭证据见 [差距实施方案](../../docs/gateway-alignment-development-plan.md)。本节只规定其UART编码。当前 nRF `0.2.0` / ESP `0.2.1` 不支持这些新命令，旧设备返回既有 `UNSUPPORTED`；不得将规划命令直接投入运行。
+
+#### 能力、命令和原子切换
+
+HELLO bit13依赖bit1。bit13表示V2全部必需字段、REPORT与显式配对范围、配置读回和状态计数均已实现，不能只实现部分字段就置位。
+
+| 规划opcode | 命令 | 参数 | OK结果 |
+| --- | --- | --- | --- |
+| `0x19` | `SET_SCAN_PROFILE_V2` | 完整 `ScanProfileV2` | 原子生效的完整 `ScanProfileV2` |
+| `0x1A` | `GET_SCAN_PROFILE_V2` | 空 | 当前完整 `ScanProfileV2`；运行旧引擎时也返回engine=0包装 |
+| `0x1B` | `GET_SCAN_FILTER_STATUS` | 空 | 下述固定96 B `ScanFilterStatus` |
+
+新命令仍在 `CMD_REQ/CMD_RSP` 内发送，帧 `version=01`、COBS、CRC32C和既有500 ms控制重试规则不变。完整配置body不得超过 **3070 B**：SET payload为1+body，成功响应payload为2+body，均须满足3072 B上限。
+
+`ScanProfileV2`连续编码、无结构体填充：
+
+| 顺序 | 字段 | 长度/类型 | 约束 |
+| --- | --- | --- | --- |
+| 1 | `format_version` | u8 | 固定2，其他值拒绝 |
+| 2 | `engine` | u8 | 0=LEGACY，1=V2 |
+| 3 | `legacy_len` | u16 | 后接完整旧ScanProfile的精确字节数 |
+| 4 | `legacy_profile` | `legacy_len` B | 完整 `scan_len + ScanConfig + legacy rule_count + legacy rules`；revision唯一来源是内部ScanConfig |
+| 5 | `scope` | u8 | 0=REPORT；1=ADV_SCAN_RSP_PAIR |
+| 6 | `pair_window_ms` | u16 | REPORT必须0；PAIR固定500 |
+| 7 | `rule_count_v2` | u8 | LEGACY必须0；V2为1～8 |
+| 8 | `rules_v2` | 逐规则变长 | 每条含u16 rule_len及对应规则体，不加额外填充 |
+
+engine=0时 scope/window/count必须为0，旧ScanProfile的全部基础字段及旧规则保持原语义；engine=1时内部旧rule_count必须为0，V2取代旧规则层，原ScanConfig基础过滤仍保留。未知engine、保留位、数量、长度错误和尾随字节均返回BAD_PARAM，不能忽略后继续执行。
+
+平台允许一个扫描配置补丁同时清空旧规则并设置V2，或清空V2并设置旧规则；ESP必须合并完整目标后以一个0x19原子切换。两引擎共用原扫描revision，不新增独立revision。相同revision相同完整字节幂等；不同字节或更旧revision返回CONFLICT。配置先校验再切换，失败恢复旧完整引擎与目标；恢复不明时返回APPLY_FAILED，ESP读回对账而不是报告成功。
+
+V2运行时，旧SET_SCAN_CONFIG(0x01)、SET_SCAN_PROFILE(0x05)以及不能完整表达V2的GET_SCAN_PROFILE(0x06)返回CONFLICT，不能暗中清除V2。GET_SCAN_CONFIG(0x02)仅返回基础子集，不能用于完整V2验证或恢复。退回旧模式须经0x19显式engine=0，然后旧命令恢复原有语义。0x1A始终提供完整权威读回。缺bit13设备不得接收V2；只有经等价性证明可完整表达的配置才可由平台明确生成旧规则，不能自动弱化、截断或跨包模拟。
+
+#### 单条V2规则编码
+
+`rule_len`不含自身2 B，规则体先 `action:u8 | kind_mask:u8 | field_mask:u16`，随后仅编码被选择字段，严格按bit0→bit5顺序。`action=0 DENY/1 ALLOW`；REPORT的kind_mask沿用四类报告位，非零且只允许bit0～3，实际EXT接收仍要求bit0接收能力；PAIR只允许kind_mask=1（主报告LEGACY_ADV）。
+
+| field_mask位 | 字段 | 编码及长度 | 校验/解释 |
+| --- | --- | --- | --- |
+| bit0 `0x0001` | NAME | `mode:u8, source:u8, n:u8, value[n], mask[n]`，3+2n B | mode 0=EXACT/1=PREFIX；source 0=COMPLETE/1=SHORTENED/2=ANY；n=1～29，mask至少一位非零 |
+| bit1 `0x0002` | IBEACON_UUID | `value[16],mask[16]`，32 B | 规范UUID文本从左到右的字节；mask至少一位非零 |
+| bit2 `0x0004` | RSSI | `mode:u8,arg0:u8,arg1:u8`，3 B | mode0 RANGE：arg0/arg1作为i8 min/max，-127～20且min≤max；mode1 BITS：arg0为i8 valueDbm的补码字节，arg1为1～255的mask |
+| bit3 `0x0008` | MAJOR | `value:u16,mask:u16`，4 B | UART数值小端；mask非0；先从iBeacon两个大端字节解析数值再比较 |
+| bit4 `0x0010` | MINOR | `value:u16,mask:u16`，4 B | 与MAJOR相同 |
+| bit5 `0x0020` | SERVICE_UUID | `value[16],mask[16]`，32 B | 从合法服务UUID AD解析16/32/128位并扩展成规范128位后比较；独立于iBeacon UUID |
+
+`field_mask`须为1～63，无未知位；同规则全部选中字段AND，规则间按首条完整命中处理。NAME按UTF-8字节而不是字符数比较；EXACT要求所选名称长度等于n，PREFIX要求至少n。名称来源、重复名称冲突和完整AD验证按Beacon规范执行；不对文本自动改大小写、修剪或Unicode归一化。字段value在mask为0的位置也保留传入字节，配置回读必须逐字节一致；不得擅自规范化后改变同revision判定。
+
+所有字节/数值掩码比较为 `(actual & mask) == (value & mask)`；所选字段缺失为不命中。RSSI未知值-128不参与比较；启用RSSI的未知输入按过滤规范计数并丢弃。RANGE采用有符号dBm含端点比较，与BITS位集合不是同一种运算。例：Major value=0x1200/mask=0xFF00匹配0x12xx；RSSI valueDbm=-64(0xC0)/mask=0xF0匹配-64～-49，不表示“至少-64 dBm”。
+
+iBeacon专用字段要求同一个完整0xFF AD的Data恰25 B，前4 B固定 `4C 00 02 15`；UUID在4～19，Major在20～21，Minor在22～23，24为1m校准RSSI。必须在同一AD元组内验证全部已选iBeacon字段，不能从不同AD或不同报告拼值。这里的数据大端字段不改变UART u16统一小端的规则。
+
+总长计算：`body_len=8+legacy_len+Σ(2+rule_len)`。NAME最大61 B，两个UUID各32 B，RSSI3 B、Major/Minor各4 B，最大单规则体140 B、含长度142 B。engine=0最大旧2755+包装8=2763 B，原有容量完整保留。V2基础列表最大时legacy_len=2323，加8条全字段规则为3467 B，超3070必须整配置拒绝；不能通过删字段、缩短名称或拆成非原子规则来凑长度。平台保存/任务创建、ESP编码、nRF解析必须使用同一总长计算。
+
+#### 显式ADV/SCAN_RSP配对
+
+REPORT逐报告匹配，沿用独立上报；不能使用历史扫描响应缓存补名称。PAIR要求active=1、legacy主ADV、固定500 ms，仅按同radio/boot/revision/真实地址类型与地址寻找唯一尚未配对前序ADV；未知地址、非legacy或不支持上下文不能配对。多个合法候选属于歧义，不能擅自取最近一个。
+
+只有完整配对后才执行基础类别和V2规则。基础UUID/公司ID可在该显式上下文查找，RSSI只取主ADV；名称来源和iBeacon同AD约束仍须遵守。配对不完整、超时、歧义、缓存满均不放行，避免只有DENY规则时因缺SCAN_RSP而默认放行；已完整配对但普通字段缺失则该predicate为false，再按有序规则/默认动作处理。DENY列表不能替代ALLOW白名单。
+
+匹配通过后ADV与SCAN_RSP以原始独立记录进入既有0x20批次，不合成AD、不伪造kind或capture时间。缓存容量、确定性淘汰/拒绝和各丢弃原因优先级按Beacon规范；配置切换、暂停/恢复、失效上下文须清理待判缓存并计数，UART重握手不能把旧失效候选变新鲜。500 ms配对窗口不同于ESP跨无线电150 ms等待/50 ms匹配及平台自动连接证据窗口，三者不能互相替代。
+
+#### 过滤状态与可观测性
+
+0x1B成功结果固定96 B，不扩展原71 B GET_STATUS或BLE记录；计数器和即时值如下，u16/u32/u64均小端：
+
+| 偏移 | 字段 | 类型 | 语义 |
+| --- | --- | --- | --- |
+| 0 | revision | u64 | 当前完整扫描组revision |
+| 8、9 | engine、scope | 各u8 | 当前引擎与范围，枚举同配置 |
+| 10、12 | pending_count、pending_bytes | u16、u32 | 当前待判原始报告数与缓存原始AD字节数 |
+| 16、24、32 | records_seen、records_passed、rule_dropped | 各u64 | 输入原始报告、获过滤输出资格、最终规则拒绝数 |
+| 40、48、56 | pair_timeout、pair_ambiguous、pair_overflow | 各u64 | 各配对原因丢弃的原始报告数 |
+| 64、72 | malformed_ad、unknown_rssi | 各u64 | 按规范因畸形AD/已启用RSSI但未知而丢弃的原始报告数 |
+| 80、88 | unsupported_context、config_discarded | 各u64 | 不支持/冲突上下文和配置/暂停清理丢弃的原始报告数 |
+
+十个计数均按原始报告条数，在同boot累计，不因配置变更清零；每输入seen一次，待判尚无终态，终态只能计一次放行或一个丢弃原因。正常配对放行/规则拒绝相应加2。原因顺序为unsupported_context→malformed_ad→unknown_rssi→配对超时/歧义/容量→最终规则拒绝；配置清理独立终结尚未决定的待判记录。records_passed仅表示过滤资格，之后FIFO满仍归原dropped_full，不是持久接管证明。芯片重启归零，以boot区分；此状态须由ESP校验并供平台诊断验收。
 
 ### 对外广播
 

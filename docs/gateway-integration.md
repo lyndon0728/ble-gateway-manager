@@ -1,6 +1,6 @@
 # GW32 系统流程与协议对接指南
 
-文档版本：1.1；基线：2026-11-19；nRF 固件 0.2.0、ESP 固件 0.2.1；统一标准：**[GW32-E2E-1.0](gateway-end-to-end-standard.md)**。本文连接 [需求清单](gateway-requirements.md)、[UART 协议](../server/docs/gateway-uart-protocol.md) 与 [服务器协议](../server/docs/gateway-protocol.md)，不引入第三套字段定义。时序是必须实现的目标流程；具体源码缺口见统一标准 C01～C11。
+文档版本：1.2；基线：2026-11-19；nRF 固件 0.2.0、ESP 固件 0.2.1；统一标准：**[GW32-E2E-1.1](gateway-end-to-end-standard.md)**。本文连接 [需求清单](gateway-requirements.md)、[UART 协议](../server/docs/gateway-uart-protocol.md) 与 [服务器协议](../server/docs/gateway-protocol.md)，不引入第三套字段定义。各差距的实施合同见[统一开发方案](gateway-alignment-development-plan.md)；时序是目标流程，规划接口及源码缺口仍需实现。
 
 ESP 执行器的详细开发与验收要求见 [ESP32-S3 软件需求](esp32s3-requirements.md)。
 
@@ -24,7 +24,7 @@ flowchart LR
 | 广播配置 | CONFIGURE / radios.nrf54.advertising | Base64 解码、时间量化、完整 revision 配置 | 0x07/0x08 |
 | 仅启停广播 | 同一 CONFIGURE 广播组 | 有 bit10 时使用简化命令，仍持久目标 | 0x0B；0x0C 查实际状态 |
 | 连接与 GATT | GATT_* 任务 / 自动连接规则 | 验证证据、持久意图、序列化副作用、查询结果 | 0x10～0x18；0x0A 连接信息 |
-| Peripheral 手机收发 | 云端业务契约待定义 | 认证、业务解析、路由和业务级 ACK | 上行 0x22；状态 0x0D、通知 0x0E、断开 0x0F |
+| Peripheral 手机收发 | 规划GW-PERIPHERAL-1，待实现 | 认证、业务解析、路由和业务级 ACK | 上行 0x22；状态 0x0D、通知 0x0E、断开 0x0F |
 | 网络 | CONFIGURE / network | 候选试用、绑定接口探测、应用 ACK 后提交 | 不发送给 nRF |
 | 本地网页配网 | 手机/笔记本→ESP SoftAP安全会话 | 与远程共享候选管理；本地版本和云revision分离，明确离线保存/回退 | 不发送给 nRF；源码已有，实际开窗入口/实板待验收 |
 | ESP 本机 BLE | CONFIGURE / radios.esp32 | 本机 BLE 驱动与同一合并队列 | 不发送给 nRF |
@@ -89,6 +89,8 @@ sequenceDiagram
 同一 MAC 不等于同一事件。匹配必须区分 AD 字节、ADV/SCAN_RSP 和时间上下文；同无线电重复仍是独立观测。按服务器协议，每条观测最多等待 150 ms，到期选符合 50 ms 时间窗约束、尚未配对且时间差最小的另一射频候选，同差取先入队者。缺少有效时间映射或可比较上下文、以及迟到的记录分别保留。服务器解析与客户投递不阻塞原始持久 ACK。
 
 同一双路采集任务分别向两个 radio 下发等价过滤目标；独立配置能力保留，不能自动覆盖另一 radio 的设置（C10）。双路匹配保留 NRF54 主记录和两路 observedBy，以保留 nRF 自动连接证据；内部缓存批次必须拆成平台允许的每批最多 200 事件。
+
+过滤新流程为平台编辑/预览→能力与完整目标校验→ESP持久意图→本机共享引擎或nRF规划0x19→0x1A完整读回、0x1B状态→结果确认。字段和字节预算以[Beacon规范](beacon-filter-spec.md)为准。REPORT立即判断单报告；显式PAIR在各radio内部以500ms窗口形成唯一上下文，按规则判断后仍输出两个原始报告，再进入原跨射频50/150ms合并链。不得以PAIR延迟修改原始时间，或将通过过滤当自动连接授权。
 
 ## 5. 服务器自动连接
 
@@ -189,7 +191,7 @@ sequenceDiagram
 
 | 工作 | 入口 |
 | --- | --- |
-| 三方标准与冲突处理 | [GW32-E2E-1.0](gateway-end-to-end-standard.md) |
+| 三方标准与冲突处理 | [GW32-E2E-1.1](gateway-end-to-end-standard.md) |
 | nRF 需求与开发 | [专项需求](nrf54l15-requirements.md) / [开发文档](nrf54l15-development.md) |
 | ESP 需求与开发 | [专项需求](esp32s3-requirements.md) / [开发文档](esp32s3-development.md) |
 | 平台需求与开发 | [专项需求](../server/docs/gateway-platform-requirements.md) / [开发文档](../server/docs/gateway-platform-development.md) |

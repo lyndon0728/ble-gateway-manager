@@ -1,10 +1,12 @@
 # 网关管理平台对接需求清单
 
-版本：1.0 · 日期：2026-11-19 · 统一标准：`GW32-E2E-1.0`
+版本：1.1 · 日期：2026-11-19 · 统一标准：`GW32-E2E-1.1`
 
 本文定义网关管理平台与 ESP32-S3、nRF54L15 贯通所需的业务、接口和验收要求，补充现有整个平台需求，不替换用户、项目、数据处理、客户投递、AI、部署和运维等既有功能。统一裁决见[端到端标准](../../docs/gateway-end-to-end-standard.md)；开发落点见[平台开发文档](gateway-platform-development.md)。
 
-本轮交付是需求和开发文档对齐。下文“必须”表示产品与协议要求，不表示当前代码已实现或实板已验收。现有功能全部保留；协议字段适配、能力限制、实现缺口和硬件验证必须分别记录。当前源码审查基线为 `0897044`，ESP 固件实现基线为 0.2.1。
+本轮交付是需求和开发文档对齐。下文“必须”表示产品与协议要求，不表示当前代码已实现或实板已验收。现有功能全部保留；协议字段适配、能力限制、实现缺口和硬件验证必须分别记录。当前仓库审查基线为 `b8ba3ef`，ESP 固件实现基线为 0.2.1。
+
+1.1 补充[差距统一开发方案](../../docs/gateway-alignment-development-plan.md)及[Beacon 过滤规范](../../docs/beacon-filter-spec.md)。C01～C12 的统一实现方向和 Beacon V2 语义在文档中冻结；原 59 条 PLAT-GW 需求、11 项验收编号保持不变。新增过滤要求使用规范中的 BFLT 编号追溯，不在三方文档分别发明不同编号。设计冻结不代表源码、机器 Schema 或部署已经支持。
 
 ## 1. 三端职责与协议边界
 
@@ -14,7 +16,7 @@
 | ESP32-S3 | 网络与本地网页入口、平台协议执行、nRF UART 适配、双射频采集去重、可靠存储与重传、配置试用回退、双组件升级编排、自身 BLE 功能 |
 | nRF54L15 | 按配置扫描与过滤、原始观测上报、BLE Central/Peripheral 与广播、UART 执行/读回、通过 ESP UART 升级 |
 
-平台到 ESP 使用[平台协议](gateway-protocol.md)；ESP 到 nRF 使用[UART 协议](gateway-uart-protocol.md)。平台不直接下发任意 UART 二进制，也不把 UART ACK 当作云端任务完成。两个协议保留各自版本，`GW32-E2E-1.0` 是跨端约束标识，不是替换线缆帧或 JSON `schemaVersion` 的新字段。
+平台到 ESP 使用[平台协议](gateway-protocol.md)；ESP 到 nRF 使用[UART 协议](gateway-uart-protocol.md)。平台不直接下发任意 UART 二进制，也不把 UART ACK 当作云端任务完成。两个协议保留各自版本，`GW32-E2E-1.1` 是跨端约束标识，不是替换线缆帧或 JSON `schemaVersion` 的新字段。
 
 ## 2. 身份、能力与兼容性
 
@@ -67,6 +69,24 @@
 | PLAT-GW-030 | 广播 mode 为 NONCONNECTABLE、SCANNABLE_NONCONNECTABLE、CONNECTABLE_SCANNABLE；间隔 100–10240 ms。可连接广播同时要求目标 BLE_ADV 与 BLE_PERIPHERAL，nRF 还检查 HELLO 能力位。 |
 | PLAT-GW-031 | Beacon 与自定义广播均以 advDataBase64/scanResponseBase64 表达完整原始 AD，每段解码 0–31 字节；NONCONNECTABLE 的扫描响应必须为空。平台可提供内容生成界面，但不得自动注入改变已提交的 AD 字节。 |
 | PLAT-GW-032 | 广播查询区分已保存配置与真实启停状态；BLE 诊断须能沿 ESP 读取 nRF GET_ADV_CONFIG/GET_ADV_STATUS。nRF 重启默认关闭，由 ESP 恢复已提交目标；同启动周期 UART 重握手不丢目标。 |
+
+### 5.1 Beacon V2 的统一需求映射
+
+本节补充 PLAT-GW-025～032 和 PLAT-GW-AT-04/05；精确字段、BFLT 要求和共同测试向量以 [Beacon 过滤规范](../../docs/beacon-filter-spec.md)为唯一依据。下列 `beaconFilterV2` 为**开发冻结、尚未上线的合同**，不能直接发送给当前 Schema/固件。
+
+| 主题 | 必须一致的规则 |
+| --- | --- |
+| 名称、UUID、信号强度、Major/Minor | `fieldMask` 的 bit0～5 依次选择 NAME、IBEACON_UUID、RSSI、MAJOR、MINOR、SERVICE_UUID；选择位和实际谓词字段一一对应。iBeacon UUID 与 GATT 服务 UUID 分开，不能互相代替。 |
+| 内容掩码 | 名称与 UUID 按等长字节掩码比较；Major/Minor 解析 iBeacon 大端 u16 后比较 `(actual & mask)==(value & mask)`。启用字段的掩码不得全零，同一规则内所有已选条件 AND。 |
+| RSSI | 支持字段选择掩码及 RANGE/BITS 两种显式模式。RANGE 两端均必填，采用有符号 dBm 闭区间；BITS 对合法有符号 RSSI 的 8 位补码执行掩码比较。BITS 不能描述成“信号强于某值”，未知 RSSI 不得当有效样本。 |
+| 名称语义 | 1～29 个原始字节；EXACT/PREFIX 与 COMPLETE/SHORTENED/ANY 显式选择。按字节比较，不自动大小写折叠、Unicode 归一化或正则匹配；显示文本由界面转换为 UTF-8，协议以 Base64 字节为准。 |
+| 规则与解析 | 最多 8 条有序规则，首条命中决定 ALLOW/DENY；存在 ALLOW 而无命中则拒绝，否则按既有默认动作。iBeacon UUID/Major/Minor 必须取自同一完整 25 字节 Manufacturer AD 值，固定前缀 `4C 00 02 15`，不能拼取不同 AD 字段。 |
+| 单报告与关联报告 | REPORT 保留单报告判断；ADV_SCAN_RSP_PAIR 仅用于 legacy 主动扫描，reportKinds 只能 LEGACY_ADV，窗口固定 500 ms。同 radio/boot/revision/真实地址类型及地址下只能有一个可配前序 ADV；歧义、超时、满缓存或缺少 SCAN_RSP 均拒绝并计数，不能在仅 DENY 规则时借缺失数据绕过。RSSI 使用 ADV 值。 |
+| 旧版兼容与切换 | 既有 `beaconRules` 六字段与单 AD 规则语义保留。切到 V2 时同一 CONFIGURE 原子提交 `beaconRules:[]` 与 V2 对象；反向提交 `beaconFilterV2:null` 与旧列表。合并目标不得同时激活两套规则，禁止静默降级或拆成两次任务形成过滤空窗。 |
+| 基础过滤及两 radio | 基础 filters 继续先执行，与 V2 条件取交集；PAIR 按规范的关联上下文评估。两 radio 独立配置，同一采集任务需要等价目标时分别下发，不复制覆盖。 |
+| 能力、容量与版本 | 平台签名能力、ESP 实现和 nRF HELLO bit13 同时允许后才开放 V2；保留现有帧/消息版本。校验 JSON 后必须计算规范二进制编码大小，完整 profile 体≤3070 字节；超限整项拒绝，不截断规则或掩码。 |
+
+平台界面必须展示选择字段、有效掩码、RSSI 模式、REPORT/PAIR 模式及合并后的有效条件；当前不支持时明确不可下发。PLAT-GW-AT-04 增补名称前缀/精确、两种 UUID、大小端、掩码边界、RSSI 负数、同规则 AND、仅 DENY 缺失报告防绕过、原子切换与超长拒绝，具体期望值复用 BFLT 向量，不能各端重新解释。
 
 ## 6. GATT 与自动连接
 
@@ -137,8 +157,10 @@
 | NRF54 源版本约束 | 平台缺独立可信组件库存，对非空约束拒绝 | 定义并实现组件库存的可信上报、重启/升级更新与兼容校验，然后开放约束任务。 |
 | 广播实际状态 | nRF 提供状态查询；ESP 当前配置读回/诊断还不能完整证明 GET_ADV_STATUS 实际状态一致 | 按统一标准 C03 补端到端读回，不把已保存 enabled 当实际广播已开启。 |
 | nRF OTA 硬件复位恢复 | 软件 DFU 已有执行路径；硬件复位恢复链尚须补齐验证 | 按 C04 保留板级复位与重连/回滚证据要求。 |
-| Peripheral 平台业务 | UART 收件与 ESP 本地 inbox 已有；平台业务合同尚缺 | 按 C05 补消息封装、认证和回发任务，不删除该需求。 |
+| Peripheral 平台业务 | UART 收件与 ESP 本地 inbox 已有；完整平台链路尚未实现 | 按[统一开发方案 C05](../../docs/gateway-alignment-development-plan.md)实现已冻结的消息封装、认证和回发要求，不能把设计冻结写成已部署。 |
 | 平台配置恢复视图 | 汇总响应明确 complete=false | 按 C08 保留完整恢复需求，不能把缺字段解释成清空或默认值。 |
 | 可信 UTC | 当前制造指定 SNTP 无密码学认证 | 按 C09 补时间可信性与误差证明，避免过期任务、自动连接与远程 OTA 判断基于虚假时间；本地离线 OTA 不增加 UTC 前提。 |
 | nRF 传输中重启恢复 | 当前 ESP 在 nRF boot 变化后可能把下载中断当作试启动回滚 | 按[统一标准 C11](../../docs/gateway-end-to-end-standard.md#2-冲突缺口与唯一处理标准)依据 journal 分阶段恢复；有效授权下重新传输从 0 BEGIN，不强加同任务自动重传。 |
 | 真实贯通 | 存在服务器、ESP、nRF 的各自实现和测试，不能等同三方联合验收 | 按本节验收清单和各固件验证计划完成实板证据。 |
+
+C02～C11 的具体数据责任、兼容迁移、实施顺序与关闭证据统一收录于[差距开发方案](../../docs/gateway-alignment-development-plan.md)。本表继续反映源码现状；文档方案一致不等于源码缺口已经关闭。Beacon V2 同样须先同步三方机器合同、实现和共同测试，再按能力放行。

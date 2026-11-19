@@ -1,8 +1,10 @@
 # 网关管理平台贯通开发文档
 
-版本：1.0 · 日期：2026-11-19 · 统一标准：`GW32-E2E-1.0`
+版本：1.1 · 日期：2026-11-19 · 统一标准：`GW32-E2E-1.1`
 
 本文是[平台对接需求](gateway-platform-requirements.md)的实现与联调说明。跨端规则以[端到端标准](../../docs/gateway-end-to-end-standard.md)为统一裁决；具体已发布字段保留在[平台协议](gateway-protocol.md)、[UART 协议](gateway-uart-protocol.md)、[配网接口](network-provisioning-integration.md)和 Schema/OpenAPI。本文本轮只对齐文档，不宣称以下后续项已修改源码或已通过实板验收。
+
+所有差距的实施决定以[统一开发方案](../../docs/gateway-alignment-development-plan.md)为准；名称/UUID/RSSI/Major/Minor 掩码过滤以[Beacon 过滤规范](../../docs/beacon-filter-spec.md)为准。新增字段与端点只存在于本轮冻结的设计中，仍须下一阶段同步 Schema/OpenAPI、平台、ESP/nRF 和测试，不能把本文作为当前部署已支持新请求的证明。
 
 ## 1. 源码落点与边界
 
@@ -106,7 +108,7 @@ ESP 的跨射频配对使用报告类别、地址/地址类型、完整 AD 等�
 
 nRF Peripheral 写入的 UART 0x22 接入 ESP 本地持久 inbox，不当作 Central GATT Notify 伪造云端事件；业务 handler 的授权与处理 ACK 保持单独边界。
 
-当前本地 inbox 不代表手机↔平台业务闭环已经完成。统一标准 C05 保留平台封装、身份/会话认证、请求关联、平台受理和 UART 下行回发的需求；后续先定义正式契约、再同步 Schema/平台/ESP/nRF，本文不发明临时 JSON 字段或回发任务名称。
+当前本地 inbox 不代表手机↔平台业务闭环已经完成。统一标准 C05 保留平台封装、身份/会话认证、请求关联、平台受理和 UART 下行回发的需求；正式开发合同采用[统一开发方案](../../docs/gateway-alignment-development-plan.md)的 C05，下一阶段同步 Schema/平台/ESP/nRF。本文件不另起消息字段或回发任务别名，也不把 ATT/Notify 受理当平台业务 ACK。
 
 自动连接、远程任务 TTL 与远程 OTA 的“可信时间”仍须验证时间源。当前制造指定 SNTP 仅说明服务器来源配置，不能代替密码学认证或抗回拨证明；按 C09 完成时间来源、误差、重启后可信门槛和失可信阻断测试。本地离线 OTA 使用本地授权和单调期限，试启动及恢复不要求互联网、云端任务或可信 UTC。
 
@@ -141,7 +143,7 @@ nRF Peripheral 写入的 UART 0x22 接入 ESP 本地持久 inbox，不当作 Cen
 
 两入口共享的是签名、兼容性、大小、摘要和启动健康校验；本地入口的授权来源和期限独立于远程任务，不能因“共享校验”而追加云任务或 UTC 依赖。远程路径继续校验可信时间、任务有效期及 TLS。
 
-平台成功结果对 NRF54 校验 component、firmwareVersion、nrfBootId、bootConfirmed 和镜像摘要；不能覆写登记的 ESP firmwareVersion。当前平台对 NRF54 的非空 fromFirmwareVersions 返回 FIRMWARE_COMPONENT_VERSION_UNKNOWN，因为没有独立可信组件库存。这是保留的兼容校验需求尚未完成，后续应补组件库存合同、验签/受权上报及更新路径，不移除限制。
+平台成功结果对 NRF54 校验 component、firmwareVersion、nrfBootId、bootConfirmed 和镜像摘要；不能覆写登记的 ESP firmwareVersion。当前平台对 NRF54 的非空 fromFirmwareVersions 返回 FIRMWARE_COMPONENT_VERSION_UNKNOWN，因为没有独立可信组件库存。这是保留的兼容校验需求尚未完成；组件库存合同与验证流程按[统一开发方案 C06](../../docs/gateway-alignment-development-plan.md)实施，受权上报、证据校验和更新路径通过验收前继续拒绝，不移除限制。
 
 nRF boot ID 变化不必然代表候选已经试启动。按持久 journal 区分传输尚未完成的重启与 FINISH/READY 后的试启动，再核对实际运行镜像和确认状态。下载中断后 nRF RAM 会话和旧 offset 无效；确需重新传输时必须获得有效授权，从 0 重新 BEGIN，不能把同任务自动重传作为强制行为，也不能把旧镜像仍运行直接标成候选 ROLLED_BACK。该恢复缺口按[统一标准 C11](../../docs/gateway-end-to-end-standard.md#2-冲突缺口与唯一处理标准)补齐。
 
@@ -164,7 +166,7 @@ ESP 本地 OTA 的状态不强塞进云端远程任务；离线本地成功后�
 | PLAT-GAP-04 | 各端存在单测/模拟器与构建记录，尚无完整实板三端证据 | 测试范围缺口 | 执行需求文档 AT-01..11，并记录版本、硬件、日志、故障注入与结论 |
 | C03 | gw_nrf.c 的广播路径执行 SET/GET 配置，诊断仅取基础 GET_STATUS，尚缺 GET_ADV_STATUS 的完整实际状态核对 | 配置读回不能替代真实广播状态 | 补实际状态、驱动错误、应用时间和 revision 证据，并校验任务成功条件 |
 | C04 | nRF OTA 有 UART DFU/等待新 HELLO 路径，板级硬件复位恢复尚缺完整执行与验收 | 复位恢复要求保留 | ESP 补板级复位安全时序、重连和回滚对账，实板注入卡死/失联 |
-| C05 | ESP 有 Peripheral 本地 inbox，平台尚无完整业务封装、认证及回发合同 | 已有本地接管不代表平台闭环 | 先冻结补充合同后同步机器契约和实现，保留业务需求 |
+| C05 | ESP 有 Peripheral 本地 inbox，完整平台业务、认证及回发链路尚未实现 | 已有本地接管不代表平台闭环 | 依统一开发方案冻结的 C05 合同同步机器契约和实现，保留业务需求 |
 | C08 | frontend_api.go:181 明确 complete=false、ACKNOWLEDGED_PATCH_NOT_RUNTIME_READBACK | 汇总配置不是完整恢复快照 | ESP 保留完整目标；平台后续补受控重放/完整恢复证据 |
 | C09 | 当前 ESP 制造指定 SNTP 不具密码学认证 | 远程时效、TLS 和自动连接的可信 UTC 验收差距 | 补可认证时间来源或受权可信锚、误差及失可信阻断证据，不将来源配置视为可信；本地离线 OTA 不追加 UTC 前提 |
 | [C11](../../docs/gateway-end-to-end-standard.md#2-冲突缺口与唯一处理标准) | gw_ota.c:483–554 的 nrf_transfer 在 boot 变化后进入 nrf_trial，可能将传输中断记为 ROLLED_BACK | 下载中断和 READY 后试启动必须按 journal 分阶段对账 | ESP 补阶段判断及真实镜像核对；重新传输须有效授权并从 0 BEGIN，不强加同任务自动重传；平台保留真实失败/恢复证据 |
@@ -173,7 +175,7 @@ ESP 本地 OTA 的状态不强塞进云端远程任务；离线本地成功后�
 
 ## 9. 开发顺序与验证
 
-1. 固定本文、需求清单和 GW32-E2E-1.0 的字段/权责；保留历史版本和兼容映射。
+1. 固定本文、需求清单、GW32-E2E-1.1 及统一开发方案的字段/权责；保留历史版本和兼容映射。
 2. 建立跨端合同向量：radio/UUID/RSSI/AD/时间量化/结果 ACK/修订号/组件字段；覆盖平台拒绝与 ESP 拒绝一致性。
 3. 依差距清单完成必要源代码与机器契约变更，特别是 MQTT、组件库存、ESP 本机支持集；每项单独确认变更不删除既有功能。
 4. 运行平台现有 Go 测试、Schema/OpenAPI 验证和模拟器流程；运行对应 ESP/nRF 主机测试与目标构建。不要把模拟器当作射频和 Flash 验证。
@@ -181,3 +183,51 @@ ESP 本地 OTA 的状态不强塞进云端远程任务；离线本地成功后�
 6. 注入重启、串口 ACK 丢失、网络中断、迟到结果、存储满、撤权和窗口关闭，验证恢复与所有权；保存可复核证据后再宣布对应功能贯通。
 
 本次仅更新 Markdown 文档，未运行或声称新的固件构建、Go 测试、射频/升级实板验收。历史实现与测试范围继续见[实现与验收范围](implementation-status.md)、[ESP 实现状态](../../firmware/esp32s3/IMPLEMENTATION.md)及[nRF 验证记录](../../firmware/nrf54l15/VALIDATION.md)。
+
+## 10. Beacon V2 的平台实施设计
+
+### 10.1 单一合同和编译路径
+
+`radios.<target>.beaconFilterV2` 是新增的版本化过滤 profile；旧 `beaconRules` 不改字段、AND/OR 或默认动作。完整 JSON、掩码位定义、二进制布局及 BFLT 向量使用[统一过滤规范](../../docs/beacon-filter-spec.md)，本节只规定平台实现落点。
+
+```text
+管理界面选择字段/填写值和掩码
+  → 生成规范 beaconFilterV2 JSON
+  → 平台合并目标并校验能力/语义/完整编码大小
+  → 持久 CONFIGURE、desiredRevision 和原请求摘要
+  → ESP 生成同一规范 profile 字节
+  → nRF 0x19 设置 / 0x1A 读回，或 ESP 本机共享匹配器
+  → 核对完整目标与生效 revision
+  → 稳定 TaskResult → RESULT_PERSISTED
+```
+
+UART 文档修订为 1.2，但线上帧仍为 1；新 profile 要求 nRF HELLO bit13。平台能力校验与 ESP 本机能力仍分别生效，不能由 nRF 有 bit13 推断 ESP 本机已支持。当前源码没有此实现，不能在 Schema 尚未更新时向线上发送示例。
+
+### 10.2 修改点与校验顺序
+
+| 修改点 | 下一阶段的确定工作 |
+| --- | --- |
+| Schema/OpenAPI | 给 radio 扫描组增加可空 `beaconFilterV2`，严格限制对象属性、枚举和范围；新增能力按统一方案登记；保留当前消息族版本及旧对象定义。 |
+| `gw32_config.go` | 先解析字段与类型，再检查 fieldMask 与谓词集合相等，再校验内容/掩码、scope/reportKinds/active，最后对合并完整 profile 编码并检查≤3070字节。JSON 合法但字节总长超限也拒绝。 |
+| 配置合并/修订 | V2 对象整体替换，rules 数组整体替换；不按规则索引局部更新。切换时允许同补丁显式清空旧对象并提交新对象，禁止合并结果两者均启用。失败不提交 revision，不先停掉旧规则形成空窗。 |
+| `control.go` / 结果校验 | 原 TaskRequest 摘要和配置结果回显规则不变；接受成功前核对目标 radio、扫描组 revision、完整读回证据及规则版本。无法证明实际目标时不得标 VERIFIED。 |
+| 管理界面 | 用 fieldMask 控制所选字段，文本名称转换为 UTF-8/Base64；掩码值使用明确的十六进制或字段控件；默认 RSSI 界面用 RANGE，BITS 标成补码位匹配。显示基础 filters 与 V2 的交集，不静默清除旧条件。 |
+| 两 radio 编译 | 平台 Go 与 ESP C 对相同 JSON 产出相同规范字节；nRF 与 ESP 本机使用相同匹配语义。不能把每个字段编译成一条旧 ALLOW 规则以代替同条 AND。 |
+| 原始事件和解析 | 过滤只决定是否接收原始观测，不能改写 AD 字节、capture 或制造新的已部署 RawEvent 字段。PAIR 只按过滤规范的关联上下文判断，不等于双射频合并，也不等于平台自动连接证据配对。 |
+| 诊断/容量 | 区分单报告不匹配、PAIR 超时/歧义/满缓存/缺 SCAN_RSP、非法 AD、未知 RSSI和配置拒绝；计数上报按统一方案正式合同接入，不私自加字段。 |
+
+名称、UUID、Major/Minor 的掩码都表示哪些位参与等值匹配。RSSI 在 RANGE 模式按有符号数比较，BITS 模式才按 8 位补码比较；负数不能先转无符号再做阈值比较。NAME+IBEACON_UUID+MAJOR+MINOR 属于同一条 AND 规则，所有 iBeacon 字段取自同一合法 Manufacturer AD，不能在多个 AD 片段之间拼出一次命中。
+
+### 10.3 PROFILE 原子切换与旧设备行为
+
+1. 在平台、ESP 和目标 radio 三层核实 V2 能力；旧设备继续使用原扫描组，平台对未支持 V2 的任务明确拒绝，不降级为仅 UUID 或仅 RSSI。
+2. 切换到 V2 时提交 `beaconRules:[]` 和完整 V2 profile，反向提交 `beaconFilterV2:null` 与完整旧规则；两者构成同一个扫描组事务，失败仍维持旧 profile。
+3. 目标为 PAIR 时必须 active=true、scope=ADV_SCAN_RSP_PAIR、pairWindowMs=500，规则报告种类仅 LEGACY_ADV。参数缺失或组合不支持时整项失败，不自动改成 REPORT。
+4. PAIR 的缓存身份、窗口、RSSI取值、歧义与默认动作均执行统一规范；窗口过期/缓存满/缺响应时保守拒绝并计数。500 ms 是过滤关联窗口，不可替代跨 radio 的 50/150 ms 合并参数。
+5. 重启/扫描组 revision 变化时按规范清理关联上下文，不把旧规则保存的半组观测用于新规则；持久事件与已接管数据的恢复责任仍遵循现有 spool 协议。
+
+### 10.4 必须共同执行的验证
+
+沿用 PLAT-GW-AT-04/05，并引用 BFLT 的规范向量，至少覆盖：大小写敏感的名称、EXACT/PREFIX及全名/短名、UTF-8字节掩码、iBeacon/服务UUID区分、Major/Minor大端、局部位掩码、RSSI负数及未知值、同条AND与多条首命中、PAIR名称来自SCAN_RSP、仅DENY且缺响应、重复ADV造成歧义、500ms边界、缓存满、revision切换、旧设备拒绝、合法JSON超3070字节、失败保持旧profile。
+
+平台校验器、ESP 编码器、nRF/ESP 匹配器必须读同一组测试数据；禁止只测试各自构造的样例。所有三方结果一致且兼容测试通过后，才能更新能力声明及关闭对应实现缺口。C02～C11 其他改动按[差距统一开发方案](../../docs/gateway-alignment-development-plan.md)的依赖和关闭证据执行，不用过滤器开发替代整条贯通验收。

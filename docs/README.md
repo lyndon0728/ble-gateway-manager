@@ -6,7 +6,9 @@
 
 | 顺序 | 文档 | 用途 |
 | --- | --- | --- |
-| 0 | **[三方贯通统一标准 GW32-E2E-1.0](gateway-end-to-end-standard.md)** | nRF、ESP、平台唯一职责/映射口径，C01～C11 冲突与源码缺口 |
+| 0 | **[三方贯通统一标准 GW32-E2E-1.1](gateway-end-to-end-standard.md)** | nRF、ESP、平台唯一职责/映射口径，C01～C12冲突与开发决策 |
+| 实施方案 | [差距统一开发方案](gateway-alignment-development-plan.md) | 各差距的接口、状态、持久化、实施责任及关闭门槛 |
+| Beacon专题 | [组合掩码过滤规范 BFLT-2.0](beacon-filter-spec.md) | 名称、UUID、RSSI、Major/Minor，18条专项需求、16项共同验收；规划扩展尚未上线 |
 | 1 | [系统需求与验收清单](gateway-requirements.md) | 理解服务器、ESP和nRF职责及整机范围 |
 | nRF | [nRF54L15需求](nrf54l15-requirements.md) / [开发文档](nrf54l15-development.md) | 既有系统需求映射、UART/BLE/广播/Peripheral/DFU 实现与贯通边界 |
 | 2 | [ESP32-S3详细需求](esp32s3-requirements.md) | 182条需求和50个专项验收场景 |

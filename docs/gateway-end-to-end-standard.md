@@ -2,22 +2,24 @@
 
 | 项目 | 基线 |
 | --- | --- |
-| 标准编号 / 文档版本 | **GW32-E2E-1.0 / 1.0** |
+| 标准编号 / 文档版本 | **GW32-E2E-1.1 / 1.1** |
 | 日期 / 范围 | 2026-11-19；网关管理平台 ↔ ESP32-S3 ↔ nRF54L15 |
 | 功能约束 | 保留扫描过滤、双路合并、Central/GATT、Beacon/自定义广播、Peripheral、本地/远程配网、ESP 本地/远程 OTA、经 UART 的 nRF OTA及既有平台功能 |
-| 源码核对基线 | `0897044948739fc7a19cac60e4f3dfbf1471ce23`；其固件实现来自 `9533a14cce8690a976481727ed68a7dac61f01e6` |
+| 源码核对基线 | `b8ba3ef74af05fe33459f429f4f1f9438b71340a`；其固件实现来自 `9533a14cce8690a976481727ed68a7dac61f01e6` |
 | 固件版本 | ESP `0.2.1`，ESP-IDF `v5.5.6`；nRF `0.2.0`，NCS `v3.2.1` |
 | 本次变更 | 需求、开发及协议说明；不修改运行源码、Schema、API、线上枚举或帧格式 |
-| 结论 | 存在旧文档冲突和实现缺口；按本标准统一设计口径，缺口仍须实现与验收，不能宣称整机已贯通 |
+| 结论 | C01～C12的统一开发方案已确定；本次完成文档层对齐，规划接口、源码及实板验收仍须联合落实 |
 
 ## 1. 文档效力与不变范围
 
 本文件统一跨层职责、字段映射、完成条件和故障处理。它不是第三套传输协议，也不是新的固件版本：
 
-1. ESP ↔ nRF 的字段、偏移、状态码和命令编号以 [UART 协议](../server/docs/gateway-uart-protocol.md) 为准。文档修订为 1.1，线上帧 `version=01` 不变。
+1. ESP ↔ nRF 的字段、偏移、状态码和命令编号以 [UART 协议](../server/docs/gateway-uart-protocol.md) 为准。文档修订为 1.2，保留既有1.1实现接口，Beacon V2为规划扩展；线上帧 `version=01` 不变。
 2. ESP ↔ 平台的 JSON、MQTT topic、HTTP API 以 [服务器协议](../server/docs/gateway-protocol.md)、[消息 Schema](../server/internal/platform/assets/message-contracts.schema.json) 和 [OpenAPI](../server/internal/platform/assets/openapi.json) 为准；既有消息 1.0/1.1 的兼容规则不变。
 3. 三方需求保留原功能与编号。发现源码不满足需求时，登记缺口并限制不实能力声明；不得通过删需求、缩减必需功能或声称已验收来消除冲突。
 4. 文档之间的职责或语义歧义按本标准解释。若今后发现二进制/Schema 本身冲突，先登记并联合评审版本迁移；本文件不能单独授权发送 Schema 不允许的字段。
+
+1.1增加两份实施依据：[差距统一开发方案](gateway-alignment-development-plan.md)逐项确定C02～C11的接口、状态、持久化、迁移及验收；[Beacon组合掩码规范](beacon-filter-spec.md)确定C12名称、iBeacon/服务UUID、RSSI、Major/Minor及PAIR语义。两文档的规划字段须联合实现后启用，当前机器合同不因Markdown更新而自动支持。
 
 | 文档层次 | 需求 | 开发设计 |
 | --- | --- | --- |
@@ -36,13 +38,16 @@
 | C02 | 平台/ESP 需求有 MQTT 与 HTTPS；[gw_cloud](../firmware/esp32s3/components/gw_cloud/gw_cloud.c) 当前仅 HTTPS 轮询与上报 | 两传输使用同一业务消息及持久 ACK；保留 MQTT 需求，当前可联调路径为 HTTPS | 源码待补齐：ESP MQTT；平台 MQTT/HTTP 交叉重试验收 |
 | C03 | nRF 有 `GET_ADV_STATUS(0x0C)`，ESP [gw_nrf_advertise](../firmware/esp32s3/components/gw_nrf/gw_nrf.c) 目前仅设置/读回广播配置 | 广播成功须同时核对目标配置、revision 与实际状态；`enabled=true` 不等于 `ACTIVE`，连接导致的 `PAUSED` 可为合法状态 | 源码待补齐：ESP 实际状态核对和结果证据；三方广播验收 |
 | C04 | OTA-011 要求挂死时 ESP 复位 nRF；当前 GPIO8 仅作为输入释放，未实现主动恢复 | 保留受控恢复要求，按持久恢复意图和已核对板级策略执行开漏拉低/高阻释放；OTA 结合升级 journal/试启动期限，普通 UART 超时不盲复位；非任务恢复仍记录本地原因 | 源码待补齐：ESP 恢复编排；板卡与 MCUboot 回退实测 |
-| C05 | nRF `0x22` 与 ESP Peripheral 持久 INBOX 已有；平台尚无对应完整业务封装、认证及回发/断开任务契约 | 保留手机收发功能；独立认证、业务路由与业务 ACK；不得伪装广播 RawEvent 或 GATT_NOTIFY，不得把公开 RX 当管理授权 | 契约及源码待补齐：三方联合冻结业务扩展；现有 Schema 本次不变 |
+| C05 | nRF `0x22` 与 ESP Peripheral 持久 INBOX 已有；平台尚无对应完整业务封装、认证及回发/断开任务契约 | 保留手机收发功能；独立认证、业务路由与业务 ACK；不得伪装广播 RawEvent 或 GATT_NOTIFY，不得把公开 RX 当管理授权 | 设计已确定：按GW-PERIPHERAL-1同步机器合同/源码；现有Schema本次不变 |
 | C06 | 平台 `firmwareVersion` 表示 ESP 主固件；独立可信 nRF 源版本尚未登记 | NRF54 非空 `fromFirmwareVersions` 在无法证明时继续以 `FIRMWARE_COMPONENT_VERSION_UNKNOWN` 拒绝；不得拿 ESP 版本代替或取消前置约束 | 源码待补齐：平台组件版本证据与 ESP 上报对账 |
 | C07 | 平台协议的模式/安全级别集合大于 ESP 本机 [gw_ble](../firmware/esp32s3/components/gw_actions/gw_ble.c) 实现：拒绝可连接广播、BONDED_ENCRYPTED；自动连接限定 nRF | 按目标 radio 和实际支持集校验；保留产品要求；nRF 支持不代表 ESP 具备，不支持返回明确失败，不改投另一芯片 | 源码待补齐：ESP 既有必需功能；三方能力登记与拒绝路径验收 |
 | C08 | 平台 configuration/effective 的 `complete=false` 不是设备完整目标；存在把最新补丁当恢复快照的风险 | ESP 从本机持久完整目标恢复；丢失时只可受控重放/重新配置，禁止用不完整平台结果覆盖已有组；保留完整恢复能力要求 | 语义已统一；平台完整快照/恢复契约与设备适配仍待补齐 |
 | C09 | 远程任务期限、TLS、远程 OTA 依赖可信 UTC；当前 ESP 制造指定 SNTP 未密码学认证 | 保留可信时间验收，不宣称已抗时间伪造、不关闭 TLS 日期/主机校验；本地离线 OTA 使用现场授权及单调期限，不要求云任务或 UTC | 实现及验收待补齐：ESP 时间信任与平台部署；已受理动作仍使用固定截止时限 |
 | C10 | 系统 SCAN-008 写“两路同一过滤目标”，平台同时允许 `radios.nrf54/esp32` 独立配置 | 同一双路采集任务分别下发等价过滤目标；两 radio 的独立配置能力保留，不自动互相覆盖；合并仅看可证明的观测匹配 | 文档已统一；保留原需求编号与独立配置测试 |
 | C11 | ESP [nrf_transfer](../firmware/esp32s3/components/gw_actions/gw_ota.c) 遇 boot 变化直接转 nrf_trial，下载中重启可能被当作试启动后回滚 | 按 journal 区分下载中断与 FINISH/READY 后试启动。下载中断后旧会话失效，重新传输须有效授权并从0 BEGIN；正常试启动先核当前镜像再确认/回退，不重新擦写 | 源码待补齐：ESP 分阶段恢复/结果分类与两侧故障测试；不新增同任务必须自动重传的要求 |
+| C12 | 旧beaconRules是单AD掩码与首条命中，不能表达名称等多字段AND、精确名称及RSSI位掩码 | BFLT-2.0：fieldMask选择字段、内容mask、同条AND，显式REPORT/PAIR；保留旧引擎及原子切换 | 设计已确定；平台Schema/预览、ESP/nRF共享引擎、bit13/0x19～0x1B及BFLT验收待实现 |
+
+上表保留实际源码差距。C05业务合同、C06组件盘点、C08快照、C09时间引导已在[统一开发方案](gateway-alignment-development-plan.md)确定实施定义，不再由各端自行另取名称或等待另一次方案选择；“待补齐”指机器合同、源码、部署材料与验证证据。C01/C10文档冲突已消除，其他项不能仅凭方案确定标记实现完成。
 
 当前已核对一致、无需修改线上协议的事项：UART 1 Mbaud/8N1/RTS-CTS、COBS/CRC32C、GET_STATUS 71 字节、GET_ADV_STATUS 35 字节、DFU_STATUS 62 字节、DFU 块最大 1024 字节、广播 AD/ScanRsp 各 31 字节、广播间隔 100～10240 ms、GATT 规范 UUID 16 字节以及任务和应用 ACK 的分层。大小指各命令定义的结果体，不包括额外帧头/CRC。
 
@@ -89,7 +94,7 @@ flowchart LR
 | 广播内容/类型/间隔 | CONFIGURE / advertising | 合并、解码、校验 AD、提交 revision、查实际状态 | 0x07/0x08 + 0x0C（bit10）；旧兼容路径按0x08/0x09取证；缺口 C03 |
 | 广播启停 | 同一 CONFIGURE 广播组 | 保持完整目标与其他组不变 | 支持时 0x0B；仍读回配置及 0x0C；关闭不隐式断开手机 |
 | Central/GATT | GATT_* / 平台规则创建任务 | 校验证据、保存副作用意图、查询异步完成 | 0x10～0x18、0x0A；不能以初始 OK 代替最终结果 |
-| Peripheral 收发 | 业务契约待冻结 | 持久 INBOX、认证/业务路由/应答 | 上行0x22；0x0D/0x0E/0x0F；缺口 C05 |
+| Peripheral 收发 | 规划GW-PERIPHERAL-1，待实现 | 持久 INBOX、认证/业务路由/应答 | 上行0x22；0x0D/0x0E/0x0F；缺口 C05 |
 | 网络配置 | CONFIGURE / network，或本地 Security2 操作 | 共享候选/探测/回退管理，本地与平台版本独立 | 不发送给 nRF |
 | ESP 升级 | FIRMWARE_UPGRADE GATEWAY，或本地 OTA | 认证、验签、候选槽写入、启动检查、确认、持久结果 | 不发送给 nRF |
 | nRF 升级 | FIRMWARE_UPGRADE NRF54 | 下载验签、维护租约、残余数据接管、传输、启动验证/确认 | 0x30～0x37；缺口 C04/C06 |
@@ -101,7 +106,7 @@ flowchart LR
 ## 6. 采集、双路合并及接管边界
 
 1. 平台配置 → nRF/ESP 各自过滤 → ESP 持久采集事务 → 一对一合并定稿 → 平台原始事件持久化 → 规则解析/客户投递。nRF 不先解析成业务值替代原始 AD。
-2. 过滤保持既有组合规则：已启用类别之间 AND、类别列表内部 OR；Beacon 规则按顺序首条命中；有 ALLOW 而无命中则拒绝，否则按原默认动作。ADV 与 SCAN_RSP 分开过滤和保留。
+2. 旧过滤及V2 REPORT保持逐报告语义；已启用类别之间AND、类别列表内部OR，规则首条命中，有ALLOW而无命中则拒绝。新增V2 PAIR仅在显式主动legacy配置下按500ms唯一前序候选关联上下文，随后ADV/SCAN_RSP仍逐条原样保留；不得静默更改旧规则。
 3. 仅合并不同 radio、可比较时间、相同地址及类型、报告种类、AD 字节和适用的 connectable/SID 上下文。匿名地址、缺失映射、上下文不足、同 radio 重复、迟到记录分别保留。
 4. 每条最多等待 150 ms；匹配必须满足 `|Δt| + error_nrf + error_esp ≤ 50 ms`，在合法候选中选时间差最小者，同差先入先出。当前映射超过 60 s 失效，并计入漂移/量化误差；不能仅凭 MAC 或载荷相同删除事件。
 5. 双路匹配以 NRF54 观测为主记录、`observedBy` 保留两路；nRF 自动连接证据不因合并丢失。定稿后的 `eventId/capture/payload/observedBy` 不再改，重传不能重新生成身份。
@@ -160,8 +165,8 @@ nRF 源版本限制按 C06 保留；私钥不进仓库。默认 SDK 示例签名
 | nRF OTA | 镜像绑定、双重校验、阶段恢复、启动确认、真实复位回退 | ACC-13～16；C04/C06/C11 |
 | 构建、容量和真实并发 | 两侧 SDK、板修订、产物 SHA、负载、Flash/RF/网络故障 | ACC-17/18；专项验证计划 |
 
-下一阶段先按 C02～C09、C11 补齐源码与冻结尚缺契约，再运行软件合同/故障恢复测试、两端目标构建，最后执行实板端到端验收。支持集不足、契约尚缺或板卡未验证时明确报告阻塞，功能继续保留在需求中。
+下一阶段按统一开发方案落实C02～C09、C11及C12的机器合同/源码，再运行软件合同/故障恢复测试、两端目标构建，最后执行实板端到端验收。支持集不足、规划接口未部署或板卡未验证时明确报告阻塞，功能继续保留在需求中。
 
 本次只完成文档审计与统一。ESP 已有目标构建证据，见 [ESP 验证记录](../firmware/esp32s3/VALIDATION.md)；nRF 的目标构建和硬件验证边界见 [nRF 验证记录](../firmware/nrf54l15/VALIDATION.md)。这些历史软件证据不等于本次执行了烧录、真实无线链路或整机升级验收。
 
-本次文档检查：15 份 Markdown 的 243 个相对文件链接、13 个章节锚点及代码围栏检查通过；系统 93 条需求的要求正文、18 项 ACC 编号保持不变，ESP 182 条需求与 50 项验收编号及顺序保持不变。新增平台 59 条贯通需求、11 项验收编号唯一；`git diff --check` 通过。运行源码、Schema 和构建配置未修改，因此本次未重新运行固件构建或硬件测试。
+上一版b8ba3ef的文档检查记录为15份Markdown、243个相对文件链接、13个章节锚点通过。本版保留系统93条/18项ACC、ESP182条/50项验收、平台59条/11项验收的既有编号；新增18条BFLT需求、16项BFLT验收。当前检查记录随本版交付更新，运行源码、Schema及构建配置保持不变，不把文档检查记为固件构建或实板通过。

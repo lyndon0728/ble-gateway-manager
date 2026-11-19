@@ -1,6 +1,6 @@
 # GW32 网关详细需求与验收清单
 
-文档版本：1.1；更新日期：2026-11-19；对应 nRF 应用：`gw-nrf54l15/0.2.0`、ESP `0.2.1`；统一标准：**[GW32-E2E-1.0](gateway-end-to-end-standard.md)**。本次只统一文档，保留原 93 条需求及 18 项 ACC，不修改功能和线上接口。
+文档版本：1.2；更新日期：2026-11-19；对应 nRF 应用：`gw-nrf54l15/0.2.0`、ESP `0.2.1`；统一标准：**[GW32-E2E-1.1](gateway-end-to-end-standard.md)**。本次完善开发文档，保留原93条需求及18项ACC；新增Beacon过滤规划使用独立BFLT编号，运行源码与线上接口本次不变。
 
 本文把用户需求拆分为可实现、可联调和可验收的条目。二进制字段以 [UART 协议](../server/docs/gateway-uart-protocol.md) 为准；服务器消息字段以 [服务器协议](../server/docs/gateway-protocol.md)、[消息 Schema](../server/internal/platform/assets/message-contracts.schema.json) 和 [OpenAPI](../server/internal/platform/assets/openapi.json) 为准。端到端流程见 [对接指南](gateway-integration.md)。
 
@@ -78,6 +78,8 @@ ESP 主机的模块、持久化事务、网络恢复、任务和升级执行细�
 | SCAN-009 | P2 | 扩展广播、PHY/SID 完整接收按额外能力启用 | 0.2.0 不声明完整扩展广播接收 |
 | SCAN-010 | P0 | 不把 Host 解析出的 bond identity 冒充空中地址 | 当前 nRF 保守报告未知地址；相应事件不能按地址自动连接 |
 
+扫描新增需求见[Beacon组合掩码规范](beacon-filter-spec.md)的BFLT-001～018：名称、iBeacon UUID、服务UUID、RSSI、Major/Minor可按掩码组合，单条AND、多条首命中；旧规则及REPORT仍逐报告处理，显式PAIR才允许有界关联ADV/SCAN_RSP。对应BFLT-AT-01～16补充原ACC-04，不重写原SCAN/ACC编号。三方实施按[统一开发方案](gateway-alignment-development-plan.md)C12推进。
+
 ## 6. 双路合并、上传与解析要求
 
 | 编号 | 优先级 | 要求 | 实现/验收边界 |
@@ -133,7 +135,7 @@ ESP 主机的模块、持久化事务、网络恢复、任务和升级执行细�
 | PER-002 | P1 | INFO 可读；RX 仅 Write Request，载荷 1～min(512,MTU−3)，拒绝偏移/长写/Write Command | nRF 代码 |
 | PER-003 | P1 | RX 作为不透明数据排入 0x22 批次，满队列返回 ATT 错误 | nRF 代码；该批次不能直接冒充现有 RawEvent 广播结构 |
 | PER-004 | P1 | ESP 通过 0x0E 向当前已订阅连接 Notify；tx_seq 保证最近一次受理幂等 | nRF 代码；OK 只表示本机受理，业务送达须自定义应答 |
-| PER-005 | P0 | 公共 RX/TX 不自动授予网络配置或升级权限；解释敏感业务前须认证和授权 | nRF 只透传；ESP 应用认证和云端映射尚未定义/实现 |
+| PER-005 | P0 | 公共 RX/TX 不自动授予网络配置或升级权限；解释敏感业务前须认证和授权 | nRF只透传；ESP认证与云端映射已在统一开发方案C05定义，机器合同/源码待实现 |
 | PER-006 | P1 | DFU 维护期拒绝新 Peripheral 业务并关闭迟到连接，等待对象回收后才擦写 | nRF 代码；真实 HCI 回调时序待实测 |
 
 ## 10. 网络与 ESP 原生无线要求
@@ -216,10 +218,11 @@ NRF54 当前版本尚未成为设备注册表的独立持久字段；服务器�
 ## 14. 后续实现顺序
 
 1. 按 [统一标准冲突清单](gateway-end-to-end-standard.md#2-冲突缺口与唯一处理标准) 补齐 C02/C03/C07：ESP MQTT、广播实际状态核对、本机 BLE 既有功能与准确能力对账。
-2. C05：三方冻结 Peripheral 业务封装、授权、回发/断开及业务 ACK 契约，再同步 Schema 和实现；不改变本次现有线上字段。
+2. C05：按已确定的统一开发方案落实Peripheral业务封装、授权、回发/断开及业务ACK，联合更新Schema和实现；本次只更新规划说明。
 3. C04/C06/C11：补齐 nRF OTA 的 ESP 硬件恢复、分阶段重启恢复及平台组件版本可信登记，不取消升级前置版本约束。
 4. C08/C09：补齐完整配置恢复路径及可信时间验收；保留本机持久目标与固定任务截止机制。
 5. 对现有 UART、采集、GATT、配网和双 OTA 执行三方故障联调；源码已有不等于整机验收通过。
 6. 完成 nRF 目标构建、ESP 现场授权开窗/板级配置，以及 ACC-03～18 和 ESP-AT-37～50 的实板未验证项，再决定生产能力登记。
+7. C12：按BFLT规范及UART1.2规划扩展实施组合掩码引擎、平台编辑/预览、完整配置读回与迁移；完成共同向量后进行空口验收。
 
 本次 GitHub 交付不把“需求已定义”“源码已写入”“模拟测试通过”和“整机验收通过”合并为一个完成状态。

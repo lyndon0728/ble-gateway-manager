@@ -4,7 +4,7 @@
 
 本文以仓库中的 [OpenAPI](../internal/platform/assets/openapi.json)、[消息 Schema](../internal/platform/assets/message-contracts.schema.json) 和服务器业务校验为准。服务器能创建任务，不等于网关已执行；以下职责与交付状态须分别验收。
 
-2026-11-19 三方文档统一基线：**[GW32-E2E-1.0](../../docs/gateway-end-to-end-standard.md)**。本次不改变线上 Schema、API 或功能；跨层语义和待补齐项按该标准处理。[平台专项需求](gateway-platform-requirements.md) / [平台开发文档](gateway-platform-development.md) 是本协议的实现及验收映射。
+2026-11-19 三方文档统一基线：**[GW32-E2E-1.1](../../docs/gateway-end-to-end-standard.md)**。本次不改变当前部署的 Schema、API 或功能；跨层语义和待补齐项按该标准处理。[平台专项需求](gateway-platform-requirements.md) / [平台开发文档](gateway-platform-development.md) 是本协议的实现及验收映射。新增 Beacon V2 及 C02～C11 扩展为**开发设计已冻结、尚未上线**，精确合同见[Beacon 过滤规范](../../docs/beacon-filter-spec.md)与[差距统一开发方案](../../docs/gateway-alignment-development-plan.md)；旧接口定义与新设计明确分开，不能把新示例直接投递给当前版本。
 
 | 层级 | 当前提供的内容 | 尚需完成的执行与验证 |
 | --- | --- | --- |
@@ -157,7 +157,9 @@ OTA 设备凭据仅能读取与有效任务匹配的 `/api/v1/artifacts/{artifac
 
 当前设备注册表中的 firmwareVersion 表示网关主机版本，没有独立、已验证的 nRF 源版本清单。因此 NRF54 manifest 若提供非空 fromFirmwareVersions，服务器返回 `FIRMWARE_COMPONENT_VERSION_UNKNOWN`，不会误拿 ESP 版本代替。需要源版本约束的发布须先建设独立组件版本证据及 ESP 实际版本回读，不能仅删掉约束绕过发布要求。
 
-ESP 接到授权任务后先验证 manifest 签名、组件、型号/硬件版本、镜像大小和 SHA-256，再通过 [UART DFU](gateway-uart-protocol.md#esp-经-uart-升级-nrf) 传送：BEGIN → 顺序 CHUNK → FINISH → REBOOT → 新 HELLO 与健康检查 → VERIFY_RUNNING → CONFIRM。VERIFY_RUNNING 使用期望制品的准确文件大小和签名 manifest 的 sha256，从运行中的主镜像槽读回校验；即使版本字符串匹配，也不能跳过这一步。CONFIRM 要求本次启动已经校验成功，即使镜像当前已确认亦如此。MCUboot 使用固件内置的板级镜像公钥进行独立验签；服务器制品签名不能替代这一检查。传输 session 和偏移保存在 ESP journal，UART 重连先查询状态，nRF 复位后重传从 0 开始。升级不能通过未经认证的 Peripheral RX 字节自动触发。
+组件库存与可信更新的开发合同已在[统一开发方案 C06](../../docs/gateway-alignment-development-plan.md)冻结；当前机器接口尚未实施，以上拒绝行为继续有效。配置完整恢复及可信 UTC 的新增合同同样以该方案 C08/C09 为准，不能仅凭本文设计新增线上字段。
+
+ESP 接到授权任务后先验证 manifest 签名、组件、型号/硬件版本、镜像大小和 SHA-256，再通过 [UART DFU](gateway-uart-protocol.md#esp-经-uart-升级-nrf) 传送：BEGIN → 顺序 CHUNK → FINISH → REBOOT → 新 HELLO 与健康检查 → VERIFY_RUNNING → CONFIRM。VERIFY_RUNNING 使用期望制品的准确文件大小和签名 manifest 的 sha256，从运行中的主镜像槽读回校验；即使版本字符串匹配，也不能跳过这一步。CONFIRM 要求本次启动已经校验成功，即使镜像当前已确认亦如此。MCUboot 使用固件内置的板级镜像公钥进行独立验签；服务器制品签名不能替代这一检查。传输 session 和偏移保存在 ESP journal，UART 重连先查询状态；下载尚未完成时 nRF 复位，旧会话失效，重新传输须有效授权后从 0 BEGIN；FINISH/READY 后的重启先核对试启动/回滚及当前镜像，不能重新 BEGIN 擦写。当前 ESP 分阶段恢复缺口与统一方案见 C11。升级不能通过未经认证的 Peripheral RX 字节自动触发。
 
 只有新镜像版本等于 expectedFirmwareVersion、运行镜像字节与期望制品一致且明确确认了 MCUboot 测试镜像，ESP 才报告 `SUCCEEDED/VERIFIED`。结果 details 必须包含 `component=NRF54`、`firmwareVersion`、32 位小写十六进制的 `nrfBootId`、`bootConfirmed=true` 和 64 位小写十六进制的 `imageSha256`。服务器把 imageSha256 与该任务绑定制品记录的 sha256 比较，缺失或不同返回 `NRF54_FIRMWARE_IMAGE_MISMATCH`，不能仅凭相同版本号接受另一镜像。仅收到 FINISH 或重启命令的 OK 不足以成功。该结果是经过网关认证通道提交的执行报告，不是对芯片状态的独立硬件证明。nRF 升级结果不会覆盖网关主机 firmwareVersion；未确认测试镜像默认在 120 s 确认窗口后复位回滚，挂死时由 ESP 复位线恢复。
 
@@ -348,6 +350,60 @@ Wi-Fi 的业务收发通过 STA 和现有 MQTT/HTTP。`DIAGNOSTICS` 的 `NETWORK
 
 基础 RSSI/服务 UUID/厂商过滤先执行，各类已启用条件之间取 AND、同一列表内部取 OR；再依序匹配 Beacon 掩码规则，首个命中决定放行或拒绝。有 ALLOW 规则但无命中时丢弃，只有 DENY 规则或空规则时默认放行。ADV 与 SCAN_RSP 独立过滤，不跨报告拼接内容。上例沿用已有基础 filters；要清除已有条件，显式附加 `filters={"minRssi":null,"serviceUuids":[],"manufacturerIds":[]}`。当前 nRF 固件以 legacy 接收为基线；Schema 允许 EXT 报告规则，不代表固件已声明完整扩展广播接收能力。
 
+### Beacon V2：名称、UUID、RSSI、Major/Minor 掩码过滤（开发冻结，未上线）
+
+该扩展增加 `radios.<target>.beaconFilterV2`，精确校验、容量、二进制映射和 BFLT 验收见[过滤规范](../../docs/beacon-filter-spec.md)。它不修改前述旧 `beaconRules` 单 AD 规则；当前机器 Schema/固件尚不接受这个新字段。后续同时更新平台、ESP 与 nRF 并验证能力后才启用，不能把 V2 拆成多条旧 ALLOW 规则模拟同条 AND。
+
+| 字段 | 开发冻结的含义 |
+| --- | --- |
+| `version` | 固定为 2，是过滤对象版本，不替代消息 schemaVersion 或 UART frame version。 |
+| `scope` | REPORT 为单报告；ADV_SCAN_RSP_PAIR 为同 radio 的 legacy ADV/SCAN_RSP 关联上下文。PAIR 要求主动扫描，规则 reportKinds 只能 LEGACY_ADV。 |
+| `pairWindowMs` | 仅 PAIR 出现，固定 500；REPORT 禁止携带。不得与跨 radio 的 50/150 ms 去重窗口混用。 |
+| `rules[]` | 最多 8 条，顺序首条命中生效；每条包括 action、reportKinds、fieldMask 及被选择的字段谓词。 |
+| `fieldMask` | bit0 NAME、bit1 IBEACON_UUID、bit2 RSSI、bit3 MAJOR、bit4 MINOR、bit5 SERVICE_UUID；非零且保留位为0，必须和实际谓词字段集合完全相等。 |
+| `name` | `{mode:EXACT\|PREFIX,source:COMPLETE\|SHORTENED\|ANY,valueBase64,maskBase64}`；1～29字节、两者等长、mask非全零；按原始字节比较，无隐式大小写/Unicode变换。 |
+| `ibeaconUuid` / `serviceUuid` | `{value,maskHex}`；value 为规范128位 UUID，maskHex 为32位十六进制内容掩码。两种 UUID 含义分开，iBeacon UUID不展开Bluetooth base。 |
+| `major` / `minor` | `{value,mask}`，均为u16、mask非零；从同一合法iBeacon AD中解析大端数值后，执行 `(actual & mask)==(value & mask)`。 |
+| `rssi` RANGE | `{mode:"RANGE",minDbm,maxDbm}`，两端均必填、-127～20、min≤max；有符号闭区间，RSSI字段也受fieldMask选择。 |
+| `rssi` BITS | `{mode:"BITS",valueDbm,mask}`，valueDbm为-127～20，mask为1～255；对8位补码做掩码等值比较，不能解释为信号强度阈值。 |
+
+规则内所有选择字段 AND；存在 ALLOW 规则而无命中则拒绝，否则沿用默认动作。字段内容掩码的0位忽略、1位比较；字段选择mask控制是否启用整个条件。基础过滤或任一V2规则启用RSSI时，未知/越界RSSI使整个上下文拒绝并计unknown_rssi，不能仅作谓词false后被仅DENY默认放行，也不能让-128哨兵变成合法样本。iBeacon UUID/Major/Minor必须来自同一完整25字节Manufacturer AD值，固定前缀`4C 00 02 15`，不能跨不同AD字段拼接。
+
+PAIR只关联同radio、同boot、同扫描组revision、同真实地址/类型的唯一未配对前序ADV；歧义、超时、满缓存或缺SCAN_RSP时保守拒绝并计数。RSSI用ADV值，基础filters按规范的关联上下文执行。两条原始报告不因此改造成一个伪造AD，后续原始事件、跨射频合并和平台自动连接各保留原有责任。
+
+下例是未来内层 configuration 示例：名称精确为UTF-8 `Beacon`、指定iBeacon UUID、RSSI为-80～-20dBm、Major高8位为`0x01`、Minor为2；五个条件属于同一条 AND 规则，fieldMask=31。名称允许出现在对应SCAN_RSP，要求主动legacy配对。清空基础filters是本例显式选择，并非V2隐式副作用。
+
+```json
+{
+  "radios": {
+    "nrf54": {
+      "scan": {"enabled": true, "active": true, "intervalMs": 100, "windowMs": 50},
+      "filters": {"minRssi": null, "serviceUuids": [], "manufacturerIds": []},
+      "beaconRules": [],
+      "beaconFilterV2": {
+        "version": 2,
+        "scope": "ADV_SCAN_RSP_PAIR",
+        "pairWindowMs": 500,
+        "rules": [{
+          "action": "ALLOW",
+          "reportKinds": ["LEGACY_ADV"],
+          "fieldMask": 31,
+          "name": {"mode": "EXACT", "source": "COMPLETE", "valueBase64": "QmVhY29u", "maskBase64": "////////"},
+          "ibeaconUuid": {"value": "00112233-4455-6677-8899-aabbccddeeff", "maskHex": "ffffffffffffffffffffffffffffffff"},
+          "rssi": {"mode": "RANGE", "minDbm": -80, "maxDbm": -20},
+          "major": {"value": 256, "mask": 65280},
+          "minor": {"value": 2, "mask": 65535}
+        }]
+      }
+    }
+  }
+}
+```
+
+切换到V2时`beaconRules:[]`和V2对象必须属于同一扫描组原子事务；反向提交`beaconFilterV2:null`和旧规则列表。合并结果不得同时激活两套规则，不能用先关闭旧规则、再开启新规则的两次任务制造过滤空窗。对象整体替换，失败仍保持旧profile和revision。基础filters在未显式清除时继续与V2取交集，两个radio仍独立配置。
+
+平台必须验证目标能力、完整合并目标及规范编码大小，profile体不得超过3070字节；ESP/nRF保持同一长度边界。新UART操作为0x19/0x1A且要求HELLO bit13，线上帧版本仍为1。不支持V2的设备明确拒绝，禁止自动退回只过滤名称/UUID/RSSI中的一部分。
+
 ### 服务器控制 nRF 对外广播
 
 广播的开启、关闭、类型、内容及间隔由 `radios.nrf54.advertising` 配置，不另造一套无 revision 的启停任务。服务器分配 desiredRevision，ESP 持久化并将部分更新合并成完整广播配置后下发 nRF。nRF 同一启动周期的 UART 重握手保留广播配置；nRF 重启后默认关闭，ESP 按已提交目标恢复。修改内容不会改变接收扫描规则；更改扫描也不能隐式抹去广播目标。
@@ -406,6 +462,8 @@ Wi-Fi 的业务收发通过 STA 和现有 MQTT/HTTP。`DIAGNOSTICS` 的 `NETWORK
 
 本机服务为 `7be00001-4b5a-4c31-9d91-6c2f9a0b5400`，具有公开 INFO 读取、RX Write 和 TX Notify。UUID 和 UART 命令详见 [Peripheral 协议](gateway-uart-protocol.md#可连接广播与本机-peripheral-服务)。远端写入通过 `PERIPHERAL_BATCH`（UART 类型 0x22）到 ESP，只是不透明应用输入；它不直接执行服务器配置或固件升级。ESP 须完成应用认证、授权和防重放后再解释或转发数据，不能把 BLE 连接成功当作管理授权，也不能把该写入伪装成已有 `GATT_NOTIFY` 上行事件。当前 RawEvent capture.kind 没有 Peripheral RX 类型，也没有服务器公开的 Peripheral 回复/断连任务；云端字段映射、应用认证和手机端到端闭环尚未实现。现有数据传输命令只定义 ESP ↔ nRF 接口。
 
+对应的正式开发合同统一使用[开发方案 C05](../../docs/gateway-alignment-development-plan.md)中的封装、身份绑定、授权、防重放、下行及业务确认设计。本轮完成合同对齐，不改变当前RawEvent/任务Schema；必须下一阶段联合更新后再开启平台业务入口，不能用现有GATT_NOTIFY或未授权RX临时绕过。
+
 ### ESP 双路采集去重
 
 ESP 在分配平台事件 ID 之前做跨射频的一对一匹配。仅一颗芯片扫描时，观测直接定稿。双路扫描时使用以下规则。
@@ -417,7 +475,7 @@ ESP 在分配平台事件 ID 之前做跨射频的一对一匹配。仅一颗芯
 
 `DIAGNOSTICS BLE` 报告两路接纳数、匹配数、时钟失效和迟到导致的单独定稿数。板内合并控制观测数量，串口重传与平台重传仍分别用批次身份和 `eventId` 去重。
 
-这些跨射频合并参数属于待实现的 ESP 算法约束，当前服务器没有开放可调 `dedupWindowMs` 配置字段。不要用 MAC 或 UUID 单独作为去重键，也不要把同一射频持续收到的周期广播永久抑制。当前 nRF 对匹配已保存 bond identity 的扫描报告保守地上报未知地址；ESP 省略该事件的 address/addressType，分别保留观测，并禁止用它触发按空口地址的自动连接。参见 [nRF 固件的地址边界说明](../../firmware/nrf54l15/README.md)。
+这些跨射频合并参数在 ESP 0.2.1 的采集实现中已有对应代码和主机测试，整机空口/掉电验证仍未完成；当前服务器没有开放可调 `dedupWindowMs` 配置字段。不要用 MAC 或 UUID 单独作为去重键，也不要把同一射频持续收到的周期广播永久抑制。当前 nRF 对匹配已保存 bond identity 的扫描报告保守地上报未知地址；ESP 省略该事件的 address/addressType，分别保留观测，并禁止用它触发按空口地址的自动连接。参见 [nRF 固件的地址边界说明](../../firmware/nrf54l15/README.md)。
 
 ### 连接和 GATT 任务
 

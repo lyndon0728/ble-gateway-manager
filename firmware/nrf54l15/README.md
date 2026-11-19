@@ -19,7 +19,7 @@ SDK 版本是本次新工程选定的基线，原工程没有已有 SDK 锁定�
 
 Zephyr 的扫描回调可能将已绑定设备的空中 RPA 替换为 identity address，且不会保留原始地址类型。为避免把 identity 冒充空中 MAC，本版本对匹配已保存 bond identity 的报告发送 `addr_type=0xFF`、全零地址，原始广播数据仍可上传。服务器不能按此地址自动连接；真实 identity 广播也会被保守地标为未知。关闭 `CONFIG_BT_PRIVACY` 无法关闭这条 Host IRK 解析路径。要让已绑定设备的 RPA 也参与原始地址去重/自动连接，需要后续接入原始 HCI 报告或扩展显式 identity 字段。
 
-三方共同基准为 [GW32-E2E-1.0 端到端统一标准](../../docs/gateway-end-to-end-standard.md)。协议来源：[UART 协议 1.1](../../server/docs/gateway-uart-protocol.md)、[ESP ↔ 服务器协议](../../server/docs/gateway-protocol.md)；UART 线上帧版本仍为 1，平台 Schema 保持 1.0/1.1。详细要求见 [nRF 专项需求](../../docs/nrf54l15-requirements.md) 与 [nRF 开发文档](../../docs/nrf54l15-development.md)，完整范围见 [需求与验收清单](../../docs/gateway-requirements.md) 和 [系统对接指南](../../docs/gateway-integration.md)。UUID 16/32/128 位的服务器规则解析与标准化由服务器完成，nRF 接收协议规定的标准形式及连接参数。
+三方共同基准为 [GW32-E2E-1.1 端到端统一标准](../../docs/gateway-end-to-end-standard.md)。协议来源：[UART 协议 1.1](../../server/docs/gateway-uart-protocol.md)、[ESP ↔ 服务器协议](../../server/docs/gateway-protocol.md)；UART 线上帧版本仍为 1，平台 Schema 保持 1.0/1.1。详细要求见 [nRF 专项需求](../../docs/nrf54l15-requirements.md) 与 [nRF 开发文档](../../docs/nrf54l15-development.md)，完整范围见 [需求与验收清单](../../docs/gateway-requirements.md) 和 [系统对接指南](../../docs/gateway-integration.md)。UUID 16/32/128 位的服务器规则解析与标准化由服务器完成，nRF 接收协议规定的标准形式及连接参数。
 
 ## 文件结构
 

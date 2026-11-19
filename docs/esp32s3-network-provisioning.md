@@ -6,7 +6,7 @@
 | 需求依据 | [ESP 专项需求](esp32s3-requirements.md) ESP-NET、ESP-PROV-001～020；[验收计划](esp32s3-validation-plan.md) ESP-AT-17/18、37～44 |
 | 范围 | 手机或笔记本连接网关热点，用浏览器配置上联网；平台远程修改同一组网络参数 |
 | 当前状态 | 本文保留设计契约；对应固件及平台扩展已有源码/部分主机证据，完整实板验收尚未完成 |
-| 协议边界 | 遵循 [GW32-E2E-1.0 三方贯通标准](gateway-end-to-end-standard.md)与[服务器协议](../server/docs/gateway-protocol.md)；本地接口与平台配网扩展已有源码/Schema，准确字段见[平台联调](../server/docs/network-provisioning-integration.md)，仍须共同部署及实板验收 |
+| 协议边界 | 遵循 [GW32-E2E-1.1 三方贯通标准](gateway-end-to-end-standard.md)与[服务器协议](../server/docs/gateway-protocol.md)；本地接口与平台配网扩展已有源码/Schema，准确字段见[平台联调](../server/docs/network-provisioning-integration.md)，仍须共同部署及实板验收 |
 
 ## 1. 用户操作与职责
 

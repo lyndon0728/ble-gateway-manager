@@ -1,12 +1,14 @@
 # nRF54L15 开发与三方接口贯通规范
 
-文档版本：1.0；更新日期：2026-11-19；共同标准：**GW32-E2E-1.0**；核对源码：`9533a14`，nRF `0.2.0` / ESP `0.2.1`。本文为本轮文档统一结果，不是源码修复或整机联调完成声明。
+文档版本：1.1；更新日期：2026-11-19；共同标准：**GW32-E2E-1.1**；核对源码：`9533a14`，nRF `0.2.0` / ESP `0.2.1`。本轮完善规划合同与开发步骤，Beacon V2待实现；不是源码修复或整机联调完成声明。
 
 ## 1. 开发依据
 
-- [端到端统一标准](gateway-end-to-end-standard.md)：三方职责、兼容决策、冲突 C01～C11 及交付门槛。
+- [端到端统一标准](gateway-end-to-end-standard.md)：三方职责、兼容决策、冲突 C01～C12 及交付门槛。
+- [差距实施方案](gateway-alignment-development-plan.md)：C01～C12的唯一实现决策、三方责任及关闭证据。
+- [Beacon过滤规范](beacon-filter-spec.md)：名称/UUID/RSSI/Major/Minor掩码、服务UUID独立字段、REPORT/显式配对及BFLT向量。
 - [nRF 需求](nrf54l15-requirements.md)：沿用总需求的 SYS/UART/SCAN/DATA/GATT/ADV/PER/OTA 编号。
-- [UART 协议 1.1](../server/docs/gateway-uart-protocol.md)：所有偏移、字段长度、状态码和向量的唯一字节合同。线上帧版本仍为 `1`。
+- [UART 协议 1.2](../server/docs/gateway-uart-protocol.md)：所有偏移、字段长度、状态码和向量的唯一字节合同。线上帧版本仍为 `1`。
 - [服务器协议](../server/docs/gateway-protocol.md)：Schema `1.0/1.1`、配置、任务及数据上报；[ESP 开发文档](esp32s3-development.md)：适配与持久化责任。
 - [nRF README](../firmware/nrf54l15/README.md) 和 [验证记录](../firmware/nrf54l15/VALIDATION.md)：固定 NCS v3.2.1、构建入口、原板级约束与历史测试证据。
 
@@ -86,7 +88,7 @@ HELLO 请求为 `0x01` 空 payload；应答 `0x81` 为 boot[16]、caps:u32、版
 | Central 动作 | `10～16`、`18` | 接受时 op_seq 8 B | `17 GET_OP_RESULT` 取得终态；连接后还要读实际连接信息 |
 | nRF 升级 | `30～37` | 30～34 为 62 B；35～37 为空 | 新 boot + 版本 + 健康 + 当前槽 SHA + running_confirmed |
 
-旧 `SET_SCAN_CONFIG` 的保留仅为兼容；新 ESP 路径统一 `SET_SCAN_PROFILE`，即便 rule_count=0 也不另设一套过滤协议。
+当前旧引擎以 `SET_SCAN_PROFILE` 为完整入口，即便rule_count=0也不用其他含糊字段。规划V2使用0x19/0x1A完整包装，并以0x1B读实际状态；活跃V2时旧0x01/0x05/0x06返回CONFLICT，0x02只有基础子集。退回旧引擎必须显式0x19 engine=0，不能靠旧SET清除新规则。
 
 ## 5. 扫描配置与 UUID 规则
 
@@ -96,7 +98,7 @@ HELLO 请求为 `0x01` 空 payload；应答 `0x81` 为 boot[16]、caps:u32、版
 
 平台保留原始 `wireBits`；厂商 iBeacon UUID 不自动作为 GATT service UUID。UUID 列表去重后按 16 B 字典序，Company ID 去重后按数值升序。平台整数 ms 量化为 `ticks=(ms*8+2)/5` 的整数除法，单位 0.625 ms，扫描 interval/window 均为 16～16384 ticks。
 
-### 5.2 过滤顺序
+### 5.2 既有LEGACY引擎过滤顺序
 
 1. 检查完整报告和可处理长度，保留 ADV/SCAN_RSP 区别；未知地址不伪造为空口 public MAC。
 2. 基础 RSSI、服务 UUID、公司 ID 各启用条件取 AND，单一列表内取 OR。
@@ -107,7 +109,44 @@ HELLO 请求为 `0x01` 空 payload；应答 `0x81` 为 boot[16]、caps:u32、版
 
 规则最多 8 条；`offset` 从 AD 的 Data 起算，不含 Length/Type；value/mask 等长 1～24 B，mask 至少一位非零，offset+n≤254。匹配不能把两个同 type 的 AD 拼起来。扩展报告 kind 位可留作合同兼容，当前未声明 bit0 时不能实际发送 EXT 报告。
 
-### 5.3 扫描报告映射
+### 5.3 Beacon V2实现设计（规划）
+
+V2保持旧引擎行为与已有配置有效性，新增独立 `engine=V2`。所有新内容都按 [Beacon规范](beacon-filter-spec.md) 和 [UART 1.2 V2章节](../server/docs/gateway-uart-protocol.md#beacon-v2-组合掩码扩展规划待实现) 实施；不得把下面的计划结构写成当前已存在的函数。
+
+| 开发位置 | 计划改动 | 必须保持的边界 |
+| --- | --- | --- |
+| `gw_core.c/h`，可拆计划 `gw_filter_v2.c/h` | V2配置解析/编码、typed谓词、AD合法性、字段掩码及完整上下文判定 | 纯C、无SDK依赖，由ESP共享相同源码；旧gw_filter_match的原行为不回写改变 |
+| `gw_radio.c` | 接收完整报告并构造REPORT上下文或显式PAIR候选，原始时间/地址/字节均保存 | 配对缓存有界、同radio/boot/revision/真实地址、不拼接AD；字段缺失与无合法配对不同 |
+| `gw_app.c` | bit13门控0x19/0x1A/0x1B；完整配置原子切换、回读、96 B状态编码 | 原帧3072 B上限不变；opcode/status长度单独计入；GET_STATUS仍71 B |
+| ESP `gw_wire/gw_nrf` | 编码同一配置、检查bit13、0x19后0x1A逐字节读回、核0x1B | 目标配置和原请求分别保留；超总预算不能裁剪字段；本机BLE调用同一判定引擎 |
+| 平台与共同测试数据 | JSON字段语义、原始报告输入和预期结果/编码向量统一 | 平台新增Schema后才能实际创建V2任务；当前机器Schema不因文档编辑而支持V2 |
+
+配置目标采用两套明确引擎，一套活动。V2包装保留完整旧ScanProfile基础字段和唯一revision；V2时旧rule_count=0。激活/退回、名称来源变化、rule数组替换必须作为一个扫描组提交，解析、容量、角色条件均通过才切换。候选缓存绑定revision，切换或暂停时丢弃尚未判定记录并计数，避免把旧规则看到的名称配给新规则的UUID。配置失败时恢复旧完整引擎，不局部留下一半新规则。
+
+#### 字段执行
+
+- `fieldMask`决定启用哪些条件；同规则AND，规则间仍首条完整命中。名称、UUID、Major、Minor使用逐字节/数值掩码；RSSI支持RANGE与BITS，不能把“信号越强越通过”写成位掩码比较。
+- 名称从0x09完整名/0x08短名提取，按显式source与EXACT/PREFIX处理；mask按UTF-8字节而非字符数。按规范处理ANY优先级和冲突重复名称，禁止随机选一个名称蒙混匹配。
+- iBeacon固定4C000215头及25 B Data不能被用户mask跳过；启用的UUID/Major/Minor必须来自同一0xFF元组。UUID原字节顺序，Major/Minor先按空口大端解析为u16再与mask比较；UART数值仍小端。
+- 服务UUID字段与iBeacon UUID分开。16/32/128位服务UUID先按AD类型/宽度解析，再规范化128位进行掩码比较；不要拿iBeacon厂商UUID去查询GATT服务。
+- RSSI采用主报告元数据；-128未知在启用RSSI时整上下文拒绝。RANGE两端包含，BITS按有符号值的补码字节比较，例如-64/0xF0不是≥-64。基础minRssi与V2 RSSI仍同时有效，配置UI可提示矛盾但不能隐式删除条件。
+- Typed V2的完整上下文AD必须合法；无所需字段是predicate false，畸形、未知RSSI或不支持上下文则按独立原因拒绝。无规则命中仍沿用有ALLOW则拒绝、否则放行，因此DENY不构成完整白名单。
+
+#### 配对、容量与时序
+
+REPORT不使用历史名字补字段。ADV_SCAN_RSP_PAIR必须主动legacy扫描、kind仅主ADV、500 ms固定窗口。查找同radio/boot/revision/地址类型/真实地址且前序的唯一未使用ADV；零候选不能伪造，多候选不能取最近一个。配对完整才评估该上下文的基础过滤和V2规则；RSSI用ADV，名称可来自显式范围内的SCAN_RSP，iBeacon各字段仍同一AD。
+
+每个报告只属于一个上下文；配对成功通过后逐条原样进入原FIFO，保留各自kind与capture_ms。500 ms配对超时、歧义、缓存满或缺扫描响应均整组不放行；不能借“只有DENY而无命中默认通过”绕过配对准入。其缓存与ESP跨射频150 ms/50 ms去重不同：V2配对不消除记录，ESP之后仍执行原一对一跨radio合并。
+
+缓存槽位、原始字节预算、溢出处理和验证向量按Beacon规范冻结；实现必须先核预算再接纳新候选，不动态无限增长。最大V2编码body为3070 B，单全字段规则含长度142 B；基础列表与8条最长规则可超总预算，必须在三方入口一致拒绝整个目标，不截断。旧2755 B profile包装后2763 B可完整使用，不能为V2降低旧容量。
+
+#### 诊断与回归门槛
+
+0x1B返回revision、引擎、范围、即时待判数量/字节和10项原始报告计数，固定96 B。所有计数同boot累计，配置切换不清零；每输入只seen一次、终态只落一个放行/拒绝原因，PAIR放行或规则拒绝通常对应两条报告。records_passed不是CUSTODY，后续FIFO满仍按旧dropped_full计数。
+
+先建立同一份纯C黄金向量，由nRF与ESP执行，并用平台配置编译器核对相同UART字节；覆盖EXACT/PREFIX、短名/全名、UTF-8多字节、部分UUID/16与32位服务UUID、Major/Minor端序、未知与边界RSSI、BITS与RANGE差异、所有字段AND、首条DENY、缺字段、畸形AD、全零mask、未支持能力、长度预算、PAIR超时/歧义/溢出/清理、重复与重启恢复。最后真实空口核对原始ADV/SCAN_RSP仍分别上报。只有完整矩阵及目标资源预算通过后才声明bit13。
+
+### 5.4 扫描报告映射
 
 BLE 记录头为 24 B：capture_ms[0..7]、kind[8]、props[9]、addr_type[10]、addr[11..16]、rssi[17]、tx_power[18]、primary_phy[19]、secondary_phy[20]、sid[21]、ad_len[22..23]，随后原始 AD。RSSI/TxPower 都是 i8 dBm，-128 未知；SID 0xFF 未提供。未知地址 addr_type=0xFF 且地址全零，不能做地址自动连接或 MAC 匹配。
 
@@ -228,15 +267,16 @@ RX 进入 0x22，24 B 头与 GATT 形似但 channel=1 是固定 RX 通道，不�
 | C01 实现状态过时 | nRF README 对比 ESP `components/gw_actions/gw_ota.c` | 本轮修正文案为“已有执行器源码，目标/实板分别验收” |
 | C03 广播实际状态 | ESP `components/gw_nrf/gw_nrf.c:gw_nrf_advertise`、`gw_actions.c:gw_actions_configure` | SET/GET 后补 AdvStatus 校验，故障与合法 PAUSED 分开；结果带实际依据 |
 | C04 硬件恢复 | ESP `gw_nrf.c:gw_nrf_init` 仅 GPIO8 输入释放 | 在硬件基线匹配后完成复位恢复编排、启动超时和 MCUboot 回退故障注入 |
-| C05 手机业务闭环 | nRF `gw_peripheral.c` 与 ESP `gw_capture.c:gw_capture_nrf` | 保留持久 INBOX，定义认证、平台业务消息、回复任务及应用 ACK；不滥用旧事件字段 |
+| C05 手机业务闭环 | nRF `gw_peripheral.c` 与 ESP `gw_capture.c:gw_capture_nrf` | 保留持久 INBOX，按差距实施方案的已定合同实现认证、平台业务消息、回复任务及应用 ACK；不滥用旧事件字段 |
 | C06 独立 nRF 版本 | HELLO/升级结果已有版本，平台仍缺可信独立登记 | 实现证明/登记及 fromFirmwareVersions 比较；完成前保守拒绝不能证明的前置版本 |
 | C11 升级阶段与重启 | ESP `gw_ota.c:nrf_transfer` 发现 previousBoot 变化即调用 nrf_trial；版本仍为旧已确认镜像时可能记为 ROLLED_BACK，未区分下载中断 | 根据 journal 区分下载中断、READY/试启动与真正回滚，保留当前镜像校验；重传须有效授权并 BEGIN 从 0，不承诺同一任务必自动重传 |
+| C12 Beacon V2 | 旧gw_filter_match仅单AD片段/首条规则，不能表达多字段AND、名称完整长度及显式报告配对 | 按5.3节、Beacon规范及UART1.2实现共享引擎/能力门控/读回/96 B计数；保留旧引擎行为并通过BFLT矩阵 |
 
 静态核对已确认 UART 帧、UUID 16 B 规范表示、三种广告 mode、62 B DFU 状态、71 B状态及三类批次基本布局在当前 nRF/ESP 实现间一致。此结论只针对已阅读的源码合同，不表示无线时序、持久掉电或 MCUboot 真实验签已通过。
 
 ## 11. 开发与验证顺序
 
-1. 先保持本标准和两份链路协议一致，将 C03/C04/C05/C06/C11 分配到 ESP/平台实现，保留需求与原编号。
+1. 先保持本标准和两份链路协议一致，按差距实施方案将C03/C04/C05/C06/C11分配到ESP/平台实现；C12由三方共享合同与测试向量，保留需求与原编号。
 2. 在 nRF 目录按 README 执行 `scripts/Test-Host.ps1` 和 Python 工具测试；新增状态/边界修改应使用针对性故障用例，不只检查结构大小。
 3. 在固定 NCS v3.2.1 工具链分别构建 DK、自定义板 RF 禁用、自定义板已调试 RF、DFU sysbuild，保存 RAM/Flash 占用与版本信息。当前仓库记录尚无 nRF 目标构建通过证据。
 4. 先实板 UART/流控，再过滤/扫描、角色转换、广播/Peripheral、Central/GATT，最后升级和电源故障注入。覆盖共享 FIFO 类型切换及 ESP spool 满的背压。

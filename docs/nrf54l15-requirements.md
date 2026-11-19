@@ -1,10 +1,10 @@
 # nRF54L15 嵌入式软件需求与贯通验收
 
-文档版本：1.0；更新日期：2026-11-19；统一标准：**GW32-E2E-1.0**；源码核对基线：nRF 应用 `0.2.0`、ESP 应用 `0.2.1`，源码提交 `9533a14`。本次只统一文档，不改变功能范围、线上字段或固件实现。
+文档版本：1.1；更新日期：2026-11-19；统一标准：**GW32-E2E-1.1**；源码核对基线：nRF 应用 `0.2.0`、ESP 应用 `0.2.1`，源码提交 `9533a14`。本次完善开发文档与规划协议，保留既有功能和编号；Beacon V2 是待实现扩展，不改动当前固件或已上线字段。
 
 ## 1. 适用范围与文档优先关系
 
-本文件是 nRF54L15 专项需求，继承 [总需求](gateway-requirements.md) 的原编号。`SYS-*`、`UART-*`、`SCAN-*` 等编号含义不变，不能以本文件发布为由删除尚未完成的需求。三方职责、冲突 C01～C11 的裁决及后续源码待办以 [端到端统一标准 GW32-E2E-1.0](gateway-end-to-end-standard.md) 为共同基准；字节编码以 [板内 UART 协议 1.1](../server/docs/gateway-uart-protocol.md) 为准，平台消息以 [服务器协议](../server/docs/gateway-protocol.md) 的 Schema `1.0/1.1` 为准。UART 文档版本 `1.1` 对应的线上帧版本仍为 `0x01`。
+本文件是 nRF54L15 专项需求，继承 [总需求](gateway-requirements.md) 的原编号。`SYS-*`、`UART-*`、`SCAN-*` 等编号含义不变，不能以本文件发布为由删除尚未完成的需求。三方职责、冲突 C01～C12 的裁决及后续源码待办以 [端到端统一标准 GW32-E2E-1.1](gateway-end-to-end-standard.md) 为共同基准；字节编码以 [板内 UART 协议 1.2](../server/docs/gateway-uart-protocol.md) 为准，平台消息以 [服务器协议](../server/docs/gateway-protocol.md) 的 Schema `1.0/1.1` 为准。UART 文档修订 `1.2` 保留线上帧版本 `0x01`；其中既有接口对应当前固件，V2 的能力位及新命令必须实现并验收后才可使用。
 
 实施步骤见 [nRF 开发文档](nrf54l15-development.md)，ESP 责任见 [ESP 需求](esp32s3-requirements.md) 和 [ESP 开发文档](esp32s3-development.md)。本文件不重新认证硬件原理图，不改动 UART 引脚、射频器件、SDK 或分区方案。
 
@@ -33,7 +33,7 @@ flowchart LR
 | 扫描 | 执行完整过滤配置；保留 ADV/SCAN_RSP 原字节、地址上下文及单调时间 | 平台下发规则；ESP 独立执行本机扫描、跨无线电一对一合并及持久上报 |
 | 连接 | 对授权任务给出的地址执行 Central/GATT；返回实际对端及动作结果 | 平台解析 16/32/128 位服务 UUID、匹配规则；ESP 复核新鲜可连接证据并持久化操作 |
 | 广播 | 按目标启停、模式、原始 AD 与间隔执行；提供实际状态 | 平台定义 Beacon 或自定义内容；ESP 合并配置、检查能力、读回并报告 |
-| Peripheral | 固定 INFO/RX/TX 服务，不透明接收与回复 | ESP 业务认证、路由与持久收件箱；平台业务封装仍待定义，见 C05 |
+| Peripheral | 固定 INFO/RX/TX 服务，不透明接收与回复 | ESP 业务认证、路由与持久收件箱；平台业务规划合同见 [差距实施方案](gateway-alignment-development-plan.md)，C05 源码仍待实现 |
 | 升级 | UART 分块、候选槽校验、试启动、当前镜像核验与确认 | ESP 下载验签、任务恢复、FIFO 接管、启动健康判断及硬件恢复；平台分离两类固件 |
 | 本地配网 / ESP OTA | 不解析 Wi-Fi 凭据，不把 Peripheral RX 当管理授权 | ESP 提供手机/笔记本 SoftAP 配网、本地 OTA、平台远程配置及 OTA；需求完整保留 |
 
@@ -48,7 +48,7 @@ flowchart LR
 | SYS-006 | 自定义板默认 `GW_RADIO_VERIFIED=n`；完成时钟、FEM、功率与引脚核验后才启用 RF | 已有门控；不得为演示直接登记完整 RF 能力 |
 | SYS-008 | 生效能力取平台授权清单、ESP 已实现适配、nRF HELLO 能力及当前资源条件的交集 | 平台能力声明与真实执行须一起验收 |
 
-射频开启的当前 nRF 源码声明 bit1/2/3/4/9/10/11（`0x00000E1E`）。bit0 完整扩展扫描及 bit5～8 并行角色组合均不声明。bit12 仅在 DFU 构建及运行时双槽检查成功后声明；射频禁用不自动禁用具备条件的 DFU。
+射频开启的当前 nRF 源码声明 bit1/2/3/4/9/10/11（`0x00000E1E`）。bit0 完整扩展扫描及 bit5～8 并行角色组合均不声明。bit12 仅在 DFU 构建及运行时双槽检查成功后声明；射频禁用不自动禁用具备条件的 DFU。规划 bit13 用于 Beacon V2 完整过滤能力，当前固件为 0；不得因文档已定义而登记为支持。
 
 ## 4. UART 与数据接管
 
@@ -76,6 +76,23 @@ flowchart LR
 | SCAN-008 | 同一双路采集任务分别下发等价逻辑过滤目标并读回；两路独立配置保留，不隐式互相覆盖；量化分别检查 | 按 C10 统一语义；不因 nRF 能力而开放 ESP 未实现能力 |
 | SCAN-009 | 完整扩展扫描仅在 bit0 声明后启用 | 后续扩展；规则可编码 EXT kind 不代表当前控制器接收该类报告 |
 | SCAN-010 | 不把 bond identity 冒充空中 RPA；当前保守未知地址报告不得参与基于 MAC 的合并或地址自动连接 | 已有保守处理；原始 HCI 地址属于后续扩展 |
+
+### 5.1 Beacon 字段掩码扩展要求（规划，待实现）
+
+[Beacon 过滤规范](beacon-filter-spec.md) 是新增 `BFLT-*` 需求与验证向量的唯一编号入口；本节不重新分配编号。原 SCAN-002/003 的基础过滤和旧 `beaconRules` 保持不变，新功能显式选择 `beaconFilterV2`，以完整扫描组 revision 原子切换。
+
+| 过滤项 | 统一要求 | 现状与开发责任 |
+| --- | --- | --- |
+| 字段选择 | `fieldMask` bit0名称、bit1 iBeacon UUID、bit2 RSSI、bit3 Major、bit4 Minor、bit5服务UUID；同规则所有选中字段 AND | 当前旧规则不能表达多 AD 字段 AND；nRF/ESP 共享 V2 引擎待实现 |
+| 名称 | UTF-8 字节掩码，1～29 B；EXACT/PREFIX、COMPLETE/SHORTENED/ANY 显式选择；不能用字符数量当字节长度 | 旧原始 AD 掩码仅支持片段匹配；完整长度及名称来源策略是新增语义 |
+| iBeacon UUID / Major / Minor | 只在同一完整 `0xFF` AD 内匹配；Data 必须恰25 B且固定头 `4C 00 02 15`；UUID16 B、Major/Minor为大端u16 | 旧单条24 B掩码已可匹配上述头与字段；V2类型化字段不能把多个AD里的值拼成一个Beacon |
+| 服务 UUID | 与 iBeacon UUID 分开；按 AD 格式解析16/32/128位，规范为128位后逐字节掩码比较 | 不能把厂商UUID作为服务UUID自动连接证据；原精确列表过滤保留 |
+| RSSI | 启用位与字段掩码独立；RANGE使用含端点的min/max；BITS对有符号dBm的补码字节按mask比较 | RSSI是接收元数据，不是AD内容；未知值不能匹配，BITS不等于强弱阈值 |
+| 规则顺序 | 基础过滤先执行，再按V2列表首条完整匹配决定ALLOW/DENY；无命中沿用“有ALLOW拒绝，否则放行” | 不可把多条ALLOW当作同一规则的AND；不得同时启用非空旧规则与V2 |
+| 报告范围 | REPORT每报告独立；ADV_SCAN_RSP_PAIR显式启用，仅legacy主动扫描、固定500 ms、唯一同radio/boot/revision/真实地址前序ADV | 未配对、超时、歧义、溢出均不放行；匹配后ADV与SCAN_RSP原字节分开上报，不合成一段AD |
+| 能力与容量 | bit13及0x19～0x1B；完整body≤3070 B；最多8条规则，并预检实际编码总长 | 仅规划；原旧配置最大2755 B保持可用；V2超预算整体拒绝，不裁剪规则或扩大既有帧 |
+
+名称可能在 SCAN_RSP，iBeacon字段在ADV。需要两者同时满足时必须显式选择配对范围；不能在REPORT模式偷偷复用历史名称。RSSI在配对范围只取主ADV。UART重握手不等于芯片重启，但候选缓存不得跨扫描revision、暂停/恢复或失效时间窗口匹配。
 
 ## 6. Central 与 GATT
 
@@ -131,20 +148,21 @@ flowchart LR
 
 ## 10. 已确认的贯通问题与关闭条件
 
-以下编号与统一标准一致。文档统一关闭的是语义歧义，未完成的源码或实测不能随之标为完成。
+以下编号与统一标准一致。逐项开发约定、依赖与关闭证据统一见 [差距实施方案](gateway-alignment-development-plan.md)；文档统一关闭的是语义歧义，源码或实测不能随之标为完成。
 
 | 标准项 | 当前证据 | 关闭条件 |
 | --- | --- | --- |
 | C01 旧实现状态 | 核对前 README 称无 ESP 执行器，但 `gw_actions/gw_ota.c` 已实现 nRF 编排 | 本轮已修正文档；继续分别标识源码、主机证据、目标构建及实板状态 |
 | C03 广播实际状态 | `gw_nrf_advertise` 仅 0x07/0x08 配置读回，`gw_actions_configure` 未核 0x0C | 后续补读取/核对 AdvStatus 与实际 PAUSED 例外；故障注入后不误报成功 |
 | C04 挂死恢复 | `gw_nrf_init` 仅将 GPIO8 设为输入释放，未有主动 nRF 复位恢复编排 | 后续按匹配硬件验证复位控制、时序、boot 变化及回退；保留 FIFO 丢失审计 |
-| C05 Peripheral 业务 | nRF 0x22 和 ESP INBOX 已有，平台统一业务封装、认证与回发任务尚缺 | 完成三方业务契约及授权；不得把 RX 冒充广播 RawEvent 或 Central Notify |
+| C05 Peripheral 业务 | nRF 0x22 和 ESP INBOX 已有，平台业务扩展已在差距实施方案中确定；对应Schema/源码尚缺 | 完成三方业务契约及授权；不得把 RX 冒充广播 RawEvent 或 Central Notify |
 | C06 nRF 版本登记 | NRF54 制品指定 `fromFirmwareVersions` 时平台缺独立可信当前版本 | 增加明确可验证的登记/证明路径；完成前拒绝无法证明的版本约束，不拿 ESP 版本代替 |
 | C11 升级阶段与重启 | ESP `nrf_transfer` 对 boot 变化无条件调用 `nrf_trial`，下载中复位也可能被记为 ROLLED_BACK | 根据 journal 区分下载中断、READY 后试启动及实际回滚；有效授权下重传须从 0 BEGIN，不承诺同一任务必自动重传；试启动优先核验/确认，不能重新擦写 |
+| C12 Beacon V2 | 旧规则没有名称完整长度、多字段AND和显式ADV/SCAN_RSP配对；RSSI只有原minRssi | 按Beacon规范及UART规划0x19～0x1B实现共享引擎、能力门控、容量与失败路径，完成BFLT向量及实板验收 |
 
 ## 11. 验收矩阵
 
-沿用总需求 ACC 编号，增加下列 nRF 验收细化；本轮文档检查不改变历史测试结论。
+沿用总需求 ACC 编号，增加下列 nRF 验收细化；新增字段掩码、短名/全名、iBeacon字节序、RSSI及配对场景采用 Beacon 规范的 BFLT 编号。本轮文档检查不改变历史测试结论。
 
 | 原验收编号 | 必验场景 | 判定证据 |
 | --- | --- | --- |
