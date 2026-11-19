@@ -36,6 +36,13 @@
 
 上述镜像摘要属于本次Windows构建；不同平台/构建时间产生的CI镜像须以其独立产物为准。SDK、临时测试密钥、本地日志和未签名构建产物不上传源码仓库。未连接/烧录实板、未执行eFuse；NCS目标构建、双射频空口、手机实机、真实MQTT/TLS切换、100ppm时钟漂移、Flash掉电、复位脉冲及整机双OTA回退仍待验收。
 
+### 0.3.0 GitHub验证证据
+
+- [固件运行44546976480](https://github.com/lyndon0728/ble-gateway-manager/actions/runs/44546976480)，提交`7efe497da20a40d7c483e4a2a13ba5f24d9bfc23`：Linux GCC主机全套与Node网页协议测试、ESP32-S3完整目标编译、镜像容量和实际ELF符号检查全部成功，产物按工作流保留14天。
+- [平台运行44545398972](https://github.com/lyndon0728/ble-gateway-manager/actions/runs/44545398972)，提交`9be7b62c47513d73c4aa01523e781d336b8ccea7`：Windows/Linux检查、Go全套测试、Linux race检查、协议进程联调、浏览器/真实API集成和容器构建全部成功。
+
+Windows镜像及228项输入核对对应`9be7b62`。后续`7efe497`仅整理MQTT测试中两处循环排版，修复GCC的misleading-indentation警告，没有改变生产代码。首次固件运行44545399087的目标job成功、host job因该测试编译警告失败；不能将首次运行标成全通过。上述最终成功运行之后仅补充Markdown证据，不改变已验证源码。
+
 ## 0.2.1 需求落实与回归
 
 本次按既有需求修复升级授权边界、启动槽写入结果不确定的恢复、签名大小约束、配网窗口关闭及配置报告版本倒退。逐项对应见[变更记录](CHANGELOG.md)。

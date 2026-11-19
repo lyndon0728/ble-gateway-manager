@@ -93,3 +93,9 @@ cd frontend && npm test && npm run build
 本轮运行记录及最终ESP镜像摘要在 [ESP验证记录](../firmware/esp32s3/VALIDATION.md)。nRF主机测试验证生产协议/过滤/无线状态机；没有完整NCS目标构建或实板数据时不标成已通过。仍需实板完成：两芯片串口电气/流控、FEM与RF、实际手机Security2和bond、掉电/双组件回退、复位脉冲、100ppm时间预算、联网切换与最大持续负载。
 
 最终文档校核：24份Markdown、377个本地链接、11个章节锚点及15个JSON示例通过；系统93条需求/18项ACC、ESP182条需求/50项验收、平台59条需求/11项验收、BFLT18条需求/16项验收的编号集合保持不变。源码差异格式检查通过。Windows最终ESP完整编译/链接及228项构建输入一致性检查通过，Peripheral额外861个逐分配点内存故障场景通过；这些软件证据不替代上述实板项。
+
+## 7. GitHub交付
+
+源码与Markdown已推送至 `codex/gateway-nrf54-v0.2.0` 分支（保留既有分支名，固件版本为0.3.0）。主要实现提交为 `9be7b62`，测试排版兼容修复为 `7efe497`；后者未改变生产代码。
+
+[固件CI 44546976480](https://github.com/lyndon0728/ble-gateway-manager/actions/runs/44546976480)全部成功，覆盖Linux主机、网页协议、ESP目标构建和实际链接符号；[平台CI 44545398972](https://github.com/lyndon0728/ble-gateway-manager/actions/runs/44545398972)全部成功，覆盖Windows/Linux、race、协议进程、浏览器/真实API和容器构建。验证通过后仅补充本节及固件验证记录。分支上传不等于已合并main或量产放行。
