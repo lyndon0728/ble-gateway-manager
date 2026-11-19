@@ -6,6 +6,8 @@
 
 本次按既有需求修复升级授权边界、启动槽写入结果不确定的恢复、签名大小约束、配网窗口关闭及配置报告版本倒退。逐项对应见[变更记录](CHANGELOG.md)。
 
+[GitHub运行44475822740](https://github.com/lyndon0728/ble-gateway-manager/actions/runs/44475822740)，源码提交`9533a14`：Linux主机测试及完整本地入口目标构建均成功，包括实际ELF函数/资源检查和11项网页协议测试。编译产物和日志保留14天；随后仅补充此Markdown验证链接，不改变已验证源码。
+
 | 检查 | 实际结果 |
 | --- | --- |
 | 完整生产主机套件 | `scripts/test_host.py` 全部通过，包含生产核心/云任务/动作/采集/HTTP、6项打包测试、145项独立Ed25519用例、69个spool断电注入点及7份生产JSON Schema检查 |
@@ -37,7 +39,7 @@ Windows应用版本0.2.1，bin为1,412,016字节（`0x158BB0`），最小OTA槽`
 
 ### 完整本地功能目标验证
 
-[GitHub运行44470481423](https://github.com/lyndon0728/ble-gateway-manager/actions/runs/44470481423)，源码提交`51b1230`：Linux主机测试与ESP32-S3目标构建两个job全部成功。目标job执行镜像容量检查，并检查实际ELF中的本地OTA函数、开窗函数及网页资源符号；产物含bin/elf/map、实际sdkconfig、符号列表及日志，保留14天。本记录之后的更新仅补充Markdown验证证据，不改变该已验证源码。
+[GitHub运行44470481423](https://github.com/lyndon0728/ble-gateway-manager/actions/runs/44470481423)，源码提交`51b1230`：Linux主机测试与ESP32-S3目标构建两个job全部成功。目标job执行镜像容量检查，并检查实际ELF中的本地OTA函数、开窗函数及网页资源符号；产物含bin/elf/map、实际sdkconfig、符号列表及日志，保留14天。该证据属于0.2.0历史版本；0.2.1的源码与验证记录见上节。
 
 默认板卡安全配置没有设置按钮/首次开窗授权，两者关闭时链接器会移除本地接口，不能据此证明网页功能已链接。本次Linux CI及Windows完整验证均显式使用`sdkconfig.local-setup-test`，确认`CONFIG_GW_FACTORY_AUTHORIZED_SETUP=y`；该配置只提供首次未配网时一次600秒窗口，量产仍须核实设置按键GPIO或实现并验证其他现场授权入口。
 
