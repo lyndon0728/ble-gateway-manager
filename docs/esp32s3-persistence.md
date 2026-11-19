@@ -1,6 +1,6 @@
 # ESP32-S3 持久化与掉电恢复设计
 
-版本 0.1，日期 2026-11-19。适用 GW32 ESP32-S3 主机，对接 nRF 固件 0.2.0、UART 1.1 和服务器消息契约 1.0/1.1。
+版本 0.2，日期 2026-11-19。适用 GW32 ESP32-S3 主机，对接 nRF 固件 0.2.0、UART 1.1 和服务器消息契约 1.0/1.1；补充本地与远程网络配置存储。
 
 **状态：待实现的工程设计。** 本文细化 [ESP32-S3 详细需求](esp32s3-requirements.md) 中的存储与恢复要求，不表示仓库已有可运行 ESP 存储组件、原子事务库或掉电测试结果。内部记录、状态和接口是设计提案，不增加 UART opcode 或服务器 JSON 字段。若实现选用其他后端，仍须满足相同提交、重放和验收条件。
 
@@ -135,7 +135,11 @@ CRC32C 参数沿用 UART 协议定义。COMMIT 的事务 SHA-256 覆盖成员完
 | `event_delivery/<eventId>` | PENDING/DELIVERED/QUARANTINED、ACK 证据、重试调度、隔离原因 | 交付状态与事件内容分开，避免重试改变去重摘要 |
 | `upload/<batchId>` | schemaVersion、有序 eventId/内容摘要列表、发送身份、成员结果 | 固定成员后才发送；批次可重新分组，事件不能改 ID |
 | `config/<group>` | 目标/已提交 revision、完整快照、原 patch、taskId、量化后的实际快照、阶段 | 扫描、广播、网络等组独立；不把最近服务器 patch 当完整配置 |
-| `network/candidate` | last-good/candidate、试用任务/修订号、受测接口、每个 probe resultId 与 ACK 证据、阶段 | 全部必要应用 ACK 后才与 config/network 一起提交 |
+| `network/candidate` | 来源、本地transactionId或云taskId、基线generation/localRevision、旧实际/候选快照、凭据引用、阶段/期限、验证证据 | 云任务记录probe resultId/ACK，本地记录独立挑战；按来源的提交门槛处理，不伪造任务 |
+| `network/current` | networkGeneration、localRevision、实际来源、activeLocalSnapshot（本地保存目标）、actualNetwork/activeInterface、lastVerified/前一回退引用、localOverride、同步状态 | 目标与实际分开；本地提交不修改config/network的平台revision；所有入口共用世代CAS |
+| `network/transaction/<id>` | 来源/操作者摘要、请求ID与受保护防重摘要、阶段/结果、窗口/boot、版本与配置引用 | 重连/重启查询同一事务；无可信UTC记录单调时刻和时间质量 |
+| `credential/<ref>/<version>` | 设备/SSID/安全模式绑定、加密实体引用、INSTALLED状态、deliveryId和回执交付状态 | 不存明文秘密；当前/候选/回退仍引用时不可回收 |
+| `network/reconciliation` | 本地完整脱敏快照/snapshotId、平台基线、同步token、裁决/关联任务与前置条件 | 只有匹配世代的正常平台任务验证提交后清除对应override |
 | `task/<taskId>` | requestDigest、完整原命令、内部阶段、执行意图、有效期、证据、下一 resultSequence | 同 ID/digest 防重；终态防重记录独立于 outbox 内容回收 |
 | `result/<taskId>/<resultId>` | resultSequence、不可变线上结果字节、内容摘要、交付状态 | 按该任务顺序发送；匹配 RESULT_PERSISTED 后可回收内容 |
 | `fact/<taskId>/<factId>` | 尚不能构造线上信封的事实、控制器/ESP boot、单调时刻、动作结果和来源 | 无可信 UTC 时保留，不能生成伪造 observedAt 的结果 |
@@ -240,7 +244,19 @@ resultSequence 在任务内递增，跨 ESP 启动延续，不使用 event seque
 
 一个配置组保存目标、已提交完整快照及在途候选；数组/原始字节整体替换。应用前提交候选及任务意图，应用后获取实际回读，再提交本组生效快照与可验证结果；失败保留旧提交版本和真实控制器状态，不能用回滚本地记录假装硬件已回滚。
 
-网络 candidate 额外保存 last-good、每个受测接口和 probe resultId。来自对应候选接口的合法 RESULT_PERSISTED 证据持久后，才能在事务中把 candidate 变成 last-good。任一必要 ACK 尚未提交时重启，恢复旧 last-good；配置提交后重启恢复新配置。probe 结果 ACK 与最终成功结果是不同事实。
+远程网络 candidate 额外保存 last-good、每个受测接口和 probe resultId。来自对应候选接口的合法 RESULT_PERSISTED 证据持久后，才能在事务中把 candidate 变成 last-good。任一必要 ACK 尚未提交时重启，恢复旧 last-good；配置提交后重启恢复新配置。probe 结果 ACK 与最终成功结果是不同事实。
+
+### 8.3 本地配网、凭据与双入口版本
+
+按[配网设计](esp32s3-network-provisioning.md)，本地transactionId/localRevision与云taskId/desiredRevision独立；共同持久networkGeneration并在接纳和提交时CAS。租约覆盖网络试用全过程，ESP重启先恢复/回退在途候选，再接纳新操作。
+
+本地在线提交把activeLocalSnapshot、lastVerified、generation+1、localRevision+1、localOverride、审计及事务终态一次发布；不改平台config/network的已确认revision。LOCAL_ONLY提交保存目标和未验证状态，同样推进本地/公共世代，但保留旧lastVerified和凭据；后续网络失败回退只改变实际选用/诊断，不丢弃用户保存目标。提交前掉电回到原实际快照，提交后恢复对应保存状态；浏览器是否收到响应不改变该判断。
+
+本地挑战的nonce/响应绑定boot、transaction、接口、snapshotId和期限；重启使未完成验证失效。后台LOCAL_ONLY验证发布前重新获得网络租约并检查snapshotId/networkGeneration，过期证据不得改变较新lastVerified。窗口、SRP会话及会话密钥不恢复为活跃；已提交事务结果和凭据引用仍须可查询。配置对账或证明状态更新不再推进一次配置修订，远程采用/覆盖的正式新任务提交则推进公共世代。
+
+凭据实体在独立加密后端写入、完成持久屏障并读回验证后，才在统一事务域发布可引用元数据及INSTALLED。跨后端不假定原子写：先秘密实体后引用，失败可留下不可见孤儿但不能留下指向未完成秘密的有效引用。回收先确认无当前/候选/回退/未结束投递引用，再提交元数据删除，最后擦除实体。普通日志不保存秘密正文；密码防重摘要用受控HMAC，不公开明文密码散列。远程安装回执在发布后才排队，断电重发同一deliveryId而非重复创建版本。
+
+新增至少覆盖AT-38/40/41/42/43：秘密实体和引用发布之间掉电、LOCAL_ONLY与lastVerified恢复、网络提交与响应之间掉电、本地状态上传和旧云命令竞争、裁决提交前再次本地修改。不能让恢复出厂或GC绕过这些引用及版本约束。
 
 ## 9. GATT 与 Peripheral 动作 journal
 
@@ -376,11 +392,12 @@ AT 编号对应 [需求的验收清单](esp32s3-requirements.md#18-验收测试�
 | 6 CUSTODY | ESP-STO-002/004～007、ESP-UART-003～007、ESP-PER-002 |
 | 7 定稿与上传 | ESP-STO-003/009、ESP-DATA-001～010、ESP-CLOUD-002～005 |
 | 8 任务/配置/结果 | ESP-CMD-001～009、ESP-CFG-001～006、ESP-NET-005～008、ESP-CLOUD-006 |
+| 8.3 本地配网与秘密引用 | ESP-PROV-008～018；ESP-AT-38/40～43 |
 | 9 GATT/Peripheral | ESP-GATT-004～010、ESP-PER-001～005 |
 | 10 升级 | ESP-NOTA-001～012、ESP-EOTA-001～008 |
 | 11–13 GC、配额与测试 | ESP-STO-008～010、ESP-OPS-002～006、ESP-SEC-004/005 |
 
-本文只细化 150 条需求中有关持久化的部分，不替代其余网络、BSP、BLE、安全和发布验收。
+本文只细化 170 条需求中有关持久化的部分，不替代其余网络、BSP、BLE、安全和发布验收。
 
 开发前须冻结并记录：
 

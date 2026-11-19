@@ -7,8 +7,9 @@
 | 顺序 | 文档 | 用途 |
 | --- | --- | --- |
 | 1 | [系统需求与验收清单](gateway-requirements.md) | 理解服务器、ESP和nRF职责及整机范围 |
-| 2 | [ESP32-S3详细需求](esp32s3-requirements.md) | 150条需求和36个专项验收场景 |
+| 2 | [ESP32-S3详细需求](esp32s3-requirements.md) | 170条需求和44个专项验收场景 |
 | 3 | [ESP32-S3开发指南](esp32s3-development.md) | 工程结构、模块接口、调度/状态机、双OTA和实施步骤 |
+| 配网专题 | [本地网页与平台远程网络配置](esp32s3-network-provisioning.md) | SoftAP、手机/笔记本、密码部署、在线/离线保存和版本对账 |
 | 4 | [ESP持久化与恢复设计](esp32s3-persistence.md) | 对象、提交、接管、重放、GC与掉电恢复 |
 | 5 | [ESP验证计划](esp32s3-validation-plan.md) | 测试步骤、故障注入、证据、覆盖和阶段门槛 |
 | 6 | [系统对接指南](gateway-integration.md) | 两层协议的端到端时序 |

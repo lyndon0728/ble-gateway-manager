@@ -2,11 +2,11 @@
 
 | 项目 | 基线 |
 | --- | --- |
-| 文档版本 / 日期 | 1.0 / 2026-11-19 |
-| 输入需求 | [ESP32-S3 需求规格](esp32s3-requirements.md)：150 条需求、36 个验收用例 |
+| 文档版本 / 日期 | 1.1 / 2026-11-19 |
+| 输入需求 | [ESP32-S3 需求规格](esp32s3-requirements.md)：170 条需求、44 个验收用例 |
 | 对接对象 | nRF54L15 应用 0.2.0；UART 协议 1.1、线上 frame version=1；服务器既有 1.0/1.1 消息 |
 | 当前状态 | 开发设计已编写；ESP 工程、驱动、业务执行器和测试实现仍待开发 |
-| 配套文档 | [持久化与恢复设计](esp32s3-persistence.md)、[验证计划](esp32s3-validation-plan.md)、[文档维护约定](README.md) |
+| 配套文档 | [本地与远程配网](esp32s3-network-provisioning.md)、[持久化与恢复设计](esp32s3-persistence.md)、[验证计划](esp32s3-validation-plan.md)、[文档维护约定](README.md) |
 
 本文把需求转为模块、接口、状态、恢复算法和开发步骤。目录树、函数名、内部状态和配置名是**计划实现的设计**，不表示仓库已有相应 API、脚本或可烧录产物。线上字段仍以 [UART 协议](../server/docs/gateway-uart-protocol.md)、[服务器协议](../server/docs/gateway-protocol.md) 和两份 JSON Schema 为准。
 
@@ -47,6 +47,8 @@ firmware/esp32s3/
     gw_clock/                单调映射、UTC质量和deadline
     gw_cloud/                MQTT/HTTPS传输与应用ACK
     gw_network/              last-good/candidate及接口绑定
+    gw_provision/            本地热点、离线网页、Security2会话与限时授权
+    gw_credentials/          凭据安全存储、引用及远程安装回执
     gw_commands/             任务journal、路由、结果
     gw_radio/                本机BLE、nRF目标与资源协调
     gw_gatt/                 连接、发现、动作和断链映射
@@ -76,6 +78,7 @@ firmware/esp32s3/
 | capture_owner | 待定观测索引、配对候选、定稿预约 | 事件驱动 + 最早到期定时器 |
 | command_owner | 活跃任务、阶段、资源预约、结果序列 | 只接受有 journal 的副作用意图 |
 | network_owner | 接口状态、候选验证和路由选择 | 网络事件触发；probe 带接口上下文 |
+| provision_owner | SoftAP窗口、网页会话、已认证本地请求 | 不直接改STA；经network_owner提交候选，凭据交安全存储 |
 | cloud_owner | 传输会话、批次发送、ACK匹配 | 消费持久快照，ACK回到store提交 |
 | radio_owner | 本机BLE状态、nRF目标/实际状态快照 | 回调只投递事件，不在回调做整任务 |
 | ota_owner | 当前组件、升级阶段、剩余预算 | 只在 command_owner 授予维护租约后运行 |
@@ -111,6 +114,8 @@ firmware/esp32s3/
 | result_enqueue | 不可变线上结果与任务结果序列 | 持久后交cloud；结果内容已提交后不重新生成observedAt |
 | radio_acquire | 任务、角色、controller、是否授权维护、deadline | 资源预约成功不代表无线角色已切换；完成后单独读回 |
 | ota_start | 已验证制品引用、组件、任务、租约 | 只进入状态机；最终结果须有运行镜像/确认/健康证据 |
+| network_candidate_submit | 来源、完整network、credentialRef、预期networkGeneration/localRevision或云任务 | 唯一租约和CAS；本地transactionId与云taskId分开，提交结果按来源生成 |
+| credential_install | 受保护会话/TLS收到的秘密、设备/SSID/安全模式绑定 | 安全持久提交后才返回引用/INSTALLED；原始秘密不进普通日志或任务outbox |
 
 所有跨任务引用使用明确的 retain/release 或移动所有权，禁止保存回调栈指针。提交失败由调用方释放；提交成功由接收方在恰好一次完成事件后归还。取消请求只表示取消等待或尚未执行的队列项，不能断言已发出的物理操作被撤销。
 
@@ -250,9 +255,11 @@ requestDigest是服务端原TaskRequest的摘要，保持服务器给出的值�
 
 掉电恢复时：nRF实际revision/内容等于待提交候选且可核验，则完成原事务；仍为旧快照则按是否已执行和任务时效恢复；出现无法解释的版本/内容进入对账。不能把旧revision重新发送当回滚，也不能为临时停扫使用`revision+1`占用未来服务器版本。
 
-服务器configuration GET只返回最近patch，且是管理员接口；设备存储全失时没有设备token可用的全量恢复API。M0必须定义重新配置/管理重放入口。恢复nRF复位后的已提交目标可重发原生效revision，因为nRF已进入新的启动周期；同一启动内冲突则不能靠覆盖解决。
+服务器普通configuration GET只返回最近patch；另有管理configuration/effective合并verified patches，但complete=false，不是完整设备实况，设备身份不能调用管理接口。设备存储全失时没有现成的设备全量恢复API，须受控重新配置/重放。恢复nRF复位后的已提交目标可重发原生效revision，因为nRF已进入新的启动周期；同一启动内冲突则不能靠覆盖解决。
 
 ## 10. 网络候选配置状态机
+
+两种入口共用network_owner、参数校验、租约、networkGeneration CAS与回退存储。下述probe TaskResult流程专用于**平台CONFIGURE任务**；本地网页使用独立transactionId/localRevision和挑战验证，详细接口及安全会话见[配网设计](esp32s3-network-provisioning.md)。
 
 `STABLE → CANDIDATE_DURABLE → PROBING → WAIT_PROBE_ACK → COMMIT → STABLE`；未提交时失败/重启走`ROLLBACK_LAST_GOOD`。候选窗口最多120 s，并受任务有效期限制。
 
@@ -270,7 +277,19 @@ requestDigest是服务端原TaskRequest的摘要，保持服务器给出的值�
 
 **不能把首次probe与SUCCEEDED放进同一个结果批次来绕过门槛。** 当前服务器要求probe已在先前事务持久化；同批首次提交会被拒绝。服务器校验结果字段不等于已经证明物理接口绑定，该证明由实板抓包/路由证据完成。[服务端校验](../server/internal/platform/control_gw32.go)
 
-常规主备切换只选已提交且验证过的接口，使用防抖和有界重连；Wi-Fi扫描是诊断动作，不改变BLE过滤配置。credentialRef由本机安全存储解析，SoftAP配置窗口/凭据注入流程必须在启用前冻结。
+常规主备切换只选已提交且验证过的接口，使用防抖和有界重连；Wi-Fi扫描是诊断动作，不改变BLE过滤配置。credentialRef由本机安全存储解析；安装失败或引用缺失在切网前拒绝。
+
+### 10.1 本地网页与首次离线部署
+
+gw_provision提供限时SoftAP及手机/笔记本浏览器页面，静态资源全部本地，秘密和控制经protocomm Security2认证加密。默认窗口10min/空闲5min/单次硬上限30min；具体开窗硬件和浏览器适配先冻结再实现。AP+STA信道变化和网段冲突须支持重连后查询同一事务，不能因网页断线重新提交。
+
+本地在线配置验证候选各必要接口的TLS、设备身份和新鲜平台挑战后才提交；本地没有云任务，不能伪造TaskResult或推进desiredRevision。用户明确选择LOCAL_ONLY可持久保存activeLocalSnapshot和未验证状态，保留lastVerified与旧凭据。网络实际可达、配置已保存、平台已同步分别显示；失败不自动降级成离线成功。
+
+### 10.2 远程凭据与本地改动对账
+
+平台新增秘密接口经TLS接收并加密存储密码，设备私有领取、加密持久安装并回执后，现有CONFIGURE才引用credentialRef。该扩展没有现成实现，不能在当前network Schema私加password。
+
+所有网络提交推进networkGeneration，本地另推进localRevision并设置localOverride；config/network保留平台确认快照，network/current独立记录实际本地来源，不把本地改动伪装成平台revision。恢复在线先上报本地状态，管理员明确ADOPT_LOCAL或APPLY_PLATFORM后生成带generation/快照前置条件的正常任务，完成probe/ACK再清除对应override。扩展未实现时阻止陈旧远程网络任务覆盖本地改动，不能伪称已对账。
 
 ## 11. 无线资源与广播控制
 
@@ -419,7 +438,10 @@ BEGIN不是删除现有RAM FIFO；开始维护后可一边下载一边接管剩�
 | DEV-17 | 制品验签/缓存/OTA公共租约 | DEV-04/08/10；错组件/签名/大小拒绝，缓存断电恢复通过 |
 | DEV-18 | NRF54 DFU和试运行恢复 | DEV-06/15/17；UART重连/芯片重启/真实MCUboot验签回退通过 |
 | DEV-19 | ESP应用OTA和兼容迁移 | DEV-17/18；目标签名、试启动/回滚、旧格式读取通过 |
-| DEV-20 | 压力、生产安全与制造/维护说明 | 前述适用功能完成；36场景和所有需求组有证据或明确阻塞，不带未验收能力出货 |
+| DEV-20 | 压力、生产安全与制造/维护说明 | 前述适用功能完成；44场景和所有需求组有证据或明确阻塞，不带未验收能力出货 |
+| DEV-21 | SoftAP、离线网页、Security2浏览器客户端和本地网络事务 | DEV-02/04/12；AT-37～41/44，现场授权/无网保存/重连/回退验证 |
+| DEV-22 | 本地凭据区与远程秘密安装服务、页面、安装回执 | DEV-04/08/21及服务端扩展；AT-38/42，设备归属、秘密保护、安装后引用 |
+| DEV-23 | 双入口版本对账、条件任务及平台差异页面 | DEV-10/11/12/21/22；AT-43，采用/覆盖和陈旧任务竞态，完整Schema与实现同步 |
 
 不能用DEV-18的nRF主机模拟通过替代真实bootloader验证；DEV-19也不能只调用OTA API后就标完成。BLE手机认证/云端契约未冻结时，只能完成安全本地传输子集。
 
@@ -458,7 +480,7 @@ idf.py -B build-gw32 size
 | Host | 编解码、提交/恢复、去重、任务和OTA替身状态机 | 测试报告、随机种子、故障点与回放输入 |
 | IDF构建 | 锁定环境目标编译、告警、分区/镜像/内存预算 | 配置、map、未签名或测试签名产物及摘要 |
 | 服务端联调 | 真设备适配器或明确模拟器，Schema/ACK/结果时序 | 服务端日志与设备日志关联证据 |
-| HIL | 受控板卡、电源、网络、UART、BLE对端夹具 | 36验收场景证据，失败可重放 |
+| HIL | 受控板卡、电源、网络、UART、BLE对端夹具 | 44验收场景证据，失败可重放 |
 | 发布 | 专用签名环境、兼容性/回退矩阵、能力清单 | Markdown发布记录与可追溯制品 |
 
 本次不新增虚构的ESP测试脚本/CI通过标记。完成对应实现后再接入真实命令，并更新验证计划中的运行状态。
@@ -470,7 +492,8 @@ idf.py -B build-gw32 size
 | IDF/BLE Host/CH390H及板版本 | 目标可构建和实际网口可用 | 版本、来源、许可证、兼容证据、选定引脚 |
 | Flash布局/后端/寿命/GC | 离线容量与掉电可靠性 | 分区、记录格式版本、最大镜像、写放大和故障注入 |
 | UTC引导与凭据制造 | 安全冷启动和TTL任务执行 | 信任根、时间来源、密钥轮换及恢复流程 |
-| 手机认证/云端数据契约 | 手机配网或云端双向闭环 | Schema/权限/业务ACK/抗重放/迁移版本 |
+| BLE Peripheral手机认证/云端数据契约 | BLE手机业务或云端双向闭环 | Schema/权限/业务ACK/抗重放/迁移版本，与Wi-Fi网页配网分开 |
+| 本地网页/平台配网扩展 | 安全浏览器配网和双入口网络闭环 | 开窗、制造凭据、浏览器加密与网页信任、秘密投递、对账Schema及实板证据 |
 | 绑定预置及维护 | 通用加密配对管理 | 当前仅预置bond；后续命令/工具及授权 |
 | 双组件健康与安全版本 | 可生产OTA、硬件防降级 | 健康预算、回滚/救援、密钥与不可逆制造步骤 |
 | 峰值负载和停机指标 | 包率、离线时长、共存或恢复性能 | 实测场景、板/SDK/镜像版本、指标与证据 |
@@ -479,7 +502,7 @@ idf.py -B build-gw32 size
 
 ## 18. 本次文档状态与参考
 
-本指南与配套存储/验证文档完成的是开发设计。当前ESP源码工程、目标构建和实板验收均未完成；具体测试状态以[验证计划](esp32s3-validation-plan.md)和之后真实产生的验证记录为准。各模块对应的150条需求和36项验收覆盖映射由验证计划统一维护。
+本指南与配套存储/配网/验证文档完成的是开发设计。当前ESP源码工程、目标构建、实板验收及新增配网平台接口均未完成；具体测试状态以[验证计划](esp32s3-validation-plan.md)和之后真实产生的验证记录为准。各模块对应的170条需求和44项验收覆盖映射由验证计划统一维护。
 
 2026-11-19核对的ESP-IDF stable参考页显示v6.1.1，这只是查阅版本，不自动成为工程已验证基线。最终API/Kconfig按DEV-01锁定版本检查：
 

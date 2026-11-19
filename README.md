@@ -11,8 +11,9 @@
 | [详细需求与验收清单](docs/gateway-requirements.md) | 需求编号、职责、优先级、实现边界、验收条件和待开发项 |
 | [ESP32-S3 详细软件需求](docs/esp32s3-requirements.md) | 网络、UART、持久接管、双路去重、任务、广播、GATT、双组件 OTA 与专项验收；2026-11-19 补充 |
 | [ESP32-S3 开发指南](docs/esp32s3-development.md) | 工程结构、模块接口、任务调度、状态机、配置与升级执行方案 |
+| [本地网页配网与平台远程配置](docs/esp32s3-network-provisioning.md) | 手机/笔记本连接热点、网络参数、凭据安装、候选回退和双入口版本对账 |
 | [ESP 持久化与恢复设计](docs/esp32s3-persistence.md) | 事务、接管水位、事件/任务日志、重放与 GC |
-| [ESP 验证计划](docs/esp32s3-validation-plan.md) | 36 项验收的前置、注入、步骤、预期及证据要求 |
+| [ESP 验证计划](docs/esp32s3-validation-plan.md) | 44 项验收的前置、注入、步骤、预期及证据要求 |
 | [系统流程与对接指南](docs/gateway-integration.md) | 启动、扫描去重、自动连接、广播、UART OTA 和异常恢复时序 |
 | [ESP32-S3 ↔ nRF54L15 UART 协议](server/docs/gateway-uart-protocol.md) | 串口参数、二进制帧、能力、命令、扫描/GATT/Peripheral 数据和 DFU |
 | [ESP32-S3 ↔ 服务器协议](server/docs/gateway-protocol.md) | MQTT/HTTP、配置、任务、应用 ACK、广播和组件升级 |

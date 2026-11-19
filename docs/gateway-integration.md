@@ -26,6 +26,7 @@ flowchart LR
 | 连接与 GATT | GATT_* 任务 / 自动连接规则 | 验证证据、持久意图、序列化副作用、查询结果 | 0x10～0x18；0x0A 连接信息 |
 | Peripheral 手机收发 | 云端业务契约待定义 | 认证、业务解析、路由和业务级 ACK | 上行 0x22；状态 0x0D、通知 0x0E、断开 0x0F |
 | 网络 | CONFIGURE / network | 候选试用、绑定接口探测、应用 ACK 后提交 | 不发送给 nRF |
+| 本地网页配网 | 手机/笔记本→ESP SoftAP安全会话 | 与远程共享候选管理；本地版本和云revision分离，明确离线保存/回退 | 不发送给 nRF；本地及云对账扩展待实现 |
 | ESP 本机 BLE | CONFIGURE / radios.esp32 | 本机 BLE 驱动与同一合并队列 | 不发送给 nRF |
 | nRF 升级 | FIRMWARE_UPGRADE / component=NRF54 | 下载校验、journal、维护、恢复与结果证据 | 0x30～0x37 |
 
@@ -162,7 +163,13 @@ sequenceDiagram
 
 当前服务器要求成功证据绑定任务制品 SHA；设备独立 nRF 版本登记和 `fromFirmwareVersions` 的限制见服务器协议。硬件强制防降级与断电跨启动续传未实现。
 
-## 8. 实施与验收入口
+## 8. 本地网页配网与远程配置的衔接
+
+现场授权打开限时SoftAP，手机/笔记本连接后用本机网页认证，填写Wi-Fi/以太网、DHCP/静态IP和主备顺序。本地凭据先安全保存，再建立独立transactionId的候选；实际接口通过TLS/设备身份挑战才显示平台可达。无互联网时用户可明确LOCAL_ONLY保存，保留lastVerified及旧凭据，不伪造云任务或成功修订。
+
+平台远程仍走CONFIGURE→逐接口networkProbe→RESULT_PERSISTED→提交；修改密码先经拟新增秘密安装接口获得设备持久回执，再引用credentialRef。本地改动设置localOverride，联网后由管理员明确采用或覆盖，执行正式任务才同步平台revision。两入口共用网络租约，旧任务/OTA冲突先对账；详细协议和未实现接口见[配网设计](esp32s3-network-provisioning.md)。
+
+## 9. 实施与验收入口
 
 | 工作 | 入口 |
 | --- | --- |

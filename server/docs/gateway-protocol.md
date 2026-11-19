@@ -283,6 +283,12 @@ Invoke-RestMethod -Method Put -Uri $configurationUrl -Headers $writeHeaders -Con
 
 上述接口绑定、试用及回滚是 ESP 执行器的实现要求。服务器目前校验配置、能力、修订号与结果回显，并不能独立证明探测流量实际经过哪个网口。LTE、Wi-Fi SoftAP 配网窗口开关、Wi-Fi 原始帧收发及凭据明文下发都没有在本配置 Schema 中开放；`NETWORK` 诊断的 Wi-Fi 扫描也不能代替 BLE 扫描。
 
+### 本地网页配网与远程凭据扩展
+
+ESP32-S3须提供手机/笔记本连接热点后使用的本地网页，配置Wi-Fi STA、Ethernet、DHCP/静态IPv4和主备顺序。该入口与平台共享参数校验、候选试用和回退管理；本地事务使用独立localRevision/transactionId，不能伪造CONFIGURE任务或自行推进desiredRevision。明确LOCAL_ONLY保存不等于平台已确认。
+
+当前Schema继续只接受credentialRef，不接受明文password。远程新密码安装、本地在线挑战、设备网络状态上报与采用/覆盖本地改动的裁决属于待实现扩展，完整端点草案与版本前置条件见[配网设计](../../docs/esp32s3-network-provisioning.md)。本节不宣称这些草案已进入当前Schema/OpenAPI；实现时须同步服务端、设备、权限、页面和验收。现有远程networkProbe及RESULT_PERSISTED先持久后成功的门槛保持不变。
+
 ### ESP Wi-Fi 与原生 BLE
 
 Wi-Fi 的业务收发通过 STA 和现有 MQTT/HTTP。`DIAGNOSTICS` 的 `NETWORK` profile 支持扩展参数 `wifiScan=OFF/PASSIVE/ACTIVE`，省略为 OFF。扫描受该任务时限约束，最多返回 32 个 AP，字段为 SSID、BSSID、信道、RSSI 和认证类型。启用主动扫描须满足本机配置和地区信道限制。Wi-Fi SoftAP 仅在现场打开的配网窗口内由固件发标准 Wi-Fi Beacon，窗口结束即停，配置界面要求本地认证。BLE 广播和扫描属于 `radios.esp32`，使用下面的独立配置和上报格式。[ESP-IDF Wi-Fi 扫描](https://docs.espressif.com/projects/esp-idf/en/latest/esp32s3/api-guides/wifi-driver/station-scenarios.html#esp32-s3-wi-fi-scan)
