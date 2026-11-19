@@ -4,6 +4,8 @@
 
 ESP 执行器的详细开发与验收要求见 [ESP32-S3 软件需求](esp32s3-requirements.md)。
 
+具体模块接口与状态机见 [ESP32-S3 开发指南](esp32s3-development.md)，配套事务和测试文档统一收录在 [文档索引](README.md)。
+
 ## 1. 两层接口及数据责任
 
 ```mermaid
