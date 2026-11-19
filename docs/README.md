@@ -18,6 +18,7 @@
 | OTA专题 | [ESP本地与远程OTA](esp32s3-ota.md) | 签名制品、授权、候选槽、启动确认与恢复 |
 | 4 | [ESP持久化与恢复设计](esp32s3-persistence.md) | 对象、提交、接管、重放、GC与掉电恢复 |
 | 5 | [ESP验证计划](esp32s3-validation-plan.md) | 测试步骤、故障注入、证据、覆盖和阶段门槛 |
+| 人工测试交接 | **[人工执行总册](gateway-manual-test-plan.md)** / [记录模板](manual-tests/record-template.md) | 上板准备、无线/Beacon、网络/OTA、平台贯通及95项原验收追溯；全部人工结果待填写，C05手机蓝牙业务范围待确认 |
 | 6 | [系统对接指南](gateway-integration.md) | 两层协议的端到端时序 |
 | 接口依据 | [UART协议](../server/docs/gateway-uart-protocol.md) / [服务器协议](../server/docs/gateway-protocol.md) | 二进制字段和云端消息的权威定义 |
 | 现有实现 | [nRF工程](../firmware/nrf54l15/README.md) / [ESP工程](../firmware/esp32s3/README.md) / [服务器联调](../server/docs/protocol-v11-integration.md) | 实际源码、工具、模拟器及其验证边界 |

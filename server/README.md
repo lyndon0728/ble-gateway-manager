@@ -4,7 +4,9 @@
 
 当前软件版本为 `0.4.0`，API 契约 `1.11.0`，兼容原 1.0 数据及 GW32 1.1 采集与控制扩展，新增 AI 资料导入、模板审阅发布、受限解析器及从设备绑定。服务器原有实现及运行边界见 [实现范围](docs/implementation-status.md)，0.3.0 前端与联调记录见 [前端实现说明](docs/frontend-implementation.md)。`REFERENCE_GW`、`reference_sensor` 和 GW32 模拟 profile 均不代表实机已验证。真实固件需要按 [网关协议](docs/gateway-protocol.md) 及 [UART 协议](docs/gateway-uart-protocol.md) 实现并联调；软件联调方式见 [1.1 对接说明](docs/protocol-v11-integration.md)。
 
-本地配网状态上报、远程密码安全安装、网络版本对账及平台配置页面的新增实现见[配网接口与部署](docs/network-provisioning-integration.md)。数据库自动升级到v4；远程秘密投递需显式注入`GW_NETWORK_CREDENTIAL_KEY`，设备动作仍需与ESP固件及实板联调。
+本地配网状态上报、远程密码安全安装、网络版本对账及平台配置页面的实现见[配网接口与部署](docs/network-provisioning-integration.md)。配网扩展使用数据库迁移v4，三方0.3.0对齐实现再增加迁移v5；远程秘密投递需显式注入`GW_NETWORK_CREDENTIAL_KEY`，设备动作仍需与ESP固件及实板联调。
+
+后续人工测试统一从[GW32人工执行总册](../docs/gateway-manual-test-plan.md)开始，使用[平台贯通分册](../docs/manual-tests/platform-integration.md)和[记录模板](../docs/manual-tests/record-template.md)。测试计划不代表平台已部署或整机已通过；独立手机蓝牙业务范围待确认，不列本批必测，Wi-Fi配网和本地OTA仍保留。
 
 完整管理前端已按 [前端总体规划](docs/frontend-plan.md) 及 AI 首期策略实现：7 个功能大类、26 个业务页面加 1 个登录页，共 27 页；入口 `/ui/`，访问根目录自动进入控制台。Vue 构建产物随 Go 程序交付，客户运行时不需要 Node.js。结构化目录见 [frontend-pages.json](docs/frontend-pages.json)，开发与测试见 [前端 README](../frontend/README.md)。
 

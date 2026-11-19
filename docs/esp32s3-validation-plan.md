@@ -1,8 +1,10 @@
 # ESP32-S3 验证计划与验收用例
 
-版本：1.2；基线日期：2026-11-19。依据为 [ESP 需求](esp32s3-requirements.md) 的 **182 条需求、50 个 ESP-AT 用例**。实现次序见 [开发文档](esp32s3-development.md)，持久事务与恢复设计见 [持久化文档](esp32s3-persistence.md)，新增升级入口见[本地与远程 OTA](esp32s3-ota.md)。线上字段仍以 [服务器协议](../server/docs/gateway-protocol.md)、[消息 Schema](../server/internal/platform/assets/message-contracts.schema.json)、[UART 协议](../server/docs/gateway-uart-protocol.md) 为准。
+版本：1.3；基线日期：2026-11-19。依据为 [ESP 需求](esp32s3-requirements.md) 的 **182 条需求、50 个 ESP-AT 用例**。实现次序见 [开发文档](esp32s3-development.md)，持久事务与恢复设计见 [持久化文档](esp32s3-persistence.md)，新增升级入口见[本地与远程 OTA](esp32s3-ota.md)。线上字段仍以 [服务器协议](../server/docs/gateway-protocol.md)、[消息 Schema](../server/internal/platform/assets/message-contracts.schema.json)、[UART 协议](../server/docs/gateway-uart-protocol.md) 为准。
 
 **本文是完整产品验收计划，不是测试报告。50 项用例尚未整体完成实板验收。** ESP 固件、主机测试、目标构建及平台扩展的分层执行证据见[固件验证记录](../firmware/esp32s3/VALIDATION.md)。下文各用例的“未执行”表示整项验收尚未完成；不能据此否认已记录的主机子测试，也不能把主机通过扩展为 Flash、网络或射频实板通过。平台已实现的配网契约见[联调说明](../server/docs/network-provisioning-integration.md)。
+
+人工执行请从[执行总册](gateway-manual-test-plan.md)开始，按分册操作并填写记录模板。本版只更新说明与人工交接，不运行设备测试。保留50个原编号；ESP-AT-25/ACC-11/C05独立手机蓝牙业务标为范围待确认，不列本轮必测；ESP-AT-21广播热更新与现有链路状态测试保留。手机Wi-Fi配网和本地OTA仍为必测，完整范围见总册。
 
 ## 1. 测试分层与运行条件
 
@@ -21,9 +23,9 @@
 
 | 代号 | 已有入口 | 使用边界 |
 | --- | --- | --- |
-| R-UART | [nRF Test-Host.ps1](../firmware/nrf54l15/scripts/Test-Host.ps1) 的 core/app 测试；[uart_probe.py](../firmware/nrf54l15/tools/uart_probe.py) 自测 | nRF 帧、队列、命令缓存和传输参考；没有 ESP UART 驱动 |
+| R-UART | [nRF Test-Host.ps1](../firmware/nrf54l15/scripts/Test-Host.ps1) 的 core/app 测试；[uart_probe.py](../firmware/nrf54l15/tools/uart_probe.py) 自测 | nRF帧、队列、命令缓存和传输参考；本入口不验证ESP实际UART驱动 |
 | R-BLE | 同一 nRF 主机入口的 radio/gatt/peripheral 测试 | 实际 nRF 应用模块配合精简 API 替身；没有真实 BLE 栈/空口 |
-| R-DFU | 同一入口的 dfu 测试及 [Python 工具测试](../firmware/nrf54l15/tests/test_uart_probe.py) | nRF 升级状态机和工具编码；没有真实 Flash 交换、镜像验签或 ESP 执行器 |
+| R-DFU | 同一入口的 dfu 测试及 [Python 工具测试](../firmware/nrf54l15/tests/test_uart_probe.py) | nRF升级状态机和工具编码；本入口不验证真实Flash交换、MCUboot验签或ESP执行器 |
 | R-SERVER | [control_test.go](../server/internal/platform/control_test.go)、[gw32_control_test.go](../server/internal/platform/gw32_control_test.go)、[pipeline_capture_test.go](../server/internal/platform/pipeline_capture_test.go)、[autoconnect_test.go](../server/internal/platform/autoconnect_test.go)、[nrf54_firmware_test.go](../server/internal/platform/nrf54_firmware_test.go) | 服务器事务/校验与测试数据库；不证明 ESP 已执行 |
 
 历史 nRF/服务器验证范围见 [验证记录](../firmware/nrf54l15/VALIDATION.md)。不得把该记录复制为 ESP 的通过结果。
@@ -56,7 +58,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 | OTA/启动 | 候选槽、运行槽、会话和启动身份、校验/确认失败 | 正式机制的签名验证、试启动、槽交换、回滚与实际电源故障 |
 | 本地配网/浏览器 | 配网窗口、认证会话、重复请求、localRevision 冲突、AP/STA 切换和离线提交 | 手机/笔记本真实浏览器、SoftAP 连接、接口隔离、凭据保护及平台对账 |
 
-替身和注入点均为待实现测试设施，不能开放成未经认证的生产网络/手机命令。生产构建须关闭注入入口，并有构建检查证据。所有随机测试保留种子；每个关键提交边界至少覆盖故障发生前、发生中、完成后，循环次数和覆盖率在实施时冻结，不能只挑一次成功重启。
+已有主机替身与故障测试见固件验证记录；真实硬件/网络的精确注入夹具仍须逐项准备，不能假定生产固件开放了注入API。生产构建须关闭调试注入入口，并有构建检查证据。所有随机测试保留种子；每个关键提交边界至少覆盖故障发生前、发生中、完成后，循环次数和覆盖率在实施时冻结，不能只挑一次成功重启。
 
 掉电必须区分三种拓扑：**仅 ESP 断电且 nRF 保持运行、仅 nRF 复位、整板断电**。前两种须确认供电隔离真实有效；不能将整板断电后已消失的 nRF RAM 记录作为可重放前提。
 
@@ -290,8 +292,8 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-25：Peripheral 恶意输入、背压与回复
 
-- **分层/现有可运行**：H、B、S边界校验；ESP本地inbox已实现，手机业务闭环验收未完成；参考 R-BLE/R-UART，现无云端Peripheral业务闭环入口。
-- **前置**：受控BLE客户端、公开RX/TX服务、本地应用inbox；认证/业务适配器未实现的构建与已实现构建分开记录。
+- **分层/现有可运行**：H、B、S边界校验；0.3.0已有独立业务适配/Schema/平台入口，主机证据见VALIDATION，实板未执行；本轮范围待确认，不列必测。
+- **前置**：范围确认后，准备受控BLE客户端、独立Security2/route授权、公开RX/TX服务和本地inbox；不复用Wi-Fi配网管理身份。
 - **注入**：未认证配网/升级/写入请求、重放、超长/高速输入、inbox满、未订阅CCC、通知受理响应丢失及发送期间断链。
 - **步骤**：按0x22接管原始应用字节；确认持久后才CUSTODY；测试业务授权、tx_seq持久映射、同通知重放和应用ACK；尝试将0x22伪装为GATT_NOTIFY上传。
 - **预期**：channel=1不当Central句柄；ATT Write Response仅代表nRF RAM接纳；UART通知OK仅代表栈受理。未认证不执行敏感操作，无云端Schema时不透传为伪类型；没有应用ACK不能宣称手机业务已收到。
@@ -371,7 +373,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-34：构建、制造安全与交付可复现
 
-- **分层/现有可运行**：K、B，辅以H/S安全边界；ESP工程未交付，未执行；参考文档和对端测试不能当作构建通过。
+- **分层/现有可运行**：K、B，辅以H/S安全边界；ESP0.3.0工程及目标构建已交付，实板制造/安全项未执行；按实际构建和板级证据分别判定。
 - **前置**：实际PCB/引脚网表、N8R8制造配置、固定SDK/toolchain/Host/Ethernet依赖、分区表、测试密钥和授权救援方案。
 - **注入**：错误Flash/PSRAM规格、错误板配置、依赖/构建参数漂移、未登记证书或错身份、错误CA/主机名/过旧TLS版本、跨设备topic访问、生产构建误启故障注入、未经授权的恢复出厂请求。
 - **步骤**：干净环境复现构建并核对map/镜像/分区；检查CH390H及复位映射、UART内存约束；验证TLS至少1.2、MQTT用户名gatewayId及仅本设备topic权限；演练凭据/证书轮换并检查日志/固件包无秘密；演练授权业务重置与身份销毁的不同流程，验证锁定后的恢复路径。
@@ -398,7 +400,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-37：本地 SoftAP 配网窗口与网页入口
 
-- **分层/现有可运行**：H、K、B；本地网页/配网模块及测试入口待实现，未执行。
+- **分层/现有可运行**：H、K、B；本地网页/配网模块及主机/目标证据已有，真实现场入口和实板验收未执行。
 - **前置**：匹配板卡和已冻结的现场开窗方式、设备唯一热点标识/接入凭据及客户端上限；窗口默认10 min、会话空闲5 min、累计开窗上限30 min；手机与笔记本各一台，断开外部互联网。
 - **注入**：首次无配置、已有配置的正常启动、普通网络故障、未经授权开窗、窗口到期、手动关闭、浏览器退出及设备重启。
 - **步骤**：通过授权方式打开窗口，连接网关热点；分别从系统引导和明确本地地址进入页面；完成页面加载、认证入口和状态查看；关闭后从热点、STA 和以太网侧重复访问本地管理服务。
@@ -407,8 +409,8 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-38：本地认证、凭据保护与请求攻击
 
-- **分层/现有可运行**：H、K、B；认证会话、凭据存储和浏览器适配待实现，未执行。
-- **前置**：独立 WPA2 SoftAP 密码与本地 setup 账号材料；protocomm Security2（SRP6a/AES-GCM）及待实现浏览器客户端；可检查 HTTP/会话边界、日志及本地存储，使用可销毁的测试凭据。
+- **分层/现有可运行**：H、K、B；认证会话、凭据存储和浏览器适配已有实现及软件证据，实机验收未执行。
+- **前置**：独立WPA2 SoftAP密码与本地setup账号材料；本版protocomm Security2（SRP6a/AES-GCM）及内置浏览器客户端；可检查HTTP/会话边界、日志及本地存储，使用可销毁的测试凭据。
 - **注入**：无认证修改、错误凭据/暴力尝试、旧会话重放、跨站请求/非法 Origin、重复请求 ID、超长输入、会话到期、凭据写入失败和容量不足；篡改密文/认证标签、重放密文计数、浏览器不支持所需安全随机数或加密运行环境。
 - **步骤**：尝试扫描、读取配置、写入密码、应用候选和关闭窗口；对合法请求重放及修改载荷；扫描页面源码、URL、浏览器持久存储、日志、诊断及响应，核对凭据更新/取消和引用回收。
 - **预期**：静态页面和 Security2 握手可使用 HTTP，控制/密码须在认证加密会话内传输；连接热点不等于获得 setup 授权。敏感操作必须在正确设备和有效授权会话中执行；错误或过期会话不会修改配置。请求防重、限速、长度/Origin 检查按契约生效；密码不通过 URL、日志、状态回显或普通诊断泄漏，已保存密码不回读。凭据先安全提交再生成可用引用，写入失败不启动候选；旧 last-good 仍引用的凭据不得提前删除。加密失败或浏览器运行环境不支持时明确拒绝敏感操作，不回退明文，不用 Math.random 代替密码学随机数。受保护会话未实现时不得以开放页面替代验收。
@@ -416,16 +418,16 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-39：本地在线配网、扫描和参数校验
 
-- **分层/现有可运行**：H、K、B、S；本地配网执行器和在线证明/对账适配待实现，未执行。
+- **分层/现有可运行**：H、K、B、S；本地配网执行器及在线证明/对账已有实现与软件证据，真实接口验收未执行。
 - **前置**：合法制造身份、可信时间引导和平台信任根；可配置的 2.4 GHz AP 与以太网，支持 DHCP/静态地址测试；保存当前完整配置及 localRevision。
 - **注入**：隐藏 SSID、UTF-8 字节边界、错误密码、不支持认证、5 GHz 专用 AP、非法静态地址/前缀/网关/DNS、所有上联关闭、仅旧接口可达、认证拒绝和时间未可信。
 - **步骤**：扫描并手工补充隐藏 SSID；填写 Wi-Fi、以太网、DHCP/静态 IPv4 和主备顺序。以独立 transactionId/baseLocalRevision 提交候选；分别观察链路、IP、DNS、TLS、设备认证及平台应用可达证明，按指定接口完成验证后提交。
-- **预期**：校验失败不改变生效配置；实际只使用设备支持的频段/认证，不静默降级。在线证明按拟议设备认证挑战应答入口 /api/v1/gateway-network-probes 联调，不能拿旧连接响应替代新接口证明；该入口未实现时保持未执行。试用最多120 s且受当前授权/事务剩余预算约束；必要探测全部绑定被测候选接口。平台不可达或时间不可信时不能报告在线验证成功；不关闭证书验证。不创建虚假云端 TaskResult 或自行递增 desiredRevision；本地配置成功与平台已接受该配置分别显示。
+- **预期**：校验失败不改变生效配置；实际只使用设备支持的频段/认证，不静默降级。在线证明通过已实现的设备认证挑战应答入口 /api/v1/gateway-network-probes 联调，不能拿旧连接响应替代新接口证明；测试平台未部署该入口时标阻塞。试用最多120 s且受当前授权/事务剩余预算约束；必要探测全部绑定被测候选接口。平台不可达或时间不可信时不能报告在线验证成功；不关闭证书验证。不创建虚假云端 TaskResult 或自行递增 desiredRevision；本地配置成功与平台已接受该配置分别显示。
 - **证据**：脱敏候选/实际配置、各字段边界、接口路由/认证证明、localRevision/transactionId、状态阶段和失败原因，以及服务器实际接入证据。
 
 ### ESP-AT-40：首次离线配网与 LOCAL_ONLY 保存
 
-- **分层/现有可运行**：H、K、B、S；离线保存及上线对账待实现，未执行。
+- **分层/现有可运行**：H、K、B、S；离线保存和上线对账已有实现与软件证据，实机验收未执行。
 - **前置**：分别准备首次无 last-good 设备和已有可恢复 last-good 设备；平台/互联网不可达但本地网页可用；可查询持久配置及状态。
 - **注入**：无 UTC、DNS/TLS/设备认证不可用、用户不确认离线保存、明确确认后浏览器断开、保存期间掉电及之后恢复平台连接；后台验证尚未结束时提交较新配置，令旧挑战响应晚到。
 - **步骤**：输入语法合法配置；先验证普通应用不能被错误标成功，再通过明确的 LOCAL_ONLY 选择保存。重启检查实际生效/回退策略与管理入口，恢复网络后走真实在线验证和配置对账；分别检查 desiredLocalNetwork、actualNetwork 与 activeInterface，并在旧验证完成前制造 networkGeneration/snapshotId 变化。
@@ -434,7 +436,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-41：本地候选回退与提交边界断电
 
-- **分层/现有可运行**：H、K、B；共享网络候选管理器和本地 journal 待实现，未执行。
+- **分层/现有可运行**：H、K、B；共享网络候选管理器和本地journal已有实现及主机故障测试，真实Flash/网络验收未执行。
 - **前置**：last-good 与候选完整快照、对应凭据引用、可控提交边界、独立 ESP 供电；准备未交付事件、活跃任务及网络事务。
 - **注入**：凭据提交前后、候选日志提交前后、验证中、配置提交前后分别断电；故意输错密码/IP；浏览器因信道迁移断连；重复应用/状态查询，试用超时或用户取消。
 - **步骤**：每点恢复后读取事务和实际驱动配置；核对 old/candidate/localRevision；通过同一 transactionId 重连查询，不重新提交；验证失败路径能重新进入授权管理窗口并恢复上联。
@@ -452,7 +454,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-43：双入口竞争、版本对账与 OTA 互斥
 
-- **分层/现有可运行**：H、K、B、S；统一事务仲裁、本地对账及相关平台扩展待实现，未执行。
+- **分层/现有可运行**：H、K、B、S；统一事务仲裁、本地对账与平台扩展已有实现及软件证据，实际并发/回退验收未执行。
 - **前置**：同一 gateway 同时有授权本地会话和平台管理用户；独立 localRevision、desiredRevision、实际快照摘要；可使设备处于网络候选、ESP/nRF OTA 和试启动确认阶段。
 - **注入**：两端同时应用、旧 baseLocalRevision、本地保存后迟到远程任务、云端新修订与本地未对账修改、相同请求 ID 不同载荷、OTA 与配网互抢资源、重启后旧窗口/旧确认请求；ESP 本地快照与服务器旧网络基线不同、裁决时仍有未下发/已发送/UNKNOWN 旧任务。
 - **步骤**：按各竞争顺序提交并观察唯一网络 owner；拒绝后重新读取状态再提交。恢复云端后分别测试管理员接受本地配置、明确下发平台配置以及继续保持冲突待处理；执行时重核对版本/摘要，不能仅在请求入队时检查。对 ADOPT_LOCAL/APPLY_PLATFORM 验证候选 uplinkOrder 的全部接口，覆盖两端基线差异。分别依法取消尚未下发的冲突任务、等待已发送任务的设备终态/对账证据，以及保留无安全终结证据的 UNKNOWN。
@@ -461,7 +463,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-44：浏览器兼容、无线共存与窗口收尾
 
-- **分层/现有可运行**：K、B、S；真实网页与共存功能待实现，未执行；不以桌面截图替代手机验收。
+- **分层/现有可运行**：K、B、S；网页及驱动已有实现，真实手机/无线共存与现场窗口验收未执行；不以桌面截图替代手机验收。
 - **前置**：冻结并记录 Android/iOS 与 Windows/macOS 实测设备及 Chrome/Edge/Safari 浏览器版本，覆盖 Security2 浏览器客户端和安全随机数可用性；内置资源页面、手机蜂窝开启/关闭两组、可切换信道的 2.4 GHz AP、BLE 采集及待发数据流。
 - **注入**：AP+STA 连接导致热点信道迁移、手机自动切换蜂窝、系统小窗口关闭、局域网地址冲突、扫描期间高负载、窗口到期、手动关闭及提交后的延迟回应。
 - **步骤**：各客户端连接热点、认证、扫描/手填、编辑、应用、重连查询并关闭；记录 AP/STA 实际信道/子网和 BLE/UART/spool 压力。重复浏览器刷新/返回，等待窗口收尾后继续正常上报。

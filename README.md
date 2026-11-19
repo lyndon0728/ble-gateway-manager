@@ -14,6 +14,7 @@
 | [本地网页配网与平台远程配置](docs/esp32s3-network-provisioning.md) | 手机/笔记本连接热点、网络参数、凭据安装、候选回退和双入口版本对账 |
 | [ESP 持久化与恢复设计](docs/esp32s3-persistence.md) | 事务、接管水位、事件/任务日志、重放与 GC |
 | [ESP 验证计划](docs/esp32s3-validation-plan.md) | 50项验收的前置、注入、步骤、预期及证据要求 |
+| [人工测试执行总册](docs/gateway-manual-test-plan.md) | 后续人工操作步骤、准备门槛、分册、记录模板与原验收覆盖；不代表实测已通过 |
 | [系统流程与对接指南](docs/gateway-integration.md) | 启动、扫描去重、自动连接、广播、UART OTA 和异常恢复时序 |
 | [ESP32-S3 ↔ nRF54L15 UART 协议](server/docs/gateway-uart-protocol.md) | 串口参数、二进制帧、能力、命令、扫描/GATT/Peripheral 数据和 DFU |
 | [ESP32-S3 ↔ 服务器协议](server/docs/gateway-protocol.md) | MQTT/HTTP、配置、任务、应用 ACK、广播和组件升级 |
