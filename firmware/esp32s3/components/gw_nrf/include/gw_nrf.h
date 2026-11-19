@@ -27,3 +27,9 @@ esp_err_t gw_nrf_advertise(const cJSON *complete, uint64_t revision,
                            int64_t deadline_ms);
 cJSON *gw_nrf_diagnostics(int64_t deadline_ms);
 int64_t gw_nrf_now_ms(void);
+
+/* Pure compiler: returns complete ScanProfileV2 wrapper for either engine. */
+esp_err_t gw_nrf_compile_scan(const cJSON *complete, uint64_t revision,
+                              uint8_t *out, size_t capacity, size_t *size);
+/* Caller must persist recovery intent and hold maintenance ownership first. */
+esp_err_t gw_nrf_hardware_reset(int64_t deadline_ms);

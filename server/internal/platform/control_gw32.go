@@ -33,6 +33,9 @@ func gw32ConnectionTask(op string, params map[string]any) bool {
 }
 
 func (a *App) validateGW32Task(ctx context.Context, tx *sql.Tx, g map[string]any, op string, params map[string]any) error {
+	if op == "PERIPHERAL_NOTIFY" || op == "PERIPHERAL_DISCONNECT" {
+		return a.validatePeripheralTask(ctx, tx, g, op, params)
+	}
 	if op == "DIAGNOSTICS" {
 		if mode, present := params["wifiScan"]; present {
 			if Str(params, "profile") != "NETWORK" || mode != "OFF" && mode != "PASSIVE" && mode != "ACTIVE" {
@@ -232,6 +235,18 @@ func (a *App) validateGW32Result(ctx context.Context, tx *sql.Tx, gateway string
 		}
 		return "", nil
 	}
+	if (op == "PERIPHERAL_NOTIFY" || op == "PERIPHERAL_DISCONNECT") && state == "SUCCEEDED" {
+		if Str(result, "verification") != "VERIFIED" || Str(details, "radio") != Str(params, "radio") || Str(details, "connectionRef") != Str(params, "connectionRef") || Str(details, "clientId") != Str(params, "clientId") {
+			return "PERIPHERAL_IDENTITY_MISMATCH", nil
+		}
+		if op == "PERIPHERAL_NOTIFY" && (Str(details, "businessId") != Str(params, "businessId") || Str(details, "businessStatus") != "APPLIED") {
+			return "PERIPHERAL_BUSINESS_NOT_APPLIED", nil
+		}
+		if op == "PERIPHERAL_DISCONNECT" && Str(details, "connectionState") != "CLOSED" {
+			return "PERIPHERAL_DISCONNECT_NOT_VERIFIED", nil
+		}
+		return "", nil
+	}
 	if !gw32GattTask(op) || state != "SUCCEEDED" {
 		return "", nil
 	}
@@ -399,6 +414,18 @@ func (a *App) applyGW32Result(ctx context.Context, tx *sql.Tx, command, result m
 			target = "unknown"
 		}
 		return a.gw32InvalidateGateway(ctx, tx, gateway, target)
+	}
+	if op == "PERIPHERAL_NOTIFY" && (state == "succeeded" || state == "unknown" || state == "failed") {
+		businessState := strings.ToUpper(state)
+		if state == "succeeded" {
+			businessState = "APPLIED"
+		}
+		_, err := tx.ExecContext(ctx, "UPDATE peripheral_business SET state=?,result_json=? WHERE namespace_id=? AND gateway_id=? AND client_id=? AND direction='DOWNLINK' AND business_id=?", businessState, encode(details), a.Config.NamespaceID, gateway, params["clientId"], params["businessId"])
+		return err
+	}
+	if op == "PERIPHERAL_DISCONNECT" && state == "succeeded" {
+		_, err := tx.ExecContext(ctx, "UPDATE peripheral_connections SET state='CLOSED' WHERE gateway_id=? AND connection_ref=? AND client_id=?", gateway, Str(params, "connectionRef"), Str(params, "clientId"))
+		return err
 	}
 	if !gw32GattTask(op) {
 		return nil

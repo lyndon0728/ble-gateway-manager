@@ -2,9 +2,9 @@
 
 关联文档：[详细需求清单](../../docs/gateway-requirements.md) · [系统流程与对接指南](../../docs/gateway-integration.md) · [ESP ↔ 服务器协议](gateway-protocol.md)。本文是板内二进制字段和状态机的权威定义。
 
-2026-11-19 三方统一采用 **[GW32-E2E-1.1](../../docs/gateway-end-to-end-standard.md)**；对应 [nRF 需求](../../docs/nrf54l15-requirements.md) / [开发文档](../../docs/nrf54l15-development.md) 与 [ESP 开发文档](../../docs/esp32s3-development.md)。本次保留现有帧版本、opcode、状态码及其二进制布局，新增的 Beacon V2 能力位13、0x19～0x1B仅为规划合同，当前固件不得使用或声明。ESP `0.2.1` 已有持久化、采集、网络和升级执行源码及目标构建；尚缺的广播状态核对、硬件恢复、Peripheral 平台业务等见统一标准 C03～C05，不能把接口存在当成整机已经完成。
+2026-11-19 三方统一采用 **[GW32-E2E-1.1](../../docs/gateway-end-to-end-standard.md)**；对应 [nRF 需求](../../docs/nrf54l15-requirements.md) / [开发文档](../../docs/nrf54l15-development.md) 与 [ESP 开发文档](../../docs/esp32s3-development.md)。本次保留现有帧版本、opcode、状态码及其二进制布局，Beacon V2 能力位13、0x19～0x1B已由ESP/nRF `0.3.0`实现；实际声明仍受板级与制造授权门控。广播状态核对、受控恢复和Peripheral业务源码已同步，完整交付边界见[实现记录](../../docs/gateway-alignment-implementation.md)。
 
-**状态：既有1.1部分为 nRF 固件0.2.0的实现接口；文档1.2的 Beacon V2 章节为已确定开发合同、待实现。** 本文按 [nRF54L15 源码](../../firmware/nrf54l15/src) 核对；主机测试不能替代 NCS 目标编译、烧录和实板验证，目前尚未完成后三项。适用硬件为 2026 年 10 月 29 日 GW32I33V2 优化版，U1 为 ESP32-S3-WROOM-1-N8R8，U9 为 nRF54L15-QFAA-R；其他原理图版本必须先核对网表。本协议覆盖 ESP 主机控制 nRF 的扫描、Beacon 过滤、GATT Central、对外广播、Peripheral 数据通道及 UART DFU。协议 1.1 保留线上帧版本 `01`，以 HELLO 能力位启用新增操作。ESP 的持久化、去重、联网和升级任务编排是对接方必须实现的责任，本文不表示已有生产级 ESP 固件。[固件构建与验证边界](../../firmware/nrf54l15/README.md) · [原理图 PDF（本地资料）](D:/chat/GW32_AT2401C_Optimized_20261029/GW32_Optimized_Final.pdf) · [最终网表（本地资料）](D:/chat/GW32_AT2401C_Optimized_20261029/evidence/final_v6.net) · [ESP 与服务器协议](gateway-protocol.md)
+**状态：既有接口及Beacon V2章节均有nRF/ESP 0.3.0源码实现。** 本文按 [nRF54L15 源码](../../firmware/nrf54l15/src) 核对；主机测试不能替代 NCS 目标编译、烧录和实板验证，目前尚未完成后三项。适用硬件为 2026 年 10 月 29 日 GW32I33V2 优化版，U1 为 ESP32-S3-WROOM-1-N8R8，U9 为 nRF54L15-QFAA-R；其他原理图版本必须先核对网表。本协议覆盖 ESP 主机控制 nRF 的扫描、Beacon 过滤、GATT Central、对外广播、Peripheral 数据通道及 UART DFU。协议 1.1 保留线上帧版本 `01`，以 HELLO 能力位启用新增操作。ESP 的持久化、去重、联网和升级任务编排是对接方必须实现的责任，本文不表示已有生产级 ESP 固件。[固件构建与验证边界](../../firmware/nrf54l15/README.md) · [原理图 PDF（本地资料）](D:/chat/GW32_AT2401C_Optimized_20261029/GW32_Optimized_Final.pdf) · [最终网表（本地资料）](D:/chat/GW32_AT2401C_Optimized_20261029/evidence/final_v6.net) · [ESP 与服务器协议](gateway-protocol.md)
 
 ## 串口参数
 
@@ -62,7 +62,7 @@ CRC32C Castagnoli 使用反射多项式 `0x82F63B78`，初值和最终异或均�
 | 10 | 广播独立启停、专用状态查询和运行中载荷更新，依赖 bit4 |
 | 11 | 可连接广播与本机 Peripheral 数据服务，依赖 bit4 |
 | 12 | ESP 经 UART 传送 MCUboot 签名镜像，支持测试启动、确认和回滚；仅相应 DFU 构建声明 |
-| 13 | **规划，当前为0**：Beacon V2字段组合、显式报告配对、完整配置读回与过滤状态，依赖bit1；0x19～0x1B全部实现并验收后声明 |
+| 13 | Beacon V2字段组合、显式报告配对、完整配置读回与过滤状态，依赖bit1；0x19～0x1B已实现，radio_ready/板级验证通过后声明 |
 
 当前bit13及其余未实现位发送为0。ESP仅调用实际能力位覆盖的功能；新增位不可改变bit1所代表的旧规则语义。HELLO 请求和响应均使用 `msg_id=0`。为兼容扫描版主机，nRF 启动后默认关闭广播和 GATT 订阅，只有收到新命令才启用。
 
@@ -166,15 +166,15 @@ ESP 恢复 Flash 队列和去重状态后发起 `HELLO_REQ`。nRF 每次启动�
 
 先执行基础 RSSI、服务 UUID 和厂商过滤，再按配置顺序查找第一条匹配规则。任一完整且同类型的 AD 结构匹配即命中该条，匹配结果不得跨两个 AD 结构拼接。无规则命中时，有 ALLOW 规则则丢弃，否则放行。这样可按 iBeacon 的厂商 ID、子类型、UUID、Major 和 Minor 过滤，也可按 Service Data 匹配 Eddystone 或自定义 Beacon。扫描配置和规则按同一个 revision 原子生效。规则生效时，旧 `SET_SCAN_CONFIG` 返回 `CONFLICT`，完整更新统一走 `SET_SCAN_PROFILE`。通过规则后的原始 AD 保持原样。
 
-### Beacon V2 组合掩码扩展（规划，待实现）
+### Beacon V2 组合掩码扩展
 
-统一业务语义及JSON字段以 [Beacon过滤规范](../../docs/beacon-filter-spec.md) 为准；实现顺序和C12关闭证据见 [差距实施方案](../../docs/gateway-alignment-development-plan.md)。本节只规定其UART编码。当前 nRF `0.2.0` / ESP `0.2.1` 不支持这些新命令，旧设备返回既有 `UNSUPPORTED`；不得将规划命令直接投入运行。
+统一业务语义及JSON字段以 [Beacon过滤规范](../../docs/beacon-filter-spec.md) 为准；实现顺序和C12关闭证据见 [差距实施方案](../../docs/gateway-alignment-development-plan.md)。本节只规定其UART编码。nRF/ESP `0.3.0`支持这些新命令；旧固件继续返回 `UNSUPPORTED`，ESP按HELLO能力选择兼容路径。
 
 #### 能力、命令和原子切换
 
 HELLO bit13依赖bit1。bit13表示V2全部必需字段、REPORT与显式配对范围、配置读回和状态计数均已实现，不能只实现部分字段就置位。
 
-| 规划opcode | 命令 | 参数 | OK结果 |
+| opcode | 命令 | 参数 | OK结果 |
 | --- | --- | --- | --- |
 | `0x19` | `SET_SCAN_PROFILE_V2` | 完整 `ScanProfileV2` | 原子生效的完整 `ScanProfileV2` |
 | `0x1A` | `GET_SCAN_PROFILE_V2` | 空 | 当前完整 `ScanProfileV2`；运行旧引擎时也返回engine=0包装 |

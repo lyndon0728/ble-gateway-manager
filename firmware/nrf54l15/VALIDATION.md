@@ -1,5 +1,26 @@
 # 验证记录
 
+## 0.3.0 三方对齐与 Beacon V2
+
+日期：2026-11-19。应用版本：`gw-nrf54l15/0.3.0`；UART文档修订1.2，线上frame version仍为1，V2使用HELLO bit13和命令0x19/0x1A/0x1B。实现映射见[三方交付记录](../../docs/gateway-alignment-implementation.md)。
+
+`scripts/Test-Host.ps1 -Compiler <zig.exe>`在Zig 0.14.1下执行七套生产C模块测试，全部通过：`test_core`、`test_filter_v2`、`test_gatt`、`test_radio`、`test_app`、`test_peripheral`、`test_dfu`。原扫描/GATT/广播/Peripheral/DFU回归保留。
+
+| 新增验证 | 实际结果和边界 |
+| --- | --- |
+| 组合掩码引擎 | 名称来源/前缀/完整匹配、UUID及major/minor位掩码、RSSI区间/补码掩码、服务UUID规范化、规则顺序、完整iBeacon字段组合、畸形AD通过 |
+| PAIR上下文 | 同radio/boot/revision、实际地址、主动legacy范围、唯一前置ADV、500ms边界、歧义/超时拒绝、有界缓存和原始时间保留通过 |
+| 原子配置 | V2完整配置/旧模式切换、非法参数/长度拒绝、配置读回、能力位及96字节诊断通过；共同87字节向量一致 |
+| 无线与控制集成 | 实际生产gw_radio/gw_app链接共享过滤器，重启和重握手生命周期、配置回滚、禁用/恢复及队列行为通过；底层SDK API由替身提供 |
+| 未定义行为检查 | V2引擎5000个变异输入在UBSan下通过；不是空口随机负载或硬件内存证明 |
+| 三方兼容 | ESP共享引擎/JSON编译与平台V2校验、编译和离线预览均有软件回归；逐项见各组件验证记录 |
+
+没有完整NCS v3.2.1 workspace和匹配ARM工具链，**尚未执行nRF目标west build/sysbuild**，没有可宣称通过的HEX、目标链接或RAM/Flash预算。ESP执行器已接入并有ESP目标构建，但未连接/烧录双芯片实板，真实UART流控、RF/FEM、手机加密会话、MCUboot验签/交换、掉电回退及整机OTA仍待验收。自定义板 `GW_RADIO_VERIFIED=n` 和ESP板级复位默认关闭；软件测试不授予硬件能力。
+
+以下保留0.2.0原始验证记录；其“ESP执行器尚未接入”等描述仅说明当时基线，不代表0.3.0源码状态。
+
+## 0.2.0 历史记录
+
 日期：2026-11-18。应用版本：`gw-nrf54l15/0.2.0`。协议基线：仓库内 UART 1.1 及能力协商扩展（线上帧 version 1）。
 
 ## 已执行

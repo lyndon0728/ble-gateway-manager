@@ -28,9 +28,25 @@ static void set(cJSON *j, const char *k, cJSON *v) {
     cJSON_DeleteItemFromObjectCaseSensitive(j, k);
     cJSON_AddItemToObject(j, k, v);
 }
+static void archive_proof(const cJSON *j,bool local) {
+    cJSON *proof=cJSON_Duplicate(j,true);
+    if(!proof)return;
+    if(local){set(proof,"component",cJSON_CreateString("GATEWAY"));
+        set(proof,"size",cJSON_Duplicate(cJSON_GetObjectItemCaseSensitive(j,"sizeBytes"),true));}
+    const char *component=gw_action_string(proof,"component");
+    if(!strcmp(component,"GATEWAY")||!strcmp(component,"NRF54")){
+        char key[32];snprintf(key,sizeof(key),"ota/proof/%s",component);
+        /* Failure lowers inventory evidence; it never undoes an already
+         * confirmed image or invents an artifact identity. */
+        (void)gw_store_put_json(key,proof);
+    }
+    cJSON_Delete(proof);
+}
 static esp_err_t phase(cJSON *j, const char *value) {
     set(j, "phase", cJSON_CreateString(value));
-    return gw_store_put_json(OTA_KEY, j);
+    esp_err_t e=gw_store_put_json(OTA_KEY, j);
+    if(e==ESP_OK&&!strcmp(value,"CONFIRMED"))archive_proof(j,false);
+    return e;
 }
 static bool safe_id(const char *s) {
     size_t n = strlen(s);
@@ -79,12 +95,11 @@ static int64_t expires_seconds(const char *s) {
     return ((int64_t)era * 146097 + doe - 719468) * 86400 + h * 3600 + minute * 60 + second - zone;
 }
 static bool task_budget(const cJSON *command, const cJSON *j, uint64_t *deadline) {
-    int64_t expires = expires_seconds(gw_action_string(command, "expiresAt")),
-            now = (int64_t)time(NULL);
+    int64_t expires = expires_seconds(gw_action_string(command, "expiresAt"));
     uint64_t mono = gw_core_mono_ms();
-    if (!gw_core_time_trusted() || expires <= now)
+    if (!gw_core_time_trusted() || expires <= 0)
         return false;
-    uint64_t limit = mono + (uint64_t)(expires - now) * 1000;
+    uint64_t limit = gw_core_time_deadline((uint64_t)expires * 1000);
     if (*deadline > limit)
         *deadline = limit;
     uint8_t boot[16];
@@ -502,6 +517,12 @@ static esp_err_t nrf_trial(cJSON *j, uint64_t deadline, cJSON **details) {
     if (strcmp(version, gw_action_string(j, "version"))) {
         if (!status[9])
             return ESP_ERR_NOT_FINISHED;
+        /* FINISH may have lost its reply before TEST was installed. Neither
+         * a new boot nor an arbitrary confirmed version proves rollback. */
+        const char *saved = gw_action_string(j, "phase");
+        if ((!strcmp(saved, "FINISH_INTENT")) ||
+            strcmp(version, gw_action_string(j, "previousVersion")))
+            return ESP_ERR_NOT_FINISHED;
         phase(j, "ROLLED_BACK");
         return ESP_ERR_INVALID_VERSION;
     }
@@ -544,10 +565,48 @@ static esp_err_t nrf_trial(cJSON *j, uint64_t deadline, cJSON **details) {
 static esp_err_t nrf_transfer(cJSON *j, uint64_t deadline, cJSON **details) {
     uint8_t boot[16], old[16], status[62], hash[32];
     uint32_t caps = 0;
-    if (!gw_nrf_identity(boot, &caps, NULL) || !(caps & (1u << 12)))
+    if (!gw_nrf_identity(boot, &caps, NULL)) {
+        uint64_t probe_deadline=gw_core_mono_ms()+1000;
+        if(probe_deadline>deadline)probe_deadline=deadline;
+        (void)gw_nrf_rehandshake((int64_t)probe_deadline);
+        if(!gw_nrf_identity(boot,&caps,NULL)) {
+#if CONFIG_GW_NRF_RESET_BOARD_VERIFIED
+            if(recovery_authorized&&!cJSON_GetObjectItemCaseSensitive(j,"recoveryIntent")&&
+               gw_core_mono_ms()+2000<deadline) {
+                cJSON *intent=cJSON_CreateObject();
+                cJSON_AddStringToObject(intent,"reason","UART_UNRESPONSIVE");
+                cJSON_AddStringToObject(intent,"state","ATTEMPT_INTENT");
+                cJSON_AddBoolToObject(intent,"ramLossBoundary",true);
+                set(j,"recoveryIntent",intent);
+                if(gw_store_put_json(OTA_KEY,j)!=ESP_OK)return ESP_ERR_NOT_FINISHED;
+                /* Existing task owns the maintenance lease. A persisted
+                 * attempt is never repeated after loss of its result. */
+                (void)gw_nrf_hardware_reset((int64_t)deadline);
+            }
+#endif
+            if(!gw_nrf_identity(boot,&caps,NULL))return ESP_ERR_NOT_FINISHED;
+        }
+    }
+    if (!(caps & (1u << 12)))
         return ESP_ERR_NOT_SUPPORTED;
-    if (!gw_action_hex(gw_action_string(j, "previousBoot"), old, 16) || memcmp(boot, old, 16))
-        return nrf_trial(j, deadline, details);
+    if (!gw_action_hex(gw_action_string(j, "previousBoot"), old, 16))
+        return ESP_ERR_INVALID_STATE;
+    if (memcmp(boot, old, 16)) {
+        const char *saved = gw_action_string(j, "phase");
+        if (!strcmp(saved, "FINISH_INTENT") || !strcmp(saved, "READY") ||
+            !strcmp(saved, "REBOOT_INTENT") || !strcmp(saved, "CONFIRMING") ||
+            !strcmp(saved, "CONFIRMED"))
+            return nrf_trial(j, deadline, details);
+        /* No FINISH intent was durably recorded: the old RAM upload is lost.
+         * Do not erase or confirm an unrelated unconfirmed image. A new task
+         * can authorize a fresh BEGIN at zero after this definite failure. */
+        esp_err_t interrupted = dfu_status(status, deadline);
+        if (interrupted != ESP_OK || status[8] != 0 || !status[9])
+            return ESP_ERR_NOT_FINISHED;
+        set(j, "failureReason", cJSON_CreateString("NRF_TRANSFER_INTERRUPTED"));
+        interrupted = phase(j, "FAILED");
+        return interrupted == ESP_OK ? ESP_FAIL : interrupted;
+    }
     esp_err_t e = dfu_status(status, deadline);
     if (e != ESP_OK)
         return e;
@@ -744,7 +803,8 @@ esp_err_t gw_ota_execute(const cJSON *command_json, uint64_t deadline, cJSON **d
         component = "GATEWAY";
     uint8_t boot[16], dfu[62];
     uint32_t caps;
-    if (!gw_nrf_identity(boot, &caps, NULL)) {
+    char previous_version[64];
+    if (!gw_nrf_identity(boot, &caps, previous_version)) {
         e = ESP_ERR_INVALID_STATE;
         goto done;
     }
@@ -786,6 +846,7 @@ esp_err_t gw_ota_execute(const cJSON *command_json, uint64_t deadline, cJSON **d
     char hex[33], session_text[24];
     gw_action_hex_encode(boot, 16, hex);
     cJSON_AddStringToObject(j, "previousBoot", hex);
+    cJSON_AddStringToObject(j, "previousVersion", previous_version);
     uint64_t session;
     do {
         esp_fill_random(&session, sizeof(session));
@@ -975,6 +1036,7 @@ static esp_err_t local_phase(const char *value) {
     if (e == ESP_OK) {
         cJSON_Delete(local_ota.journal);
         local_ota.journal = next;
+        if(!strcmp(value,"CONFIRMED"))archive_proof(next,true);
     } else
         cJSON_Delete(next);
     return e;

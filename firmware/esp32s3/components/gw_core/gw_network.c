@@ -4,7 +4,6 @@
 #include "esp_eth_netif_glue.h"
 #include "esp_eth_phy_ch390.h"
 #include "esp_event.h"
-#include "esp_sntp.h"
 #include "esp_timer.h"
 #include "esp_wifi.h"
 #include "freertos/task.h"
@@ -29,19 +28,12 @@ static SemaphoreHandle_t wifi_lock;
 static SemaphoreHandle_t scan_done;
 static bool scan_running, scan_fault;
 static uint32_t scan_status;
-static atomic_bool clock_synced;
 static atomic_bool ap_route_fault;
 static char uplinks[2][16];
 static unsigned uplink_count;
 
 uint64_t gw_core_mono_ms(void) {
   return (uint64_t)esp_timer_get_time() / 1000u;
-}
-static void clock_notification(struct timeval *tv) {
-  clock_synced = tv && tv->tv_sec >= 1735689600;
-}
-bool gw_core_time_trusted(void) {
-  return clock_synced && time(NULL) >= 1735689600;
 }
 static bool subnet_overlap(const esp_netif_ip_info_t *a,
                            const esp_netif_ip_info_t *b) {
@@ -273,13 +265,8 @@ esp_err_t gw_network_init(void) {
   if (e != ESP_OK)
     return e;
 #endif
-  char ntp[128];
-  if (gw_factory_get_string("ntp_server", ntp, sizeof(ntp)) == ESP_OK) {
-    esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
-    esp_sntp_setservername(0, strdup(ntp));
-    esp_sntp_set_time_sync_notification_cb(clock_notification);
-    esp_sntp_init();
-  }
+  /* Only GW-TIME-1 may set the system clock. Keep ntp_server factory metadata
+   * for compatibility, but never let an unauthenticated SNTP packet move it. */
   return xTaskCreate(retry_task, "gw_net_retry", 3072, NULL, 4, NULL) == pdPASS
              ? ESP_OK
              : ESP_ERR_NO_MEM;

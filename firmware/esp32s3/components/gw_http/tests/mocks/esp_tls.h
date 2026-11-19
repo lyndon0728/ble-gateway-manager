@@ -19,6 +19,7 @@ typedef enum {
 int esp_tls_get_conn_state(esp_tls_t *, esp_tls_conn_state_t *);
 typedef struct {
   const unsigned char *cacert_buf;
+  int (*crt_bundle_attach)(void *);
   unsigned cacert_bytes;
   const char *common_name;
   bool skip_common_name, non_block;

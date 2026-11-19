@@ -13,6 +13,7 @@ static struct gw_frame sent[64];
 static size_t sent_count;
 static unsigned radio_executions;
 static bool fail_tx;
+static bool dfu_active;
 
 int uart_callback_set(const struct device *d,mock_uart_callback_t cb,void *u)
 { ARG_UNUSED(d); ARG_UNUSED(u); mock_callback=cb; return 0; }
@@ -34,7 +35,7 @@ int gw_peripheral_init(void) { return 0; }
 int gw_dfu_init(void) { return 0; }
 void gw_dfu_poll(void) {}
 bool gw_dfu_available(void) { return false; }
-bool gw_dfu_active(void) { return false; }
+bool gw_dfu_active(void) { return dfu_active; }
 uint8_t gw_dfu_command(uint8_t op,const uint8_t *a,size_t n,uint8_t *o,size_t *l)
 { ARG_UNUSED(op); ARG_UNUSED(a); ARG_UNUSED(n); ARG_UNUSED(o); *l=0; return GW_UNSUPPORTED; }
 void gw_peripheral_poll(void) {}
@@ -59,7 +60,7 @@ static void reset_test(void)
     link_id=0; link_established=false; last_command=0; cached_request_length=0;
     ack_deadline_ms=next_batch_send_ms=sent_batch=0; retry_backoff_ms=250;
     dropped_full=bad_rx=retries=0; sent_count=radio_executions=mock_reboots=0;
-    fail_tx=false; mock_now=1000; mock_callback=uart_event;
+    fail_tx=false; dfu_active=false; mock_now=1000; mock_callback=uart_event;
     memset(boot_id,0x42,sizeof(boot_id));
 }
 static void feed(const struct gw_frame *f)
@@ -146,11 +147,23 @@ static void test_invalid_ack_and_fault(void)
     ack(15,id,2,0); assert(queue.fault && queue.count==1);
     size_t before=sent_count; mock_now+=10000; transmit_batch(); assert(sent_count==before);
 }
+static void test_v2_dispatch_and_dfu(void)
+{
+    reset_test();hello(16);struct gw_frame f=command(1,0);f.payload[0]=0x19;
+    feed(&f);assert(radio_executions==1&&sent[sent_count-1].payload[1]==GW_OK);
+    dfu_active=true;f.msg_id=2;feed(&f);
+    assert(radio_executions==1&&sent[sent_count-1].payload[1]==GW_BUSY);
+    f.msg_id=3;f.payload_len=1;f.payload[0]=0x1a;feed(&f);
+    assert(radio_executions==2&&sent[sent_count-1].payload[1]==GW_OK);
+    f.msg_id=4;f.payload[0]=0x1b;feed(&f);
+    assert(radio_executions==3&&sent[sent_count-1].payload[1]==GW_OK);
+}
 int main(void)
 {
     test_handshake_and_session(); test_command_idempotence_conflict();
     test_failed_response_cached(); test_relink_preserves_fifo();
     test_busy_freezes_batch_and_custody(); test_invalid_ack_and_fault();
-    puts("PASS: 6 app transport scenarios (real gw_app + gw_core; mock peripherals)");
+    test_v2_dispatch_and_dfu();
+    puts("PASS: 7 app transport scenarios (real gw_app + gw_core; mock peripherals)");
     return 0;
 }

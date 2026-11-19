@@ -28,7 +28,7 @@ func migrationChecksumMatches(raw []byte, saved string) bool {
 }
 
 func migrateExtensions(tx *sql.Tx, schemaName string) error {
-	const latest = 4
+	const latest = 5
 	var maximum int
 	if e := tx.QueryRow("SELECT COALESCE(MAX(version),0) FROM schema_migrations").Scan(&maximum); e != nil {
 		return e
@@ -66,6 +66,9 @@ func migrateExtensions(tx *sql.Tx, schemaName string) error {
 // resources are immutable; later extensions must use a new migration version.
 func extensionMigration(schemaName string, version int) ([]byte, error) {
 	prefix := strings.TrimSuffix(schemaName, ".sql")
+	if version == 5 && (prefix == "management" || prefix == "pipeline") {
+		return Assets.ReadFile("assets/" + prefix + ".v5.sql")
+	}
 	if version == 4 && (prefix == "management" || prefix == "pipeline") {
 		return Assets.ReadFile("assets/" + prefix + ".v4.sql")
 	}

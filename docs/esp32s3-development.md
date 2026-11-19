@@ -2,57 +2,58 @@
 
 | 项目 | 基线 |
 | --- | --- |
-| 文档版本 / 日期 | 1.4 / 2026-11-19 |
+| 文档版本 / 日期 | 1.5 / 2026-11-19 |
 | 输入需求 | [ESP32-S3 需求规格](esp32s3-requirements.md)：182 条需求、50 个验收用例 |
-| 对接对象 | [GW32-E2E-1.1 三方贯通标准](gateway-end-to-end-standard.md)；ESP 应用 0.2.1、nRF54L15 应用 0.2.0；UART 协议文档 1.2、线上 frame version=1（既有实现基线 1.1，新扩展待实现）；服务器既有 1.0/1.1 消息 |
-| 当前状态 | 设计已形成，ESP工程和平台配网扩展已有源码；验证状态见固件VALIDATION |
+| 对接对象 | [GW32-E2E-1.1 三方贯通标准](gateway-end-to-end-standard.md)；ESP应用0.3.0、nRF54L15配套V2固件；UART 协议文档 1.2、线上 frame version=1（旧设备兼容基线1.1，扩展按能力门控）；服务器既有 1.0/1.1 消息 |
+| 当前状态 | 0.3.0贯通源码已实施；主机/目标证据见固件VALIDATION，实板未验收 |
 | 配套文档 | [本地与远程配网](esp32s3-network-provisioning.md)、[本地与远程 OTA](esp32s3-ota.md)、[持久化与恢复设计](esp32s3-persistence.md)、[验证计划](esp32s3-validation-plan.md)、[文档维护约定](README.md) |
 
 本文把需求转为模块、接口、状态、恢复算法和开发步骤。2026-11-19已新增[固件工程](../firmware/esp32s3/README.md)；以下逻辑模块和拟议接口保留设计职责，实际组件合并、API及容量以源码和[实现决策](../firmware/esp32s3/IMPLEMENTATION.md)为准，测试证据见[验证记录](../firmware/esp32s3/VALIDATION.md)。设计中的名称不自动成为同名C接口或测试入口。线上字段仍以 [UART 协议](../server/docs/gateway-uart-protocol.md)、[服务器协议](../server/docs/gateway-protocol.md) 和两份 JSON Schema 为准。
 
-本版完善三方实施设计，保留 182 条原有 ESP 需求和 50 项验收；新增过滤需求/向量按 [BFLT 专项规范](beacon-filter-spec.md) 单独管理。跨端语义冲突采用 GW32-E2E-1.1；源码与标准的差距按同名 C01～C12 登记，不能用改写需求来掩盖。所有差距的唯一实施合同见 [统一实施方案](gateway-alignment-development-plan.md)，本文件给出 ESP 代码落点、调度/持久化和验收步骤。文档修订本身不触发线上 UART/JSON 版本变化；拟扩展字段必须经过能力协商和 Schema/固件共同发布。
+本版按0.3.0源码更新三方实施状态，保留 182 条原有 ESP 需求和 50 项验收；新增过滤需求/向量按 [BFLT 专项规范](beacon-filter-spec.md) 单独管理。跨端语义冲突采用 GW32-E2E-1.1；源码与标准的差距按同名C01～C12追踪；软件实施及剩余实板门槛见[实施记录](gateway-alignment-implementation.md)，不能用改写需求掩盖。所有差距的唯一实施合同见 [统一实施方案](gateway-alignment-development-plan.md)，本文件给出 ESP 代码落点、调度/持久化和验收步骤。文档修订本身不触发线上 UART/JSON 版本变化；拟扩展字段必须经过能力协商和 Schema/固件共同发布。
 
 ## 1. 开发约束与技术决策
 
 | 类别 | 决策 | 落地要求 |
 | --- | --- | --- |
 | 工程框架 | ESP-IDF v5.5.6 组件工程、FreeRTOS 和 C；协议/算法核心保持可主机编译 | 使用工程锁定依赖和同版 CI；目标构建记录与实板验收分别保存 |
-| BLE Host | 当前采用 NimBLE，支持范围按本机实现及运行时能力核验 | 版本选择已写入实现决策；可连接广播、绑定安全及共存差距逐项保留，不借 nRF 能力扩大 ESP 声明 |
+| BLE Host | 当前采用 NimBLE，支持范围按本机实现及运行时能力核验 | 版本选择已写入实现决策；已实现本机Peripheral和已有bond加密，首次配对不开放；共存按独立能力及板验证门控 |
 | 芯片通信 | 一条 UART1，单控制请求，异步 RX/TX/持久完成事件 | 重用协议向量，不使用通用 AT 命令替换已有二进制协议 |
 | 存储 | 每个后端串行提交，提交后确认，恢复后重建索引 | 当前低频对象用加密 NVS 快照，高频采集用 gwspool 记录/轮转根；具体原子边界见实现决策，等效实现仍须满足持久化契约 |
 | 外部 JSON | 有界解析、严格字段、无损整数、持久保存服务器摘要 | 不对含 desiredRevision 的最终命令重新计算原 TaskRequest 摘要 |
 | 业务并发 | 一个网关任务执行所有者；UART、接管、网络和存储继续独立推进 | 不能把一次 30 s DFU 响应等待写成阻塞整个主循环 |
-| SDK / 板版本 | SDK/BLE Host 已锁定，CH390 组件为 0.4.1；目标板引脚单独冻结 | 不猜 CH390H/按钮 GPIO，不把 Oct29 板定义自动用于新 PCB；GPIO8 受控复位链仍须补实现与实测 |
+| SDK / 板版本 | SDK/BLE Host 已锁定，CH390 组件为 0.4.1；目标板引脚单独冻结 | 不猜 CH390H/按钮 GPIO，不把 Oct29 板定义自动用于新 PCB；受控reset接口已实现但默认关闭，GPIO/时序及回退必须实测 |
 | 文档 | 后续新增和更新的项目说明统一 Markdown `.md` | JSON/YAML/CSV 等机器契约或真实配置保持其原生格式，不把它们误改为文档 |
 
 ESP-IDF 的组件模型和 `idf.py` 构建入口用于组织目标工程；FreeRTOS 的核亲和、栈参数和同步 API 必须按锁定的 IDF 版本核对，不能套用其他 FreeRTOS 移植的默认约定。[组件构建](https://docs.espressif.com/projects/esp-idf/en/v5.5.6/esp32s3/api-guides/build-system.html) · [IDF FreeRTOS](https://docs.espressif.com/projects/esp-idf/en/v5.5.6/esp32s3/api-reference/system/freertos_idf.html)
 
 ### 1.1 三方映射与当前实现差距
 
-| 跨端路径 | 固定映射及实现入口 | 必须补齐或验证的证据 |
+| 跨端路径 | 0.3.0实现入口 | 证据与边界 |
 | --- | --- | --- |
-| 平台 CONFIGURE → nRF 扫描 | `gw_cloud → gw_actions → gw_nrf_scan`；完整目标 → 0x05/0x06，旧基本扫描兼容语义见 UART 协议 | revision 无损、null RSSI 清除、16/32/128 位 UUID 等价匹配、厂商与 Beacon 掩码过滤；相同业务双路目标由平台分别下发，ESP 不自动改另一侧（C10） |
-| 平台 CONFIGURE → 广播 | `gw_actions → gw_nrf_advertise` 或 `gw_ble_configure`；保存原补丁及合并后的完整目标 | nRF 现执行 0x07/0x08，仅回显配置还不足以确认实际状态；须补 0x0C 读回、PAUSED/FAULT/最后错误及恢复证据（C03）。ESP 当前拒绝可连接模式，保留能力门控和实现差距（C07） |
-| nRF 观测 → ESP → 平台 | UART 0x20/0x21/0x22 → `gw_capture/gw_spool`；ADV/GATT 原始事件按 1.1 上传，Peripheral 进入独立 inbox | 同事务观测/水位、CUSTODY、跨源一对一去重、稳定事件身份、RAW_PERSISTED；Peripheral 业务认证和平台回发按统一开发方案C05实现，机器合同尚未部署 |
-| UUID 规则 → GATT | 平台创建任务，ESP 检查新鲜 nRF ADV；`gw_actions/gw_gatt` 维护动作、连接和证据 | 规范 UUID 不改写原始 AD；自动连接 radio=NRF54；0x17 终态持久后才推进下一 op_seq；本机绑定安全差距按 C07 管理 |
-| 平台传输 | `gw_http/gw_cloud` 当前实现 HTTPS 设备入口 | MQTT 为保留的产品需求，须补同一任务 journal、spool、应用 ACK 和切换重试路径（C02），不得把 HTTPS 已存在写成双传输均实现 |
-| 本地/远程配网 | `gw_provision → gw_core`；`gw_cloud` 执行远程凭据领取/回执、本地 probe 和状态同步；平台 network_provisioning 扩展 | 源码/Schema 已存在（C01）；仍需真实手机、接口绑定、断网/掉电、双入口竞态验收。设备全量快照恢复缺口为 C08，时间信任差距为 C09 |
-| GATEWAY OTA | `gw_actions/gw_ota`；本地 uploadId 与远程 taskId 分开，均走非运行槽和 90 s 试启动 | 本地离线恢复不依赖服务器/UTC；远程仍检查授权时限，成功结果等待 RESULT_PERSISTED；完整回滚证据待实板验收 |
-| NRF54 OTA | `gw_actions/gw_ota → gw_nrf`；0x30～0x37，默认 120 s 试启动 | GPIO8 当前仅释放为输入，挂死时受控复位/回退链待补（C04）；平台独立 nRF 可信源版本登记待补（C06），不可用 ESP 版本绕过 |
-| NRF54 OTA 重启恢复 | `gw_ota.nrf_transfer` 当前遇 boot 变化直接转 `nrf_trial` | 按 journal 分辨传输中断与试启动，不能直接将旧镜像判作回滚；旧会话失效，允许重新传输时须有效授权、新 BEGIN、offset=0（C11） |
+| CONFIGURE→扫描 | gw_cloud→gw_actions→gw_nrf_scan/gw_ble_configure；gw_scan_config编译完整目标 | V2按具名能力及nRF HELLO bit13用0x19/1A/1B；旧设备0x05/06且拒绝V2，不暗改另一路 |
+| CONFIGURE→广播 | gw_nrf_advertise/gw_radio_evidence或本机NimBLE | 配置全字节及实际ACTIVE/STOPPED；PAUSED核真实连接，FAULT/缺证据不成功 |
+| 观测→平台 | UART→gw_capture/spool→gw_transport | CUSTODY及RAW_PERSISTED分开；严格跨源一对一去重保持原字节 |
+| Peripheral→业务 | 本机固定服务/nRF独立inbox→gw_peripheral→平台 | 独立Security2身份、PG分片、route授权、持久STORED与平台ACK；不是RawEvent或配网管理入口 |
+| GATT | gw_ble/gw_gatt_nrf及动作journal | 自动规则只选NRF54；BONDED_ENCRYPTED只用已有bond并核实际加密，缺bond拒绝 |
+| 双传输 | gw_transport→MQTT/HTTPS，共用gw_cloud业务入口 | PUBACK不确认业务；制造选择HTTPS/MQTT/AUTO，具名接口候选探测仍走绑定HTTPS |
+| 配网与恢复 | gw_provision/gw_core；gw_sync完整快照和受控恢复来源 | localOverride/generation/CAS保留；不完整快照不恢复，真实手机/网络验收仍需实板 |
+| GATEWAY OTA | gw_actions/gw_ota，本地及远程入口共用应用槽 | 本地离线按单调授权；远程按签名时间锚；实际试启动确认后结果落盘 |
+| NRF54 OTA | UART DFU与分阶段journal恢复、gw_nrf_hardware_reset | 传输中断/FINISH歧义/试启动分开；reset默认禁用，需板验证和持久意图 |
+| 库存、能力与时间 | gw_sync、gw_authority/gw_crypto、gw_signed_time/gw_time | 组件挑战/镜像/boot独立；能力为授权/实现/HELLO/板验证交集；签名UTC区间约束TTL和TLS |
 
-当前具体代码状态可从 [nRF 适配器](../firmware/esp32s3/components/gw_nrf/gw_nrf.c)、[动作调度](../firmware/esp32s3/components/gw_actions/gw_actions.c)、[本机 BLE](../firmware/esp32s3/components/gw_actions/gw_ble.c)、[云端适配器](../firmware/esp32s3/components/gw_cloud/gw_cloud.c)核对。表中的“须补”是后续源码工作单，不表示本次已修改源码。能力发布与验收必须逐目标核对实现、nRF HELLO 和真实验证结果，不能仅凭型号或静态平台清单。
+源码已覆盖上表路径，最终测试与构建证据见[VALIDATION](../firmware/esp32s3/VALIDATION.md)。驱动状态不证明空口接收，目标构建不证明实板通过；发布能力仍需对应制造与板级证据。
 
 ### 1.2 联调顺序与不变量
 
 1. 以统一标准固定字段、枚举、单位和版本域；配置使用 `radios.nrf54/esp32`，GATT 使用 `NRF54/ESP32`，OTA 使用 `NRF54/GATEWAY`。不私改 Schema 名称或将本地 API 的十进制字符串套入云端数值字段。
 2. 平台创建持久任务，ESP 保留原 requestDigest 和完整命令；先持久意图，再执行每个 UART/本机动作，按其真实终态生成结果。局部补丁、完整目标、实际状态分别保存。
 3. 按扫描 → 去重/上传 → UUID 自动连接/GATT → 广播 → 双入口配网 → 双组件 OTA 验证端到端闭环；串口控制、数据接管和任务结果分别取证。测试需包含功能交叠及恢复，不能仅逐接口返回 OK。
-4. 复用原 50 项验收编号，给每个 C01～C12 记录关联用例、三方提交号和证据；实现缺口关闭后再进行真实设备验收。本次文档一致性检查不产生硬件通过记录。
+4. 复用原 50 项验收编号，给每个 C01～C12 记录关联用例、三方提交号和证据；实现缺口关闭后再进行真实设备验收。源码/主机/目标验证均不产生未经执行的硬件通过记录。
 
 ### 1.3 差距实施工作单与唯一合同
 
-下表把 [统一实施方案](gateway-alignment-development-plan.md) 分配到 ESP 现有组件。拟议内部组件/接口可按工程结构合并；外部字段、错误码和迁移版本只引用统一合同，不能在本表单独定义第二套协议。下列“交付物”都仍待源码实现，不把文档冻结等同于开发完成。
+下表把 [统一实施方案](gateway-alignment-development-plan.md) 分配到 ESP 现有组件。拟议内部组件/接口可按工程结构合并；外部字段、错误码和迁移版本只引用统一合同，不能在本表单独定义第二套协议。下列交付物已有0.3.0源码，对应关闭证据仍按各层执行结果管理，尤其不以软件验证代替实板放行。
 
 | 差距 | 主要代码落点 | 交付物 | 关闭证据 |
 | --- | --- | --- | --- |
@@ -109,6 +110,21 @@ firmware/esp32s3/
 依赖方向：驱动/编解码产生内部事件，业务提交状态变更和存储请求，完成事件返回原所有者。`gw_store` 不调用 BLE、网络或 UART；`gw_codec` 不调用任何驱动；`gw_cloud` 不直接触发 reset/GATT/OTA。避免命令模块与底层回调相互同步调用。
 
 可复用 nRF [gw_core.c](../firmware/nrf54l15/src/gw_core.c) 中的帧/字节序算法及黄金向量；不能把其中的 nRF RAM FIFO 当作 ESP 持久队列，也不能把 Zephyr API 带入 ESP 编译单元。首次复用先做字节级对照测试并明确维护位置，避免两个不一致的协议副本。
+
+### 2.1 0.3.0实际组件补充
+
+| 组件/文件 | 实际职责 |
+| --- | --- |
+| gw_authority / gw_crypto | 验制造清单双层签名、摘要与本机身份；公共Ed25519验证；授权清单和板验证清单分别保存 |
+| gw_transport | 有界MQTT消息、订阅就绪、传输选择、共享应用ACK；不把PUBACK作为业务成功 |
+| gw_core/gw_time、gw_cloud/gw_signed_time | nonce/boot签名挑战，UTC上下界与60s锚，单调任务预算 |
+| gw_http/gw_http_time、gw_http_tls_bounds | 无凭据时间传输及可信区间的TLS日期核验，保留CA/主机名检查 |
+| gw_cloud/gw_sync | 组件挑战/镜像盘点、运行能力交集、完整快照校验及来源绑定恢复 |
+| gw_peripheral | 独立Security2业务会话、PG分片/长度/序号、route授权、持久事件/应用ACK及回发 |
+| gw_actions/gw_ble、gw_nrf/gw_scan_config | 本机Peripheral/已有bond恢复、无线互斥；统一V2 JSON编译，driver/UART实际状态核验 |
+| gw_wire→nRF共享核心 | 直接编译gw_core.c及gw_filter_v2.c，两侧用同一掩码/REPORT/PAIR规则 |
+
+总连接预算为一，Central/Peripheral互斥；扫描与广播冲突在完整目标检查时拒绝，原目标不被隐式修改。动作与断连恢复共用radio锁；BLE回调不执行Flash/网络，PAIR水位仅在更早输入都已发布/处理后推进。
 
 ## 3. 任务、所有者和缓冲
 
@@ -190,7 +206,7 @@ stateDiagram-v2
 
 维护三种时间：`mono_ms`（本次ESP启动内deadline）、nRF采集单调时钟映射、UTC锚。时间锚带两端启动ID、采样时刻、RTT与误差；TIME_PROBE样本必须未重试且扣除nRF处理时间后的净RTT在0～50 ms。用于某观测的锚须满足其capture_ms距锚≤60 s；不能用新锚给久积压观测强行校时。UTC跳变重建锚，已定稿事件不变。
 
-任务在可信UTC下把expiresAt映射到本启动的单调deadline；GATT还取timeoutMs的较早截止。校时变化后重新审查，但不得让已过期任务重新有效或扩大既有操作预算；ESP重启后不能继续使用旧mono deadline。当前实现使用制造指定 SNTP 服务器校时，该时间源未做密码学认证，时间信任与安全冷启动仍按 C09 验收；不能将“已同步”直接写成“可信时间已验收”，也不能通过禁用TLS校验解决。
+任务在可信UTC下把expiresAt映射到本启动的单调deadline；GATT还取timeoutMs的较早截止。校时变化后重新审查，但不得让已过期任务重新有效或扩大既有操作预算；ESP重启后不能继续使用旧mono deadline。当前gw_signed_time验证独立Ed25519时间公钥、nonce及boot绑定，gw_time保存UTC上下界和单调锚；SNTP只作候选。100ppm制造上界必须有板级依据，锚失效不授权新远程副作用；TLS按整个可信区间验证证书日期，不能跳过CA/主机名校验。
 
 ### 5.1 可信时间实施路径（C09）
 
@@ -264,7 +280,7 @@ valid_frame(type=20/21/22)
 
 ### 7.3 Beacon V2 配置与执行流水线
 
-完整外部字段和向量以 [Beacon 过滤规范](beacon-filter-spec.md) 为准。UART 扩展由 [UART 1.2](../server/docs/gateway-uart-protocol.md) 定义：HELLO bit13 门控，0x19/0x1A 写入/读回完整 ScanProfileV2，0x1B 查询过滤状态/计数；线上帧 version 仍为1。当前源码只有旧单报告过滤路径，本节是下一阶段实现设计。
+完整外部字段和向量以 [Beacon 过滤规范](beacon-filter-spec.md) 为准。UART 扩展由 [UART 1.2](../server/docs/gateway-uart-protocol.md) 定义：HELLO bit13 门控，0x19/0x1A 写入/读回完整 ScanProfileV2，0x1B 查询过滤状态/计数；线上帧 version 仍为1。0.3.0已把gw_filter_v2作为两radio共享实现；下述流程对应现行代码。具名能力为NRF54_BLE_FILTER_V2和ESP32_BLE_FILTER_V2，制造授权与板验证独立。
 
 ```text
 平台补丁 → 校验版本/目标能力 → 合并本组持久完整目标
@@ -277,7 +293,7 @@ valid_frame(type=20/21/22)
 - RSSI 默认 RANGE 含边界比较；显式 BITS 才使用 i8 的原始补码字节做掩码。无效 RSSI 不参与碰巧命中的位比较，iBeacon measured power 与 RSSI 是不同来源。
 - 同一规则内所有启用谓词 AND；外层顺序与 action 语义按专项规范。不得把复合规则拆成多个旧 first-match 规则，也不允许丢弃不支持条件后继续成功。
 - legacy `beaconRules` 与 V2 不得同时非空。整组切换在一个配置事务内进行；UART 完整 profile 编码不得超过3070字节，超限拒绝且保留原目标。能力不足或新旧混合部署时不能发送未知opcode或静默降级。
-- 规则配置采用不可变快照；回调仅短时取得快照/复制原始报告，不等待配对、不执行网络、不做 Flash 提交。`gw_ble` 当前直接调用 `gw_filter_match`，需将 V2 配对交给有界队列后的独占执行上下文；保留 `filter_duplicates=0`，不得删掉后续周期广播。
+- 规则配置采用不可变快照；回调仅短时取得快照/复制原始报告，不等待配对、不执行网络、不做 Flash 提交。`gw_ble`使用32项原始输入环队列，worker调用共享引擎，输入发布/水位推进同锁且输入队列+PAIR状态静态断言≤4096B；保留 `filter_duplicates=0`，不得删掉后续周期广播。
 - nRF 在自身扫描路径执行 V2，ESP 本机在自己的路径执行相同纯过滤核心与配对算法；ESP 不拿另一 radio 的字段“补齐”nRF未命中的规则。配置读回、同 revision 不同内容冲突和重启恢复均沿用既有事务原则。
 
 #### 7.3.1 REPORT 与 PAIR 的边界
@@ -300,7 +316,7 @@ REPORT 只处理一条完整报告。PAIR 是 `ADV_SCAN_RSP_PAIR` 的简称，�
 
 输入JSON采用有界token解析或能保留整数原始字面的等效实现；revision、sequence和计数不得先转换double再截回u64。检查UTF-8、字段集合、数组上限、Base64和数值范围后才分配业务对象。不得只依赖云端已经校验而跳过设备边界。
 
-MQTT与HTTPS必须共享同一持久对象和结果队列；当前 0.2.1 仅实现 HTTPS 设备路径，MQTT 补齐项见 C02。每个发送尝试带传输实例ID、身份、batch/result关联和deadline，响应只能推进对应对象。MQTT PUBACK只更新传输统计，不能触发事件回收。设备身份不随接口、IP或重连改变。
+MQTT与HTTPS必须共享同一持久对象和结果队列；0.3.0的gw_transport已实现MQTT和HTTPS共用入口，制造cloud_link选择HTTPS/MQTT/AUTO。每个发送尝试带传输实例ID、身份、batch/result关联和deadline，响应只能推进对应对象。MQTT PUBACK只更新传输统计，不能触发事件回收。设备身份不随接口、IP或重连改变。
 
 | 流 | 版本与匹配 | 持久后动作 |
 | --- | --- | --- |
@@ -403,7 +419,7 @@ gw_provision提供限时SoftAP及手机/笔记本浏览器页面，静态资源�
 
 | 操作 | 资源 | 当前可接受组合 |
 | --- | --- | --- |
-| 扫描/广播配置 | 对应radio配置组 + UART控制步 | nRF扫描与广播互斥，不能暗中停止另一目标 |
+| 扫描/广播配置 | 对应radio配置组 + UART控制步 | 两个radio各自扫描与广播互斥，不能暗中停止另一目标 |
 | Central动作 | 连接所有权 + 单GATT动作 + UART控制步 | nRF自身按已保存扫描目标暂停/恢复；广播或Peripheral冲突需明确协调 |
 | NRF54 OTA | 网关升级租约 + nRF维护 + 制品暂存 + 每次UART控制步 | 不与ESP OTA、网关REBOOT、网络候选试用并行 |
 | GATEWAY OTA / REBOOT | 网关维护 + 存储恢复兼容性 + 当前nRF义务对账 | 不打断nRF传输、READY处理或试启动确认 |
@@ -421,7 +437,7 @@ gw_provision提供限时SoftAP及手机/笔记本浏览器页面，静态资源�
 - 可连接模式要求该目标的ADV+PERIPHERAL能力；手机已连时PAUSED可以正常，enabled=false不等于断开手机。
 - 恢复配置来源只能是原持久目标或后续服务器配置任务；不创造临时revision。nRF BEGIN的维护暂停和Central自暂停不修改配置revision。
 
-上述为要求的完整路径。当前 gw_nrf_advertise 只执行 0x07 写入及 0x08 配置读回，没有完成 0x0C 实际状态核对（C03）；后续补实现时，bit10 可用须读 0x0C，旧兼容路径按协议通过 0x08/0x09 取得足够证据。不能把可选的 0x0B 优化当成取消实际状态核验的理由。广播字段没有可直接设置 RF 发射功率的属性；载荷中的 Tx Power/测距参考字节仍只是内容，不能赋予隐藏控制含义。
+上述为要求的完整路径。0.3.0的gw_nrf_advertise先0x07/08核完整配置，再以bit10的0x0C核实际状态；旧兼容路径用0x09。PAUSED还查0x0D活跃Peripheral，证据不明保留UNKNOWN。不能把可选的 0x0B 优化当成取消实际状态核验的理由。广播字段没有可直接设置 RF 发射功率的属性；载荷中的 Tx Power/测距参考字节仍只是内容，不能赋予隐藏控制含义。
 
 ESP自己的BLE扫描/广播必须有独立驱动验证和能力声明；不能因nRF支持而授予ESP32_BLE_PERIPHERAL。Wi-Fi共存参数与扫描空档归入压力验证，不在此承诺同步双扫描无损。
 
@@ -437,7 +453,7 @@ ESP自己的BLE扫描/广播必须有独立驱动验证和能力声明；不能�
 | 配置不一致、无可解释暂停、错误或FAULT | 不报成功；保留实际/错误并进入既有恢复，不能仅靠revision相同掩盖失败 |
 | 读回超时/结果不明 | 保留意图和证据并对账；不得重新分配revision盲重做 |
 
-本机Peripheral需独立注册服务、连接/订阅生命周期、认证路由及背压，实现后才开放ESP32相应能力。已有bond加密连接从受保护绑定存储加载并核实际安全级别；缺bond或安全级别不足不得降级成UNENCRYPTED，也不自动触发首次配对。初次配对管理仍按既有扩展范围处理，不借本轮实现目标扩大产品功能。平台自动连接目标仍为NRF54；手动GATT按原radio路由。
+本机已独立注册与nRF相同UUID的INFO/RX/TX服务、连接/订阅生命周期及背压；gw_peripheral提供业务认证/路由。只有制造授权与板验证交集允许才发布ESP32_BLE_PERIPHERAL。已有bond加密连接从受保护绑定存储加载并核实际安全级别；gw_store以既有制造密钥显式secure_init默认nvs分区，gw_ble_bonds在host启动前校验nimble_bond记录、SDK恢复后核原安全材料与数量，错误阻止BLE启动且不清库；缺bond或安全级别不足不得降级成UNENCRYPTED，也不自动触发首次配对。初次配对管理仍按既有扩展范围处理，不借本轮实现目标扩大产品功能。平台自动连接目标仍为NRF54；手动GATT按原radio路由。
 
 ### 11.4 受控 nRF 复位恢复（C04）
 
@@ -448,9 +464,9 @@ ESP自己的BLE扫描/广播必须有独立驱动验证和能力声明；不能�
 → 优先OTA阶段恢复 → GATT未决结果对账 → 恢复已提交无线目标
 ```
 
-`recoveryIntent` 是计划内部记录，包含原因、原boot、关联任务或本地原因、数据接管水位、升级阶段、已核验板级策略及尝试次数。普通UART超时只触发有界重试/重握手；FIFO FAULT、已核验挂死等恢复条件必须先确定未接管RAM数据影响，不能通过复位掩盖丢失。已发物理动作在无法证明时保留UNKNOWN，不因reset自动重做。
+`recoveryIntent`是升级恢复的持久内部记录，包含原因、原boot、关联任务或本地原因、数据接管水位、升级阶段、已核验板级策略及尝试次数。普通UART超时只触发有界重试/重握手；FIFO FAULT、已核验挂死等恢复条件必须先确定未接管RAM数据影响，不能通过复位掩盖丢失。已发物理动作在无法证明时保留UNKNOWN，不因reset自动重做。
 
-实际GPIO、电气释放方式、拉低时间和复位后等待预算使用经实板核实的板级配置，本轮不新增猜测引脚或时序。持久尝试计数和有限恢复预算跨ESP重启保留，超过上限保持维护/诊断，不能形成连续复位循环。未确认镜像由C11阶段决策优先处理，reset自身不证明已回退；必须核新boot及实际镜像。
+实际GPIO、电气释放方式、拉低时间和释放后等待须使用核实板配置。GW_NRF_RESET_BOARD_VERIFIED默认关闭；启用后gw_nrf_hardware_reset以开漏拉低/输入释放且核新boot，默认参数不是已验证板证据。持久尝试计数和有限恢复预算跨ESP重启保留，超过上限保持维护/诊断，不能形成连续复位循环。未确认镜像由C11阶段决策优先处理，reset自身不证明已回退；必须核新boot及实际镜像。
 
 ## 12. GATT 和 Peripheral 适配器
 
@@ -475,7 +491,7 @@ ESP重启但nRF仍活时，先GET_OP_RESULT对账旧动作再关闭遗留连接�
 
 ### 12.2 Peripheral 路径
 
-0x22数据先持久到独立inbox，键包含nRF启动、角色、peripheral_conn_id及采集身份；不能把channel=1当GATT句柄。认证/授权/重放防护之后才进入业务适配器。当前没有云端RX事件类型或公开回复任务，这一适配器在统一方案的版本化契约与实现共同部署前保持受限状态；具体认证、消息/业务ACK、回发和断开接口仅引用 [统一实施方案](gateway-alignment-development-plan.md)，不借用现有RawEvent/GATT字段。
+0x22数据先持久到独立inbox，键包含nRF启动、角色、peripheral_conn_id及采集身份；不能把channel=1当GATT句柄。认证/授权/重放防护之后才进入业务适配器。0.3.0通过独立业务事件/ACK及PERIPHERAL_NOTIFY/PERIPHERAL_DISCONNECT贯通，只有独立业务Security2凭据、route授权及完整持久证据满足时才处理；具体认证、消息/业务ACK、回发和断开接口仅引用 [统一实施方案](gateway-alignment-development-plan.md)，不借用现有RawEvent/GATT字段。
 
 回复持久业务事务与tx_seq再调用0x0E；同seq同内容可回放最近受理，不存在GET_TX_RESULT。断连/确认丢失时不自动分配新seq重做业务。手机ATT Write Response仅说明nRF RAM接收，Notify OK仅说明栈受理；业务送达需应用ACK。
 
@@ -522,9 +538,9 @@ BEGIN不是删除现有RAM FIFO；开始维护后可一边下载一边接管剩�
 
 试运行确认使用nRF的confirm_remaining_ms预算（默认窗口120 s）；UART长等待30 s不代表可无限重试。健康项目在实施前冻结且可在预算内完成；没有有效任务授权、时间判断或健康/镜像证据就不确认。运行主循环超时可复位，挂死按板级受控reset触发MCUboot回退，恢复后核查真实镜像。
 
-成功详情沿用component=NRF54、firmwareVersion、nrfBootId、bootConfirmed、imageSha256。nRF源版本没有独立服务器登记，非空fromFirmwareVersions受当前服务端限制，不能拿ESP版本替代。错误MCUboot签名可能直到启动才被拒绝，不保证FINISH阶段能识别。
+成功详情沿用component=NRF54、firmwareVersion、nrfBootId、bootConfirmed、imageSha256。gw_sync按组件挑战核实际镜像/boot并独立登记nRF库存，服务端按可信证据处理fromFirmwareVersions，不用ESP版本替代。错误MCUboot签名可能直到启动才被拒绝，不保证FINISH阶段能识别。
 
-**当前恢复缺口 C11：** [gw_ota.c](../firmware/esp32s3/components/gw_actions/gw_ota.c) 的 nrf_transfer 对 boot 变化直接调用 nrf_trial，后者可能因仍运行已确认旧版本而记录 ROLLED_BACK，没有先按持久阶段分辨传输中断。后续源码必须按上表分支恢复，保留 FINISH 意图不明时的镜像核验；不能跨 boot 续传旧 RAM 会话，也不能无有效授权自动 BEGIN。是否重新开始由既有授权和恢复策略决定。本次仅记录差距，原 ESP-AT-28/36 应覆盖传输中重启与 FINISH/READY 后重启两类证据。
+**C11源码状态：** gw_ota现依持久阶段区分传输中断、FINISH结果不明、试启动和已确认镜像。跨boot旧RAM session/offset失效，传输中断不误报ROLLED_BACK；新BEGIN仍须有效授权与明确恢复策略。ESP-AT-28/36继续覆盖传输途中和FINISH/READY后重启，真实MCUboot回退需实板取证。
 
 ### 13.3 ESP 自身 OTA
 
@@ -645,7 +661,7 @@ idf.py -B build-gw32 size
 | 板版本、CH390H/开窗 GPIO 及受控 nRF reset | 新板网口/现场开窗可用、nRF 挂死自动回退 | IDF v5.5.6/NimBLE/CH390 0.4.1 已锁定；另记录实际引脚、复位电路与板上验证，不能将二者混为未选 SDK |
 | Flash布局/后端/寿命/GC | 离线容量与掉电可靠性 | 分区、记录格式版本、最大镜像、写放大和故障注入 |
 | UTC引导与凭据制造 | 安全冷启动和TTL任务执行 | 信任根、时间来源、密钥轮换及恢复流程 |
-| BLE Peripheral认证/云端合同实施 | BLE手机业务或云端双向闭环 | 方案按统一实施文档；Schema/权限/业务ACK/抗重放共同落地，与Wi-Fi网页配网分开 |
+| BLE Peripheral认证/云端合同实板验收 | 生产手机业务或云端双向闭环 | 0.3.0源码已接Schema/权限/业务ACK/抗重放；须部署并完成手机/链路验收，与Wi-Fi网页配网分开 |
 | 本地网页/平台配网部署与实板验收 | 生产环境安全浏览器配网和双入口网络闭环 | 源码/Schema 已存在；补开窗、制造凭据、浏览器兼容与网页信任、共同部署及真实双接口证据 |
 | 绑定预置及维护 | 通用加密配对管理 | 当前仅预置bond；后续命令/工具及授权 |
 | 双组件健康与安全版本 | 可生产OTA、硬件防降级 | 健康预算、回滚/救援、密钥与不可逆制造步骤 |
@@ -664,4 +680,4 @@ idf.py -B build-gw32 size
 - [NVS与持久对象边界](https://docs.espressif.com/projects/esp-idf/en/v5.5.6/esp32s3/api-reference/storage/nvs_flash.html)。
 - [应用OTA与回滚](https://docs.espressif.com/projects/esp-idf/en/v5.5.6/esp32s3/api-reference/system/ota.html)。
 
-Nordic端接口采用仓库已有nRF 0.2.0源码及UART协议，本次不更改NCS版本、板定义或nRF固件。
+Nordic侧配套源码增加V2配置/共享过滤/状态接口；NCS基线及板定义的具体状态由nRF工程记录，不因ESP文档版本自动改变。

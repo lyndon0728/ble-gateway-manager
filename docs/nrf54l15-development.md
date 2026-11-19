@@ -1,6 +1,6 @@
 # nRF54L15 开发与三方接口贯通规范
 
-文档版本：1.1；更新日期：2026-11-19；共同标准：**GW32-E2E-1.1**；核对源码：`9533a14`，nRF `0.2.0` / ESP `0.2.1`。本轮完善规划合同与开发步骤，Beacon V2待实现；不是源码修复或整机联调完成声明。
+文档版本：1.2；更新日期：2026-11-19；共同标准：**GW32-E2E-1.1**；对应 nRF `0.3.0`。Beacon V2共享引擎和真实radio/app接入已完成主机回归；NCS目标、实板与整机空口验收仍独立记录。跨端实施状态见 [贯通实现记录](gateway-alignment-implementation.md)。
 
 ## 1. 开发依据
 
@@ -88,7 +88,7 @@ HELLO 请求为 `0x01` 空 payload；应答 `0x81` 为 boot[16]、caps:u32、版
 | Central 动作 | `10～16`、`18` | 接受时 op_seq 8 B | `17 GET_OP_RESULT` 取得终态；连接后还要读实际连接信息 |
 | nRF 升级 | `30～37` | 30～34 为 62 B；35～37 为空 | 新 boot + 版本 + 健康 + 当前槽 SHA + running_confirmed |
 
-当前旧引擎以 `SET_SCAN_PROFILE` 为完整入口，即便rule_count=0也不用其他含糊字段。规划V2使用0x19/0x1A完整包装，并以0x1B读实际状态；活跃V2时旧0x01/0x05/0x06返回CONFLICT，0x02只有基础子集。退回旧引擎必须显式0x19 engine=0，不能靠旧SET清除新规则。
+旧引擎继续支持 `SET_SCAN_PROFILE` 完整入口。0.3.0 的V2使用0x19/0x1A完整包装，并以0x1B读实际状态；活跃V2时旧0x01/0x05/0x06返回CONFLICT，0x02只有基础子集。退回旧引擎必须显式0x19 engine=0，不能靠旧SET清除新规则。
 
 ## 5. 扫描配置与 UUID 规则
 
@@ -109,17 +109,17 @@ HELLO 请求为 `0x01` 空 payload；应答 `0x81` 为 boot[16]、caps:u32、版
 
 规则最多 8 条；`offset` 从 AD 的 Data 起算，不含 Length/Type；value/mask 等长 1～24 B，mask 至少一位非零，offset+n≤254。匹配不能把两个同 type 的 AD 拼起来。扩展报告 kind 位可留作合同兼容，当前未声明 bit0 时不能实际发送 EXT 报告。
 
-### 5.3 Beacon V2实现设计（规划）
+### 5.3 Beacon V2实现（0.3.0）
 
-V2保持旧引擎行为与已有配置有效性，新增独立 `engine=V2`。所有新内容都按 [Beacon规范](beacon-filter-spec.md) 和 [UART 1.2 V2章节](../server/docs/gateway-uart-protocol.md#beacon-v2-组合掩码扩展规划待实现) 实施；不得把下面的计划结构写成当前已存在的函数。
+V2保持旧引擎行为与已有配置有效性，新增独立 `engine=V2`。编码和语义以 [Beacon规范](beacon-filter-spec.md) 和 [UART 1.2](../server/docs/gateway-uart-protocol.md) 为准，实际模块如下。
 
-| 开发位置 | 计划改动 | 必须保持的边界 |
+| 开发位置 | 已实现内容 | 必须保持的边界 |
 | --- | --- | --- |
-| `gw_core.c/h`，可拆计划 `gw_filter_v2.c/h` | V2配置解析/编码、typed谓词、AD合法性、字段掩码及完整上下文判定 | 纯C、无SDK依赖，由ESP共享相同源码；旧gw_filter_match的原行为不回写改变 |
+| `gw_filter_v2.c/h` | `parse/encode/feed/advance/clear/status`实现完整包装、字段掩码、REPORT/PAIR与计数 | 纯C、无SDK依赖，由ESP共享；旧`gw_filter_match`行为不变 |
 | `gw_radio.c` | 接收完整报告并构造REPORT上下文或显式PAIR候选，原始时间/地址/字节均保存 | 配对缓存有界、同radio/boot/revision/真实地址、不拼接AD；字段缺失与无合法配对不同 |
-| `gw_app.c` | bit13门控0x19/0x1A/0x1B；完整配置原子切换、回读、96 B状态编码 | 原帧3072 B上限不变；opcode/status长度单独计入；GET_STATUS仍71 B |
+| `gw_radio.c`、`gw_app.c` | radio负责bit13、0x19/0x1A/0x1B、原子切换/回读；app分发并在DFU维护时允许V2只读查询 | 原帧3072B上限不变；opcode/status单独计入；GET_STATUS仍71B |
 | ESP `gw_wire/gw_nrf` | 编码同一配置、检查bit13、0x19后0x1A逐字节读回、核0x1B | 目标配置和原请求分别保留；超总预算不能裁剪字段；本机BLE调用同一判定引擎 |
-| 平台与共同测试数据 | JSON字段语义、原始报告输入和预期结果/编码向量统一 | 平台新增Schema后才能实际创建V2任务；当前机器Schema不因文档编辑而支持V2 |
+| 平台与共同测试数据 | 87B规范黄金向量、JSON字段语义与V2机器Schema对齐 | 创建任务仍检查签名制造清单与目标radio实际能力，不向旧设备静默降级 |
 
 配置目标采用两套明确引擎，一套活动。V2包装保留完整旧ScanProfile基础字段和唯一revision；V2时旧rule_count=0。激活/退回、名称来源变化、rule数组替换必须作为一个扫描组提交，解析、容量、角色条件均通过才切换。候选缓存绑定revision，切换或暂停时丢弃尚未判定记录并计数，避免把旧规则看到的名称配给新规则的UUID。配置失败时恢复旧完整引擎，不局部留下一半新规则。
 
@@ -140,11 +140,13 @@ REPORT不使用历史名字补字段。ADV_SCAN_RSP_PAIR必须主动legacy扫描
 
 缓存槽位、原始字节预算、溢出处理和验证向量按Beacon规范冻结；实现必须先核预算再接纳新候选，不动态无限增长。最大V2编码body为3070 B，单全字段规则含长度142 B；基础列表与8条最长规则可超总预算，必须在三方入口一致拒绝整个目标，不截断。旧2755 B profile包装后2763 B可完整使用，不能为V2降低旧容量。
 
+当前共享config为3904B，state为1872B（host ABI实测）；nRF32项输入队列加32项PAIR缓存及两个索引共3586B，编译期断言≤4096B。BLE回调持同锁分配capture_ms并发布副本；worker在该锁下先排空输入，再以当前单调时间推进水位，故排队但在deadline捕获的响应不被抢先超时。配置或Central/DFU暂停同时清输入队列和PAIR上下文，保留完整wrapper，`config_discarded`按原报告累计。
+
 #### 诊断与回归门槛
 
 0x1B返回revision、引擎、范围、即时待判数量/字节和10项原始报告计数，固定96 B。所有计数同boot累计，配置切换不清零；每输入只seen一次、终态只落一个放行/拒绝原因，PAIR放行或规则拒绝通常对应两条报告。records_passed不是CUSTODY，后续FIFO满仍按旧dropped_full计数。
 
-先建立同一份纯C黄金向量，由nRF与ESP执行，并用平台配置编译器核对相同UART字节；覆盖EXACT/PREFIX、短名/全名、UTF-8多字节、部分UUID/16与32位服务UUID、Major/Minor端序、未知与边界RSSI、BITS与RANGE差异、所有字段AND、首条DENY、缺字段、畸形AD、全零mask、未支持能力、长度预算、PAIR超时/歧义/溢出/清理、重复与重启恢复。最后真实空口核对原始ADV/SCAN_RSP仍分别上报。只有完整矩阵及目标资源预算通过后才声明bit13。
+`test_filter_v2.c`已执行规范87B向量、合法3070B边界/超容量拒绝、掩码与名称来源、RSSI RANGE/BITS、16/32/128服务UUID、同AD iBeacon、首命中、PAIR500/501ms/歧义/32项溢出/清理与状态计数；5000个畸形/变异解码输入另通过UBSan。`test_radio.c`使用真实radio源码验证命令、原子回滚、维护暂停、回调排队和水位；`test_app.c`验证DFU期间V2读回白名单。bit13仅在radio实际就绪时返回；自定义板`GW_RADIO_VERIFIED=n`仍保持关闭，需NCS资源预算及真实空口证据后再进行实板授权。
 
 ### 5.4 扫描报告映射
 
@@ -258,19 +260,21 @@ RX 进入 0x22，24 B 头与 GATT 形似但 channel=1 是固定 RX 通道，不�
 - CHUNK offset 连续，只有最近相同块可重试；先按原 UART ID 重试丢响应，重握手后查询 session/大小/SHA/offset。accepted_offset 含 RAM 缓冲。下载中 nRF 真正复位后旧 RAM 会话失效，先依据 journal 和当前镜像对账；有效授权下重新传输须 BEGIN 从 0 开始，不承诺同一任务必自动重传。READY 以后重启可能已进入试启动，应先核验当前镜像并按确认/回滚流程处理，不能一律重新 BEGIN。
 - 活跃 DFU 禁止业务变更，仅保留状态/查询等允许命令。READY 仍是维护期，需 REBOOT 或 ABORT 退出；ABORT 恢复目标要确认连接对象已回收。
 - REBOOT 应答不是升级成功。新启动即使版本字符串相同，也要按 manifest 精确长度/SHA 验证当前主槽，再 CONFIRM；读回 running_confirmed=1 后报告成功。
-- 试启动默认 120 s，主循环正常时到期触发复位；挂死/无法启动需 ESP 硬件恢复，C04 尚未实现完整路径。错 boot、错 SHA、过期、回滚不得生成成功结果。
+- 试启动默认120s，主循环正常时到期触发复位；挂死/无法启动需ESP硬件恢复，C04当前源码状态见贯通实现记录，真实共享复位线及时序仍需实板验证。错boot、错SHA、过期、回滚不得生成成功结果。
 
-## 10. 本轮审计结论与后续源码任务
+## 10. 冻结审计问题与实现追踪
+
+下表保留原审计发现及验收目标。跨端当前实现状态以 [贯通实现记录](gateway-alignment-implementation.md) 为准，不能把冻结时的源码缺口当作0.3.0仍未实现声明。
 
 | 标准项 | 已核对位置 | 后续工作，仍不改变功能 |
 | --- | --- | --- |
 | C01 实现状态过时 | nRF README 对比 ESP `components/gw_actions/gw_ota.c` | 本轮修正文案为“已有执行器源码，目标/实板分别验收” |
 | C03 广播实际状态 | ESP `components/gw_nrf/gw_nrf.c:gw_nrf_advertise`、`gw_actions.c:gw_actions_configure` | SET/GET 后补 AdvStatus 校验，故障与合法 PAUSED 分开；结果带实际依据 |
 | C04 硬件恢复 | ESP `gw_nrf.c:gw_nrf_init` 仅 GPIO8 输入释放 | 在硬件基线匹配后完成复位恢复编排、启动超时和 MCUboot 回退故障注入 |
-| C05 手机业务闭环 | nRF `gw_peripheral.c` 与 ESP `gw_capture.c:gw_capture_nrf` | 保留持久 INBOX，按差距实施方案的已定合同实现认证、平台业务消息、回复任务及应用 ACK；不滥用旧事件字段 |
+| C05 手机业务闭环 | nRF服务保持不透明；ESP新增`gw_peripheral`消费独立32项INBOX | 已有独立Security2、PG分片、持久spool/STORED/平台ACK/下行APPLIED源码及host故障测试；继续做真实手机和掉电验收 |
 | C06 独立 nRF 版本 | HELLO/升级结果已有版本，平台仍缺可信独立登记 | 实现证明/登记及 fromFirmwareVersions 比较；完成前保守拒绝不能证明的前置版本 |
 | C11 升级阶段与重启 | ESP `gw_ota.c:nrf_transfer` 发现 previousBoot 变化即调用 nrf_trial；版本仍为旧已确认镜像时可能记为 ROLLED_BACK，未区分下载中断 | 根据 journal 区分下载中断、READY/试启动与真正回滚，保留当前镜像校验；重传须有效授权并 BEGIN 从 0，不承诺同一任务必自动重传 |
-| C12 Beacon V2 | 旧gw_filter_match仅单AD片段/首条规则，不能表达多字段AND、名称完整长度及显式报告配对 | 按5.3节、Beacon规范及UART1.2实现共享引擎/能力门控/读回/96 B计数；保留旧引擎行为并通过BFLT矩阵 |
+| C12 Beacon V2 | 0.3.0已接共享引擎、完整包装和96B状态，真实radio/app主机回归通过 | 继续验证NCS目标构建、RAM/Flash预算与实板BFLT空口矩阵；保留旧功能与板级门控 |
 
 静态核对已确认 UART 帧、UUID 16 B 规范表示、三种广告 mode、62 B DFU 状态、71 B状态及三类批次基本布局在当前 nRF/ESP 实现间一致。此结论只针对已阅读的源码合同，不表示无线时序、持久掉电或 MCUboot 真实验签已通过。
 

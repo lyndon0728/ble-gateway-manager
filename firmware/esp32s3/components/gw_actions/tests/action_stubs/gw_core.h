@@ -13,6 +13,7 @@ esp_err_t gw_core_maintenance_acquire(const char *);
 void gw_core_maintenance_release(const char *);
 esp_err_t gw_factory_get_string(const char *,char *,size_t);
 bool gw_core_time_trusted(void);
+uint64_t gw_core_time_deadline(uint64_t expires);
 bool gw_core_interface_ready(const char *);
 esp_err_t gw_core_wifi_scan(bool,uint64_t,cJSON **);
 cJSON *gw_core_state(void);

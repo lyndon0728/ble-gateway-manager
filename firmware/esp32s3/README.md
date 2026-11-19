@@ -1,6 +1,6 @@
 # GW32 ESP32-S3 固件
 
-版本：0.2.1；日期：2026-11-19。芯片目标ESP32-S3，ESP-IDF固定v5.5.6，8MiB Flash布局。依据[需求](../../docs/esp32s3-requirements.md)、[开发设计](../../docs/esp32s3-development.md)、[本地/远程配网设计](../../docs/esp32s3-network-provisioning.md)及[本地/远程 OTA 协议](../../docs/esp32s3-ota.md)。本次需求落实与修复见[变更记录](CHANGELOG.md)。
+版本：0.3.0；日期：2026-11-19。芯片目标ESP32-S3，ESP-IDF固定v5.5.6，8MiB Flash布局。依据[需求](../../docs/esp32s3-requirements.md)、[开发设计](../../docs/esp32s3-development.md)、[本地/远程配网设计](../../docs/esp32s3-network-provisioning.md)及[本地/远程 OTA 协议](../../docs/esp32s3-ota.md)。本次需求落实与修复见[变更记录](CHANGELOG.md)。
 
 本目录提供实际C固件、离线网页、制造/构建工具和测试。源码存在、主机测试通过、ESP目标编译通过、实板通过是不同状态；以[验证记录](VALIDATION.md)为准，不将未连接的硬件写为已验收。
 
@@ -8,16 +8,19 @@
 
 | 组件 | 责任 |
 | --- | --- |
-| gw_core | 制造身份读取、加密配置事务、Wi-Fi/CH390接口、候选试用、LOCAL_ONLY、版本CAS、回退、凭据存储 |
+| gw_core | 制造身份读取、加密配置事务、Wi-Fi/CH390接口、候选试用、LOCAL_ONLY、版本CAS、回退、凭据；gw_time维护签名UTC误差区间/单调锚 |
 | gw_provision | 限时SoftAP、离线网页、protocomm Security2、认证限流及本地操作 |
-| gw_http | HTTPS设备身份、CA/主机名验证、逐接口DNS和TLS绑定、响应大小/时限限制 |
-| gw_cloud | HTTP任务轮询、持久受理/执行意图、稳定结果与应用ACK、秘密安装、网络对账和状态上报 |
-| gw_wire | 直接共享nRF工程的纯C COBS/CRC32C和过滤代码；不复制协议实现 |
-| gw_nrf | 1Mbaud UART1 RTS/CTS、单请求与重试、HELLO、扫描/广播读回和异步持久接管入口 |
+| gw_http | HTTPS设备身份、CA/主机名及整个可信时间区间验证、逐接口DNS/TLS绑定、有界无凭据时间挑战 |
+| gw_cloud | 共用任务入口/journal、应用ACK及秘密安装；gw_sync核组件库存、完整快照及能力；gw_signed_time刷新签名时间锚 |
+| gw_wire | 直接编译nRF工程纯C COBS/CRC32C及gw_filter_v2，共享同一谓词/PAIR实现 |
+| gw_authority / gw_crypto | 制造双层签名、设备身份/SHA绑定、授权与板验证能力交集；公共Ed25519实现 |
+| gw_transport | MQTT QoS1和HTTPS共用任务/spool/应用ACK，切换保留业务身份 |
+| gw_peripheral | 两radio独立Security2业务身份、PG分片、route授权、持久业务spool/ACK与回发 |
+| gw_nrf | 1Mbaud UART1 RTS/CTS、HELLO、统一V2 JSON编译、完整配置/状态读回、受控reset及持久接管入口 |
 | gw_capture | 原始批次与水位提交、Flash spool、跨射频定稿、平台逐项ACK和隔离、Peripheral独立inbox |
 | gw_actions | 配置执行、ESP BLE、nRF GATT与发现、动作journal、双组件升级及恢复 |
 
-默认UART来自已有Oct29基线：TX17/RX18/RTS15/CTS16；GPIO8只释放为输入，不因串口超时自动复位nRF。CH390 SPI及现场配网按钮需在menuconfig中按实际板卡设置；默认未指定GPIO时不启动对应硬件。源码不能替代后续PCB引脚复核。
+默认UART来自已有Oct29基线：TX17/RX18/RTS15/CTS16；默认GPIO8只释放为输入，不因普通串口超时自动复位nRF。受控复位须启用GW_NRF_RESET_BOARD_VERIFIED并核实GPIO/脉宽/释放等待；先持久恢复意图并持有维护租约，开漏拉低后释放，HELLO核新boot。开关默认关闭，默认10ms/100ms不是实板验证结论。CH390 SPI及现场配网按钮需在menuconfig中按实际板卡设置；默认未指定GPIO时不启动对应硬件。源码不能替代后续PCB引脚复核。
 
 **默认配置没有可开启本地热点的入口。** `GW_SETUP_BUTTON_GPIO=-1` 且 `GW_FACTORY_AUTHORIZED_SETUP=n` 时，`app_main` 不调用开窗入口，链接器可能裁除 HTTP、本地 OTA 路由与网页资源；默认镜像构建成功不能作为完整本地功能已链接的证据。量产前须按实际板卡核实设置按钮 GPIO（低电平持续 3 s 开窗），或实现并验证其他现场授权入口；不得猜测 GPIO。
 
@@ -64,9 +67,12 @@ idf.py -B build-local-setup-test size
 
 普通编译产物不含生产设备秘密。启动必须具有匹配的Flash加密状态、NVS密钥、加密制造分区及设备身份；缺失时停止敏感服务，不自动清空NVS或使用通用密码。制造工具生成材料与实际烧录/不可逆安全配置是独立步骤，不能把测试密钥部署到生产设备。
 
+NimBLE持久bond使用SDK固定的默认`nvs`分区/`nimble_bond`命名空间。启动以既有制造NVS密钥显式初始化`gwfactory`、`gwstore`和`nvs`三分区，未调用自动生成密钥/eFuse的默认初始化路径。BLE启动前检查预置key记录，SDK恢复后逐条核安全材料及数量；读错、长度不符或恢复不完整则停止BLE启动。空库允许基础BLE，但BONDED_ENCRYPTED明确返回未找到绑定。预置记录必须匹配锁定IDF/NimBLE结构与容量；旧明文/不兼容NVS须经过授权制造迁移，设备不会自动擦除或清空bond。
+
+
 云端制造字段至少包括`api_url`（HTTPS管理origin）、`namespace`、`gateway`、设备`token`、`root_ca`；分进程部署可指定`ingest_url`。热点密码、setup账号/SRP salt/verifier、时钟源和固件签名公钥使用独立字段，按制造工具/组件说明交付。禁止将工厂CSV、设备密码、签名私钥或NVS bin提交Git。
 
-固件严格验证TLS证书和主机名，禁止重定向携带设备token至其他origin。当前HTTP等价接口是实际联网路径；MQTT broker部署仍可供其他网关使用，本固件没有伪造MQTT已接入的状态。制造指定SNTP服务器用于时间同步；SNTP不是经过密码学认证的时间源，现场网络/时间信任须单独验收。
+固件严格验证TLS证书和主机名，禁止重定向携带设备token至其他origin。0.3.0已实现HTTPS与MQTT适配，制造cloud_link选择HTTPS/MQTT/AUTO；MQTT需要broker origin、独立设备凭据和ACL，PUBACK不回收业务。SNTP仅作候选；独立制造时间公钥验证nonce/boot绑定的签名时间包，误差区间及有效期限制TLS和远程动作。100ppm上界须有板级依据，缺合格制造时间材料不提升为可信时间。
 
 ## 本地网页配网
 
@@ -100,7 +106,15 @@ idf.py -B build-local-setup-test size
 
 任务日志最多64个保留身份且受96KiB整体配置快照预算限制，接纳新任务前为结果预留空间。空间不足时拒绝新动作，不删除旧防重记录；长期部署必须定义经审计的任务保留/归档策略。CUSTODY仅在原始记录和水位提交后发送；HTTP成功或MQTT PUBACK不替代应用ACK。
 
-默认固件不会把未认证Peripheral RX当配网或执行指令，也不创建不存在的云端Peripheral消息类型。当前生产签名、Flash寿命、独立/整板掉电、CH390引脚、RF共存、真实移动浏览器和完整50项验收均须依据实测放行。
+0.3.0已接独立Peripheral事件/ACK/回发合同；公开RX仍不是管理入口。业务Security2身份、route授权及持久STORED由gw_peripheral处理，不复用现场配网管理员会话。当前生产签名、Flash寿命、独立/整板掉电、CH390引脚、RF共存、真实移动浏览器和完整50项验收均须依据实测放行。
+
+## 无线对齐与能力启用
+
+V2具名能力为`NRF54_BLE_FILTER_V2`、`ESP32_BLE_FILTER_V2`，nRF还需HELLO bit1/bit13。新设备用0x19/0x1A完整wrapper原子切换LEGACY/V2，0x1B读96B计数；旧设备继续0x05/0x06且拒绝V2。名称、UUID、RSSI、Major/Minor及Service UUID组合掩码与500ms PAIR见[专项](../../docs/beacon-filter-spec.md)。本机回调只复制报告，worker判定/过期；输入队列和PAIR缓存以静态断言限定≤4096B。
+
+ESP注册与nRF一致的INFO/RX/TX服务，`ESP32_BLE_PERIPHERAL`按制造授权与实板交集启用。Central/Peripheral共用一连接，扫描与广播互斥；完整目标同时启用二者时拒绝并保留原目标，不暗停另一业务。已有Peripheral期间新revision的enabled=true广播更新拒绝，enabled=false不隐式断连。广播成功需完整配置及ACTIVE/STOPPED证据，PAUSED须有真实连接原因；缺证据保留UNKNOWN。
+
+BONDED_ENCRYPTED仅从安全预置bond恢复加密并核实际安全级；缺bond拒绝，不降级明文或自动首次配对。自动连接规则仍只选NRF54。软件实现、制造授权、实板验证分别约束能力发布，见[实施记录](../../docs/gateway-alignment-implementation.md)。
 
 ## 开发与测试
 

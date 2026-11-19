@@ -4,6 +4,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "gw_actions.h"
+#include "gw_authority.h"
 #include "gw_capture.h"
 #include "gw_cloud.h"
 #include "gw_core.h"
@@ -31,6 +32,10 @@ void app_main(void) {
     return;
   }
   bool boot_healthy = true;
+  err = gw_authority_init();
+  if (err != ESP_OK)
+    ESP_LOGW(TAG, "Manufacturing capability evidence unavailable; new "
+                  "capabilities remain disabled");
   err = gw_capture_init();
   if (err == ESP_OK)
     err = gw_nrf_init(gw_capture_nrf, NULL);

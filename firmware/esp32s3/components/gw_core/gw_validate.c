@@ -139,7 +139,7 @@ static int key_compare(const void *a, const void *b) {
                 (*(const cJSON *const *)b)->string);
 }
 static cJSON *canonical(const cJSON *v, unsigned depth) {
-  if (depth > 8)
+  if (depth > 16)
     return NULL;
   if (cJSON_IsObject(v)) {
     int n = cJSON_GetArraySize(v);
@@ -150,6 +150,7 @@ static cJSON *canonical(const cJSON *v, unsigned depth) {
     for (const cJSON *x = v->child; x; x = x->next)
       items[i++] = x;
     qsort(items, n, sizeof(items[0]), key_compare);
+    for(i=1;i<n;i++)if(!strcmp(items[i-1]->string,items[i]->string))return NULL;
     cJSON *o = cJSON_CreateObject();
     if (!o)
       return NULL;
@@ -176,6 +177,11 @@ static cJSON *canonical(const cJSON *v, unsigned depth) {
       }
     }
     return a;
+  }
+  if(cJSON_IsNumber(v)&&isfinite(v->valuedouble)&&
+     fabs(v->valuedouble)<=9007199254740991.0&&floor(v->valuedouble)==v->valuedouble) {
+    char integer[32];snprintf(integer,sizeof(integer),"%.0f",v->valuedouble==0?0:v->valuedouble);
+    return cJSON_CreateRaw(integer);
   }
   return cJSON_Duplicate(v, true);
 }

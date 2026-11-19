@@ -9,6 +9,7 @@
 #include "gw_capture_rules.h"
 #include "gw_core.h"
 #include "gw_http.h"
+#include "gw_transport.h"
 #include "gw_nrf.h"
 #include "gw_spool.h"
 #include "mbedtls/base64.h"
@@ -853,7 +854,7 @@ esp_err_t gw_capture_upload(const char *namespace_id, const char *gateway_id,
     return rc ? result(rc) : ESP_OK;
   }
   cJSON *ack = NULL;
-  esp_err_t e = gw_http_json("/api/v1/gateway-ingress/batches", "POST", body,
+  esp_err_t e = gw_transport_json("/api/v1/gateway-ingress/batches", "POST", body,
                              NULL, deadline, &ack);
   cJSON_Delete(body);
   bool valid = e == ESP_OK && !strcmp(str(ack, "namespaceId"), namespace_id) &&
@@ -1017,7 +1018,7 @@ cJSON *gw_capture_peripheral_peek(void) {
   gw_spool_record_t *v = malloc(sizeof(*v));
   if (slot != GW_SPOOL_NONE && v &&
       gw_spool_read(&spool, slot, v) == GW_SP_OK) {
-    char token[80], ref[33];
+    char token[80], ref[33], boot[33];
     inbox_token(v, token);
     gw_capture_connection_ref(v->radio, v->source_boot,
                               gw_get_u32(v->bytes + 8), ref);
@@ -1026,6 +1027,16 @@ cJSON *gw_capture_peripheral_peek(void) {
     if (out && encoded) {
       cJSON_AddStringToObject(out, "receiptToken", token);
       cJSON_AddStringToObject(out, "connectionRef", ref);
+      hex(v->source_boot, 16, boot, false);
+      cJSON_AddStringToObject(out, "radio", v->radio ? "ESP32" : "NRF54");
+      cJSON_AddStringToObject(out, "controllerBootId", boot);
+      cJSON_AddNumberToObject(out, "connectionId", gw_get_u32(v->bytes + 8));
+      cJSON_AddNumberToObject(out, "captureMs", (double)gw_get_u64(v->bytes));
+      cJSON_AddNumberToObject(out, "arrivedMs", (double)v->arrived_ms);
+      hex(gw_spool_event_boot(&spool, slot), 16, boot, false);
+      cJSON_AddStringToObject(out, "ingressBootId", boot);
+      if (v->utc_ms)
+        cJSON_AddNumberToObject(out, "receivedUtcMs", (double)v->utc_ms);
       cJSON_AddStringToObject(out, "payloadBase64", encoded);
       cJSON_AddStringToObject(out, "trust", "UNAUTHENTICATED");
     } else {

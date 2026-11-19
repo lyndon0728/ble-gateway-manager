@@ -45,6 +45,10 @@ esp_err_t gw_store_get(const char *key, void *out, size_t *size) {
 static const esp_partition_t fake_partition = {GW_SPOOL_BYTES, true};
 bool esp_flash_encryption_enabled(void) { return true; }
 bool gw_core_time_trusted(void) { return true; }
+esp_err_t gw_transport_json(const char *path,const char *method,const cJSON *body,
+ const char *interface,uint64_t deadline,cJSON **out) {
+ return gw_http_json(path,method,body,interface,deadline,out);
+}
 int64_t esp_timer_get_time(void) { return (int64_t)now_ms * 1000; }
 void esp_fill_random(void *p, size_t n) {
   for (size_t i = 0; i < n; i++)
@@ -299,6 +303,11 @@ int main(int argc, char **argv) {
   assert(states(GW_SP_INBOX) == 1);
   cJSON *inbox = gw_capture_peripheral_peek();
   assert(inbox && !strcmp(str(inbox, "trust"), "UNAUTHENTICATED"));
+  assert(!strcmp(str(inbox, "radio"), "NRF54"));
+  assert(strlen(str(inbox, "controllerBootId")) == 32);
+  assert(strlen(str(inbox, "ingressBootId")) == 32);
+  assert(cJSON_GetObjectItemCaseSensitive(inbox, "connectionId")->valueint == 8);
+  assert(cJSON_IsNumber(cJSON_GetObjectItemCaseSensitive(inbox, "arrivedMs")));
   before = http_calls;
   upload(0);
   assert(http_calls == before);
@@ -394,6 +403,19 @@ int main(int argc, char **argv) {
          upload_flush_ms == 3333);
   cJSON_Delete(saved_configuration);
   saved_configuration = NULL;
+  /* Unauthenticated Peripheral ingress has an independent 32-record budget;
+   * full-capacity replay remains idempotent and frees never consume RawEvent ACK. */
+  for(unsigned i=0;i<32;i++) {
+    f.msg_id=3+i;gw_put_u64(f.payload+2,3+i);
+    assert(gw_capture_nrf(peer_boot,&f,NULL)==0);
+  }
+  assert(states(GW_SP_INBOX)==32);
+  assert(gw_capture_nrf(peer_boot,&f,NULL)==0);
+  f.msg_id=35;gw_put_u64(f.payload+2,35);
+  assert(gw_capture_nrf(peer_boot,&f,NULL)==1&&states(GW_SP_INBOX)==32);
+  inbox=gw_capture_peripheral_peek();assert(inbox);
+  assert(gw_capture_peripheral_ack(str(inbox,"receiptToken"))==ESP_OK);cJSON_Delete(inbox);
+  assert(gw_capture_nrf(peer_boot,&f,NULL)==0&&states(GW_SP_INBOX)==32);
   if (argc > 1) {
     FILE *out = fopen(argv[1], "wb");
     assert(out);

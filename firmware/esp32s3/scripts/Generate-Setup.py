@@ -47,6 +47,8 @@ def self_test() -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--username")
+    parser.add_argument("--purpose", choices=("setup", "peripheral"), default="setup")
+    parser.add_argument("--slot", type=int, choices=range(8))
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
@@ -55,18 +57,22 @@ def main() -> None:
         return
     if not args.username or args.output_dir is None:
         parser.error("--username and --output-dir are required")
+    if (args.purpose == "peripheral") != (args.slot is not None):
+        parser.error("--slot 0..7 is required only for --purpose peripheral")
     destination = args.output_dir.resolve()
     repository = PROJECT.parent.parent
     if destination.is_relative_to(repository):
         parser.error("Manufacturing material must be stored outside the source checkout")
-    password = getpass.getpass("Device-specific setup password (at least 16 characters): ")
+    password = getpass.getpass(f"Device-specific {args.purpose} password (at least 16 characters): ")
     if len(password) < 16 or password != getpass.getpass("Repeat password: "):
         parser.error("Passwords must match and contain at least 16 characters")
     salt = secrets.token_bytes(16)
     encoded = verifier(args.username, password, salt)
     password = None
     destination.mkdir(mode=0o700, parents=True, exist_ok=True)
-    for name, data in [("sec2_salt.bin", salt), ("sec2_verifier.bin", encoded)]:
+    names = ("sec2_salt.bin", "sec2_verifier.bin") if args.purpose == "setup" else (
+        f"periph{args.slot}_salt.bin", f"periph{args.slot}_ver.bin")
+    for name, data in zip(names, (salt, encoded)):
         path = destination / name
         descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(descriptor, "wb") as stream:

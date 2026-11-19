@@ -110,6 +110,13 @@ esp_err_t gw_store_init(void) {
   err = nvs_flash_secure_init_partition("gwfactory", &security);
   if (err == ESP_OK)
     err = nvs_flash_secure_init_partition("gwstore", &security);
+#if CONFIG_BT_NIMBLE_NVS_PERSIST
+  /* NimBLE uses nvs_open(), hence the default named partition. Initialize it
+   * explicitly with the same manufacturing-provisioned NVS key; never call
+   * nvs_flash_init() or generate/erase keys on a restore failure. */
+  if (err == ESP_OK)
+    err = nvs_flash_secure_init_partition("nvs", &security);
+#endif
   memset(&security, 0, sizeof(security));
   if (err != ESP_OK)
     return err; /* No automatic erase of credentials/journal. */

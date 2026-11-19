@@ -1,0 +1,3 @@
+#pragma once
+#define CONFIG_BT_NIMBLE_NVS_PERSIST 1
+#define CONFIG_BT_NIMBLE_MAX_BONDS 3

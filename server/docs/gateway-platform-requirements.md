@@ -1,12 +1,12 @@
 # 网关管理平台对接需求清单
 
-版本：1.1 · 日期：2026-11-19 · 统一标准：`GW32-E2E-1.1`
+版本：1.2 · 日期：2026-11-19 · 统一标准：`GW32-E2E-1.1`
 
 本文定义网关管理平台与 ESP32-S3、nRF54L15 贯通所需的业务、接口和验收要求，补充现有整个平台需求，不替换用户、项目、数据处理、客户投递、AI、部署和运维等既有功能。统一裁决见[端到端标准](../../docs/gateway-end-to-end-standard.md)；开发落点见[平台开发文档](gateway-platform-development.md)。
 
-本轮交付是需求和开发文档对齐。下文“必须”表示产品与协议要求，不表示当前代码已实现或实板已验收。现有功能全部保留；协议字段适配、能力限制、实现缺口和硬件验证必须分别记录。当前仓库审查基线为 `b8ba3ef`，ESP 固件实现基线为 0.2.1。
+本版对应平台源码、机器 Schema/OpenAPI、配置界面，以及 ESP32-S3/nRF54L15 0.3.0 的贯通实现。下文“必须”继续表示产品与协议要求；源码实现、软件测试、部署和实板验收分别记录，不能相互代替。具体交付与验证边界见[三方实现记录](../../docs/gateway-alignment-implementation.md)。
 
-1.1 补充[差距统一开发方案](../../docs/gateway-alignment-development-plan.md)及[Beacon 过滤规范](../../docs/beacon-filter-spec.md)。C01～C12 的统一实现方向和 Beacon V2 语义在文档中冻结；原 59 条 PLAT-GW 需求、11 项验收编号保持不变。新增过滤要求使用规范中的 BFLT 编号追溯，不在三方文档分别发明不同编号。设计冻结不代表源码、机器 Schema 或部署已经支持。
+本版落实[差距统一开发方案](../../docs/gateway-alignment-development-plan.md)及[Beacon 过滤规范](../../docs/beacon-filter-spec.md)，保留原 59 条 PLAT-GW 需求、11 项验收编号。新增过滤要求继续使用 BFLT 编号追溯。新增库存、能力、快照、签名时间及 Peripheral 接口已注册路由并纳入正式 Schema；数据库追加迁移 v5，不改历史迁移 v1～v4。部署方仍须导入真实签名清单并按板级验证结果授予能力，不能因升级程序自动开放全部功能。
 
 ## 1. 三端职责与协议边界
 
@@ -33,7 +33,7 @@
 
 | 编号 | 需求 |
 | --- | --- |
-| PLAT-GW-007 | MQTT 与 HTTPS 提供相同的遥测、任务、结果、应用 ACK 和状态语义；保持 MQTT 需求。当前 ESP HTTPS 实现不等于取消 MQTT。MQTT QoS 1、retain=false，PUBACK 不等于应用持久接管。 |
+| PLAT-GW-007 | MQTT 与 HTTPS 提供相同的遥测、任务、结果、应用 ACK 和状态语义；ESP 两通道共用任务 journal 和持久队列。MQTT QoS 1、retain=false，PUBACK 不等于应用持久接管。 |
 | PLAT-GW-008 | 原始事件完整保留 payloadBase64、稳定 eventId、时间质量和 capture；不得仅上报解析结果而丢失原始 BLE AD/GATT 值。 |
 | PLAT-GW-009 | 单批最多 200 条、单条原始载荷不超过 64 KiB、批次原始总量不超过 256 KiB、HTTP JSON 不超过 1 MiB；内部 upload.batchMaxRecords 可到 1000，ESP 必须拆为合法批次。 |
 | PLAT-GW-010 | 平台在原文、收据和处理任务同事务持久化后才返回 RAW_PERSISTED；ACK 匹配 namespaceId/gatewayId/batchId，逐项 ACCEPTED/DUPLICATE 才允许 ESP 回收。身份相同内容不同必须显式冲突，不能视为重复成功。 |
@@ -72,7 +72,7 @@
 
 ### 5.1 Beacon V2 的统一需求映射
 
-本节补充 PLAT-GW-025～032 和 PLAT-GW-AT-04/05；精确字段、BFLT 要求和共同测试向量以 [Beacon 过滤规范](../../docs/beacon-filter-spec.md)为唯一依据。下列 `beaconFilterV2` 为**开发冻结、尚未上线的合同**，不能直接发送给当前 Schema/固件。
+本节补充 PLAT-GW-025～032 和 PLAT-GW-AT-04/05；精确字段、BFLT 要求和共同测试向量以 [Beacon 过滤规范](../../docs/beacon-filter-spec.md)为唯一依据。`beaconFilterV2` 已纳入 Schema、平台校验与字节编译、配置界面、ESP 编码器和两路匹配器；只有目标设备具备对应能力才允许下发，旧固件不自动获得 V2 支持。
 
 | 主题 | 必须一致的规则 |
 | --- | --- |
@@ -84,9 +84,9 @@
 | 单报告与关联报告 | REPORT 保留单报告判断；ADV_SCAN_RSP_PAIR 仅用于 legacy 主动扫描，reportKinds 只能 LEGACY_ADV，窗口固定 500 ms。同 radio/boot/revision/真实地址类型及地址下只能有一个可配前序 ADV；歧义、超时、满缓存或缺少 SCAN_RSP 均拒绝并计数，不能在仅 DENY 规则时借缺失数据绕过。RSSI 使用 ADV 值。 |
 | 旧版兼容与切换 | 既有 `beaconRules` 六字段与单 AD 规则语义保留。切到 V2 时同一 CONFIGURE 原子提交 `beaconRules:[]` 与 V2 对象；反向提交 `beaconFilterV2:null` 与旧列表。合并目标不得同时激活两套规则，禁止静默降级或拆成两次任务形成过滤空窗。 |
 | 基础过滤及两 radio | 基础 filters 继续先执行，与 V2 条件取交集；PAIR 按规范的关联上下文评估。两 radio 独立配置，同一采集任务需要等价目标时分别下发，不复制覆盖。 |
-| 能力、容量与版本 | 平台签名能力、ESP 实现和 nRF HELLO bit13 同时允许后才开放 V2；保留现有帧/消息版本。校验 JSON 后必须计算规范二进制编码大小，完整 profile 体≤3070 字节；超限整项拒绝，不截断规则或掩码。 |
+| 能力、容量与版本 | 分别使用 NRF54_BLE_FILTER_V2 / ESP32_BLE_FILTER_V2，并检查签名授权、实际实现与板级验证交集；nRF 目标还须 HELLO bit13。保留现有帧/消息版本。校验 JSON 后必须计算规范二进制编码大小，完整 profile 体≤3070 字节；超限整项拒绝，不截断规则或掩码。 |
 
-平台界面必须展示选择字段、有效掩码、RSSI 模式、REPORT/PAIR 模式及合并后的有效条件；当前不支持时明确不可下发。PLAT-GW-AT-04 增补名称前缀/精确、两种 UUID、大小端、掩码边界、RSSI 负数、同规则 AND、仅 DENY 缺失报告防绕过、原子切换与超长拒绝，具体期望值复用 BFLT 向量，不能各端重新解释。
+平台界面提供选择字段、有效掩码、RSSI 模式、REPORT/PAIR 模式、完整编码长度和离线 AD 样本预览；合并后的基础 filters 与 V2 同时生效，能力不足时不可下发。预览只检查提交样本，不宣称已在现场扫描命中。PLAT-GW-AT-04 增补名称前缀/精确、两种 UUID、大小端、掩码边界、RSSI 负数、同规则 AND、仅 DENY 缺失报告防绕过、原子切换与超长拒绝，具体期望值复用 BFLT 向量，不能各端重新解释。
 
 ## 6. GATT 与自动连接
 
@@ -98,7 +98,7 @@
 | PLAT-GW-036 | autoTrigger 由服务器生成并关联 advEventId、规则 revision、规范 UUID 和来源；ESP 校验本地证据，nRF 执行连接及服务发现。服务不存在不能报业务连接成功。 |
 | PLAT-GW-037 | connectionRef 绑定 radio、控制器 boot ID 和连接 ID，不能只用易复用的控制器 handle；断链事件建立墓碑，迟到成功结果不得复活已断连接。 |
 | PLAT-GW-038 | nRF Peripheral 可连接广播、服务发现、订阅及写入路径继续保留；Peripheral 收件 0x22 进入 ESP 本地持久 inbox，与云端 Central GATT 值上报区分。手机 ATT 成功不代表平台业务已执行。 |
-| PLAT-GW-039 | UNENCRYPTED/BONDED_ENCRYPTED 等安全要求不得在执行时静默降级；当前 ESP 原生 BLE 的非 UNENCRYPTED、可连接广播和自动连接限制必须明示为支持集差异/待实现，不删掉既有相应需求。 |
+| PLAT-GW-039 | UNENCRYPTED/BONDED_ENCRYPTED 等安全要求不得在执行时静默降级；ESP 已实现原生 Peripheral、可连接广播及预置 bond 的加密连接路径，但仍按实际能力、已验证角色组合及真实链路安全证据放行。自动连接继续由平台面向 NRF54 决策，不把该支持集差异改成 ESP 自主自动连接。 |
 
 ## 7. 本地 Wi-Fi 配网与平台远程配置
 
@@ -124,11 +124,11 @@
 | PLAT-GW-052 | GATEWAY 新固件完成自检和启动确认后才成功；保留 ESP 90 s 与 nRF 120 s 各自试运行约束，失败回滚并可对账。nRF 启动变化须按持久阶段区分下载中断与 READY 后试启动，不能一律判回滚；重新传输须有效授权并从 0 BEGIN，不强制同任务自动重传。下载完成、串口写入完成、设置启动分区均不等于升级成功。 |
 | PLAT-GW-053 | ESP 本地网页 OTA 与远程 OTA 使用相同签名包、大小/摘要/型号/版本校验与全局升级互斥；本地入口由物理窗口及本地会话授权，以 LOCAL/uploadId 记录，不能编造 taskId/requestDigest/远程结果。 |
 | PLAT-GW-054 | 本地 OTA 可离线完成，试启动和恢复不以互联网或可信 UTC 为必要条件，联网后报告真实当前状态；必须保持启动确认、回滚和断电恢复要求。升级窗口与会话关闭后停止尚未提交的操作，提交结果不明时保留证据及互斥进行对账。 |
-| PLAT-GW-055 | nRF 源版本兼容约束必须来自独立可信组件库存。现平台尚无此库存时，非空 fromFirmwareVersions 明确拒绝并列入后续开发，不得用 ESP firmwareVersion 代替或绕过约束。 |
+| PLAT-GW-055 | nRF 源版本兼容约束必须来自独立可信组件库存：挑战及世代匹配、CONFIRMED_ARTIFACT、签名制品与实际镜像一致、bootConfirmed=true，且证据不超过 60 s 并匹配当前 nrfBootId。证据缺失/过期/启动变化时，对非空 fromFirmwareVersions 返回 FIRMWARE_COMPONENT_VERSION_UNKNOWN；不得用 ESP firmwareVersion、VERSION_ONLY 或制品查询结果代替。 |
 | PLAT-GW-056 | 自动连接新鲜度、远程任务有效期、TLS 和远程升级授权依赖可信 UTC；时间来源的可认证性、误差与启动后可信门槛必须完成验证，不能把制造指定 SNTP 服务器等同密码学认证。本地离线 OTA 使用本地授权和单调期限，不因此增加 UTC 前提。 |
 | PLAT-GW-057 | nRF 升级失败或试运行未确认时保留通过板级复位恢复的要求；只有软件 DFU 命令、等待和重新 HELLO 不等于硬件复位恢复已完成。 |
-| PLAT-GW-058 | Peripheral 业务透传保留平台封装、身份绑定、会话授权、关联回复及下行回发需求；目前本地持久 inbox 不等于这些接口已贯通。后续须正式扩展 Schema/命令合同后实现，不临时借用 Central GATT 字段。 |
-| PLAT-GW-059 | ESP 保存各组完整目标并在重启后恢复；本地持久目标丢失时禁止把 complete=false 的平台视图当全量恢复快照，须走受控重放/重配置并留下可验证恢复证据。 |
+| PLAT-GW-058 | Peripheral 业务透传使用独立 Security2 客户端身份、route 授权、PG 分片与业务身份，平台通过正式 PeripheralEventBatch/PeripheralEventAck 合同接收，持久后返回 PERIPHERAL_PERSISTED。下行 PERIPHERAL_NOTIFY 必须取得同会话、同 businessId 的手机 APPLIED 才可成功；STORED、ATT 或 Notify 发送成功不等于业务完成。PERIPHERAL_DISCONNECT 必须取得真实断链证据，不借用 Central GATT 字段。 |
+| PLAT-GW-059 | ESP 保存各组完整目标并在重启后恢复；独立完整快照接口提供六组配置、来源、摘要、世代及不可变历史。下载仅保存恢复候选，不自动覆盖设备。显式 CONFIGURE/sourceSnapshotId 必须引用本网关完整历史快照，以新 revision 一次恢复一个完整组，并保留任务所有权及本地网络覆盖裁决；complete=false、缺组或存在阻塞状态均不可作为全量恢复依据。 |
 
 ## 9. 验收清单
 
@@ -148,19 +148,21 @@
 | PLAT-GW-AT-10 | 本地 ESP OTA | 同包本地/远程一致，离线本地升级不制造远程任务，窗口关闭/慢上传/提交状态不明行为受控，回滚可验证。 |
 | PLAT-GW-AT-11 | 长时间运行 | 满盘背压、断网缓存、Wi-Fi/BLE 共存、多连接/广播调度和恢复均有真实计数及容量边界，不静默丢未确认数据。 |
 
-## 10. 当前差距与保留需求
+## 10. 实现状态与验收边界
 
-| 项目 | 当前审查结论 | 后续要求 |
+| 项目 | 本版实现 | 部署与验收要求 |
 | --- | --- | --- |
-| ESP MQTT 通道 | 平台入口与需求存在；ESP gw_cloud 当前使用 HTTPS | 补齐同等应用 ACK、身份、重连和网络试用语义，不能只做 PUBACK 适配。 |
-| ESP 原生 Peripheral / 加密连接 | Schema/产品需求覆盖更宽；当前驱动仅非连接广播和 UNENCRYPTED 等子集 | 保留需求，补真实实现、能力声明与测试；不支持时明确拒绝。 |
-| NRF54 源版本约束 | 平台缺独立可信组件库存，对非空约束拒绝 | 定义并实现组件库存的可信上报、重启/升级更新与兼容校验，然后开放约束任务。 |
-| 广播实际状态 | nRF 提供状态查询；ESP 当前配置读回/诊断还不能完整证明 GET_ADV_STATUS 实际状态一致 | 按统一标准 C03 补端到端读回，不把已保存 enabled 当实际广播已开启。 |
-| nRF OTA 硬件复位恢复 | 软件 DFU 已有执行路径；硬件复位恢复链尚须补齐验证 | 按 C04 保留板级复位与重连/回滚证据要求。 |
-| Peripheral 平台业务 | UART 收件与 ESP 本地 inbox 已有；完整平台链路尚未实现 | 按[统一开发方案 C05](../../docs/gateway-alignment-development-plan.md)实现已冻结的消息封装、认证和回发要求，不能把设计冻结写成已部署。 |
-| 平台配置恢复视图 | 汇总响应明确 complete=false | 按 C08 保留完整恢复需求，不能把缺字段解释成清空或默认值。 |
-| 可信 UTC | 当前制造指定 SNTP 无密码学认证 | 按 C09 补时间可信性与误差证明，避免过期任务、自动连接与远程 OTA 判断基于虚假时间；本地离线 OTA 不增加 UTC 前提。 |
-| nRF 传输中重启恢复 | 当前 ESP 在 nRF boot 变化后可能把下载中断当作试启动回滚 | 按[统一标准 C11](../../docs/gateway-end-to-end-standard.md#2-冲突缺口与唯一处理标准)依据 journal 分阶段恢复；有效授权下重新传输从 0 BEGIN，不强加同任务自动重传。 |
-| 真实贯通 | 存在服务器、ESP、nRF 的各自实现和测试，不能等同三方联合验收 | 按本节验收清单和各固件验证计划完成实板证据。 |
+| ESP MQTT 通道 / C02 | HTTPS/MQTT 共用任务与持久队列，使用相同应用 ACK；候选网络试用仍绑定受测接口执行 HTTPS 探测 | 验证 TLS、重连、丢 ACK、通道切换和实网背压，PUBACK 不触发业务回收。 |
+| 广播状态 / C03 | 配置完整读回并核对实际广播状态；PAUSED 需要真实 Peripheral 连接证据 | 实测启停、角色切换、故障回滚和两 radio 的实际状态。 |
+| nRF 复位 / C04 | 持久恢复意图、有限重握手及最多一次板级复位路径已实现；硬件复位默认关闭 | 仅在确认板级接线、有效电平和时序后启用；保留失联及回滚实板验证。 |
+| Peripheral 业务 / C05 | 独立身份与 route 授权、持久业务收件、HTTP/MQTT 上行、关联 NOTIFY/DISCONNECT 和 APPLIED 证据 | 登记客户端及制造凭据；通用业务传输不替代业务系统自己的处理器或客户交付 ACK。 |
+| 独立组件库存 / C06 | 挑战、CAS 世代及真实运行证据分级；只读 component-artifact 查询关联已导入的签名制品 | 未导入的离线本地 OTA 镜像保持 VERSION_ONLY；查询本身不能证明设备运行该镜像。 |
+| 能力与 ESP BLE / C07 | 制造清单验签、身份绑定及运行能力交集；原生 Peripheral 和预置 bond 路径已实现 | 签名 capabilities 是上限；availableCapabilities 体现当前交集。无当前 nRF 身份时 nrfBootId=null，不能沿用旧 boot 证据。 |
+| 完整恢复快照 / C08 | 六组完整性校验、稳定摘要/世代、不可变历史与 sourceSnapshotId 受控单组恢复 | 原最近补丁视图仍 complete=false。缺基线、UNKNOWN、在途配置或 localOverride 必须阻止自动恢复。 |
+| 可信 UTC / C09 | nonce/boot 绑定的 Ed25519 时间包、设备误差区间及单调任务预算 | 配置独立时间密钥并核实服务端时间源；未建立可信锚时不开放依赖 UTC 的远程动作，本地离线 OTA 不受此限制。 |
+| nRF 传输中重启 / C11 | 按 journal 区分传输中断、FINISH 不确定状态和试启动，核验实际镜像后确认 | 断电实测；重新传输仍须有效授权并从 0 BEGIN，不强制同任务自动重传。 |
+| Beacon V2 / C12 | 正式 Schema、平台编译/容量校验、字段掩码界面、离线预览及两 radio 实现 | 按目标能力放行并完成 BFLT 实板向量，不能因软件测试通过而开启未经验证的角色组合。 |
 
-C02～C11 的具体数据责任、兼容迁移、实施顺序与关闭证据统一收录于[差距开发方案](../../docs/gateway-alignment-development-plan.md)。本表继续反映源码现状；文档方案一致不等于源码缺口已经关闭。Beacon V2 同样须先同步三方机器合同、实现和共同测试，再按能力放行。
+新增能力包括 `NRF54_BLE_FILTER_V2`、`ESP32_BLE_FILTER_V2`、`PERIPHERAL_BRIDGE_1`、`PERIPHERAL_NOTIFY`、`PERIPHERAL_DISCONNECT`、`COMPONENT_INVENTORY_1`、`CONFIG_SNAPSHOT_1`、`SIGNED_TIME_1`；既有能力继续保留。平台在已有运行报告时依据 availableCapabilities 放行，签名清单仍为授权上限。旧设备继续使用既有合同，不通过猜测能力启用新端点。
+
+平台 Go 测试、前端类型检查/构建和输入测试已执行；ESP/nRF 主机测试及目标构建的具体范围见[三方实现记录](../../docs/gateway-alignment-implementation.md)与各固件验证文件。AT-01～11 仍须记录固定硬件、固件、平台版本和故障注入证据，不能以接口已实现代替联合实板验收。

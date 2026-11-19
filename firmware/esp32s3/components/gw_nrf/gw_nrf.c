@@ -7,7 +7,10 @@
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
+#include "gw_authority.h"
+#include "gw_radio_evidence.h"
 #include "mbedtls/base64.h"
+#include "sdkconfig.h"
 #include <ctype.h>
 #include <math.h>
 #include <stdio.h>
@@ -15,6 +18,12 @@
 #include <string.h>
 
 #define PORT UART_NUM_1
+#if defined(CONFIG_GW_NRF_RESET_BOARD_VERIFIED) &&                             \
+    CONFIG_GW_NRF_RESET_BOARD_VERIFIED
+#define RESET_PIN CONFIG_GW_NRF_RESET_GPIO
+#else
+#define RESET_PIN 8
+#endif
 typedef struct {
   uint8_t boot[16];
   struct gw_frame frame;
@@ -332,7 +341,7 @@ esp_err_t gw_nrf_init(gw_nrf_batch_fn callback, void *ctx) {
     return e;
   /* Release reset. No reset is performed just because a serial handshake
    * failed. */
-  gpio_config_t reset = {.pin_bit_mask = 1ULL << 8,
+  gpio_config_t reset = {.pin_bit_mask = 1ULL << RESET_PIN,
                          .mode = GPIO_MODE_INPUT,
                          .pull_up_en = GPIO_PULLUP_DISABLE,
                          .pull_down_en = GPIO_PULLDOWN_DISABLE};
@@ -351,52 +360,6 @@ esp_err_t gw_nrf_init(gw_nrf_batch_fn callback, void *ctx) {
 static double number(const cJSON *o, const char *key, double fallback) {
   const cJSON *v = cJSON_GetObjectItemCaseSensitive(o, key);
   return cJSON_IsNumber(v) ? v->valuedouble : fallback;
-}
-static bool uuid(const char *s, uint8_t out[16]) {
-  char compact[33];
-  size_t n = 0;
-  if (!s)
-    return false;
-  if (strlen(s) == 4) {
-    char expanded[37];
-    snprintf(expanded, sizeof(expanded), "0000%s-0000-1000-8000-00805f9b34fb",
-             s);
-    return uuid(expanded, out);
-  }
-  if (strlen(s) == 8) {
-    char expanded[37];
-    snprintf(expanded, sizeof(expanded), "%s-0000-1000-8000-00805f9b34fb", s);
-    return uuid(expanded, out);
-  }
-  if (strlen(s) != 36)
-    return false;
-  for (size_t i = 0; s[i]; ++i) {
-    if (i == 8 || i == 13 || i == 18 || i == 23) {
-      if (s[i] != '-')
-        return false;
-      continue;
-    }
-    if (!isxdigit((unsigned char)s[i]) || n >= 32)
-      return false;
-    compact[n++] = s[i];
-  }
-  if (n != 32)
-    return false;
-  compact[32] = 0;
-  for (size_t i = 0; i < 16; ++i) {
-    char a[3] = {compact[2 * i], compact[2 * i + 1], 0};
-    char *end;
-    unsigned long v = strtoul(a, &end, 16);
-    if (*end)
-      return false;
-    out[i] = v;
-  }
-  return true;
-}
-static int uuid_cmp(const void *a, const void *b) { return memcmp(a, b, 16); }
-static int company_cmp(const void *a, const void *b) {
-  uint16_t x = *(const uint16_t *)a, y = *(const uint16_t *)b;
-  return (x > y) - (x < y);
 }
 static bool b64(const cJSON *o, const char *key, uint8_t *out, size_t cap,
                 size_t *n) {
@@ -428,120 +391,35 @@ static esp_err_t set_readback(uint8_t set, uint8_t get, const uint8_t *data,
 }
 esp_err_t gw_nrf_scan(const cJSON *complete, uint64_t revision,
                       int64_t deadline) {
-  struct gw_profile *p = calloc(1, sizeof(*p));
-  uint8_t *data = malloc(GW_PROFILE_MAX);
-  if (!p || !data) {
-    free(p);
-    free(data);
+  uint8_t *data = malloc(3070);
+  if (!data)
     return ESP_ERR_NO_MEM;
-  }
-  gw_profile_default(p);
-  p->revision = revision;
-  const cJSON *scan = cJSON_GetObjectItemCaseSensitive(complete, "scan"),
-              *filters = cJSON_GetObjectItemCaseSensitive(complete, "filters");
-  esp_err_t e = ESP_ERR_INVALID_ARG;
-  if (!cJSON_IsObject(scan) || !cJSON_IsObject(filters) || !revision)
-    goto done;
-  double interval = number(scan, "intervalMs", 100),
-         window = number(scan, "windowMs", 50),
-         rssi = number(filters, "minRssi", -128);
-  if (interval < 10 || interval > 10240 || window < 10 || window > interval ||
-      floor(interval) != interval || floor(window) != window || rssi < -128 ||
-      rssi > 20 || floor(rssi) != rssi)
-    goto done;
-  p->interval_ticks = ((uint32_t)interval * 8 + 2) / 5;
-  p->window_ticks = ((uint32_t)window * 8 + 2) / 5;
-  p->min_rssi = (int8_t)rssi;
-  p->scan_flags =
-      (cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(scan, "enabled")) ? 1
-                                                                       : 0) |
-      (cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(scan, "active")) ? 2 : 0);
-  const cJSON *v,
-      *list = cJSON_GetObjectItemCaseSensitive(filters, "serviceUuids");
-  cJSON_ArrayForEach(v, list) {
-    if (p->uuid_count == 128 || !cJSON_IsString(v) ||
-        !uuid(v->valuestring, p->uuids[p->uuid_count]))
-      goto done;
-    ++p->uuid_count;
-  }
-  qsort(p->uuids, p->uuid_count, 16, uuid_cmp);
-  unsigned used = 0;
-  for (unsigned i = 0; i < p->uuid_count; i++)
-    if (!used || memcmp(p->uuids[i], p->uuids[used - 1], 16))
-      memcpy(p->uuids[used++], p->uuids[i], 16);
-  p->uuid_count = used;
-  list = cJSON_GetObjectItemCaseSensitive(filters, "manufacturerIds");
-  cJSON_ArrayForEach(v, list) {
-    if (p->company_count == 128 || !cJSON_IsNumber(v) || v->valuedouble < 0 ||
-        v->valuedouble > 65535 || floor(v->valuedouble) != v->valuedouble)
-      goto done;
-    p->companies[p->company_count++] = (uint16_t)v->valuedouble;
-  }
-  qsort(p->companies, p->company_count, 2, company_cmp);
-  used = 0;
-  for (unsigned i = 0; i < p->company_count; i++)
-    if (!used || p->companies[i] != p->companies[used - 1])
-      p->companies[used++] = p->companies[i];
-  p->company_count = used;
-  list = cJSON_GetObjectItemCaseSensitive(complete, "beaconRules");
-  cJSON_ArrayForEach(v, list) {
-    if (p->rule_count == 8)
-      goto done;
-    struct gw_beacon_rule *rule = &p->rules[p->rule_count];
-    const cJSON *action = cJSON_GetObjectItemCaseSensitive(v, "action");
-    if (!cJSON_IsString(action) || (strcmp(action->valuestring, "ALLOW") &&
-                                    strcmp(action->valuestring, "DENY")))
-      goto done;
-    rule->action = !strcmp(action->valuestring, "ALLOW");
-    rule->kind_mask = 0;
-    const cJSON *kind,
-        *kinds = cJSON_GetObjectItemCaseSensitive(v, "reportKinds");
-    cJSON_ArrayForEach(kind, kinds) {
-      if (!cJSON_IsString(kind))
-        goto done;
-      const char *names[] = {"LEGACY_ADV", "LEGACY_SCAN_RSP", "EXT_ADV",
-                             "EXT_SCAN_RSP"};
-      bool known = false;
-      for (unsigned k = 0; k < 4; k++)
-        if (!strcmp(kind->valuestring, names[k])) {
-          rule->kind_mask |= 1U << k;
-          known = true;
-        }
-      if (!known)
-        goto done;
-    }
-    double type = number(v, "adType", 0), offset = number(v, "offset", -1);
-    if (type < 1 || type > 255 || floor(type) != type || offset < 0 ||
-        offset > 253 || floor(offset) != offset)
-      goto done;
-    rule->ad_type = (uint8_t)type;
-    rule->offset = (uint16_t)offset;
-    size_t n = 0, m = 0;
-    if (!b64(v, "valueBase64", rule->value, 24, &n) ||
-        !b64(v, "maskBase64", rule->mask, 24, &m) || n != m || !n)
-      goto done;
-    if (!rule->kind_mask || offset + n > 254)
-      goto done;
-    bool any = false;
-    for (size_t k = 0; k < n; k++)
-      any |= rule->mask[k] != 0;
-    if (!any)
-      goto done;
-    rule->length = n;
-    p->rule_count++;
-  }
-  size_t n = gw_profile_encode(p, true, data, GW_PROFILE_MAX);
-  if (!n)
-    goto done;
-  uint32_t caps = 0;
-  gw_nrf_identity(NULL, &caps, NULL);
-  if (!(caps & (1U << 1))) {
+  size_t n = 0;
+  esp_err_t e = gw_nrf_compile_scan(complete, revision, data, 3070, &n);
+  if (e == ESP_OK && data[1] && !gw_authority_has("NRF54_BLE_FILTER_V2"))
     e = ESP_ERR_NOT_SUPPORTED;
-    goto done;
+  uint32_t caps = 0;
+  if (e == ESP_OK &&
+      (!gw_nrf_identity(NULL, &caps, NULL) || !(caps & (1u << 1))))
+    e = ESP_ERR_NOT_SUPPORTED;
+  if (e == ESP_OK) {
+    if (caps & (1u << 13)) {
+      e = set_readback(0x19, 0x1a, data, n, deadline);
+      if (e == ESP_OK) {
+        uint8_t result[96], status;
+        size_t length = sizeof(result);
+        e = gw_nrf_command(0x1b, NULL, 0, &status, result, &length, deadline);
+        if (e == ESP_OK &&
+            (status || length != 96 || gw_get_u64(result) != revision ||
+             result[8] != data[1] ||
+             result[9] != data[4 + gw_get_u16(data + 2)]))
+          e = ESP_ERR_INVALID_RESPONSE;
+      }
+    } else if (data[1])
+      e = ESP_ERR_NOT_SUPPORTED;
+    else
+      e = set_readback(5, 6, data + 4, gw_get_u16(data + 2), deadline);
   }
-  e = set_readback(5, 6, data, n, deadline);
-done:
-  free(p);
   free(data);
   return e;
 }
@@ -577,11 +455,90 @@ esp_err_t gw_nrf_advertise(const cJSON *adv, uint64_t revision,
       !gw_ad_valid(data + 14 + n, m) || (kind == 0 && m))
     return ESP_ERR_INVALID_ARG;
   data[13 + n] = m;
-  return set_readback(7, 8, data, 14 + n + m, deadline);
+  esp_err_t e = set_readback(7, 8, data, 14 + n + m, deadline);
+  if (e != ESP_OK)
+    return e;
+  uint8_t result[35], status;
+  size_t length = sizeof(result);
+  if (caps & (1u << 10)) {
+    e = gw_nrf_command(0x0c, NULL, 0, &status, result, &length, deadline);
+    if (e != ESP_OK)
+      return e;
+    if (status)
+      return ESP_ERR_INVALID_RESPONSE;
+    e = gw_advertising_evidence(data, 14 + n + m, result, length);
+    if (e != ESP_ERR_NOT_FINISHED)
+      return e;
+    /* PAUSED is successful only with a live peripheral, not merely enabled=1.
+     */
+    length = 16;
+    e = gw_nrf_command(0x0d, NULL, 0, &status, result, &length, deadline);
+    return e != ESP_OK ? e
+           : (!status && gw_peripheral_live(result, length))
+               ? ESP_OK
+               : ESP_ERR_INVALID_STATE;
+  }
+  length = sizeof(result);
+  e = gw_nrf_command(9, NULL, 0, &status, result, &length, deadline);
+  if (e != ESP_OK)
+    return e;
+  return !status && length == 15 && gw_get_u64(result + 2) == revision &&
+                 result[1] == (data[8] ? 1 : 0)
+             ? ESP_OK
+             : ESP_ERR_INVALID_STATE;
+}
+
+esp_err_t gw_nrf_hardware_reset(int64_t deadline) {
+#if defined(CONFIG_GW_NRF_RESET_BOARD_VERIFIED) &&                             \
+    CONFIG_GW_NRF_RESET_BOARD_VERIFIED
+  if (!GPIO_IS_VALID_OUTPUT_GPIO(CONFIG_GW_NRF_RESET_GPIO))
+    return ESP_ERR_INVALID_ARG;
+  if (!request_lock || remaining(deadline) == 0 ||
+      xSemaphoreTake(request_lock, remaining(deadline)) != pdTRUE)
+    return ESP_ERR_TIMEOUT;
+  uint8_t previous[16] = {0};
+  (void)gw_nrf_identity(previous, NULL, NULL);
+  bool known = false;
+  for (unsigned i = 0; i < 16; i++)
+    known |= previous[i] != 0;
+  esp_err_t e = ESP_ERR_TIMEOUT;
+  if (deadline - gw_nrf_now_ms() <=
+      CONFIG_GW_NRF_RESET_LOW_MS + CONFIG_GW_NRF_RESET_SETTLE_MS)
+    goto reset_done;
+  xSemaphoreTake(identity_lock, portMAX_DELAY);
+  ready = false;
+  xSemaphoreGive(identity_lock);
+  /* Set the output latch before switching direction; never drive a shared reset
+   * high. */
+  e = gpio_set_level(CONFIG_GW_NRF_RESET_GPIO, 0);
+  if (e == ESP_OK)
+    e = gpio_set_direction(CONFIG_GW_NRF_RESET_GPIO, GPIO_MODE_OUTPUT_OD);
+  if (e == ESP_OK)
+    vTaskDelay(pdMS_TO_TICKS(CONFIG_GW_NRF_RESET_LOW_MS) + 1);
+  esp_err_t released =
+      gpio_set_direction(CONFIG_GW_NRF_RESET_GPIO, GPIO_MODE_INPUT);
+  if (e == ESP_OK)
+    e = released;
+  if (e == ESP_OK)
+    vTaskDelay(pdMS_TO_TICKS(CONFIG_GW_NRF_RESET_SETTLE_MS) + 1);
+reset_done:
+  xSemaphoreGive(request_lock);
+  if (e != ESP_OK)
+    return e;
+  e = gw_nrf_rehandshake(deadline);
+  uint8_t current[16];
+  if (e == ESP_OK && (!gw_nrf_identity(current, NULL, NULL) ||
+                      (known && !memcmp(previous, current, 16))))
+    return ESP_ERR_INVALID_RESPONSE;
+  return e;
+#else
+  (void)deadline;
+  return ESP_ERR_NOT_SUPPORTED;
+#endif
 }
 cJSON *gw_nrf_diagnostics(int64_t deadline) {
   cJSON *o = cJSON_CreateObject();
-  uint8_t boot[16], result[71], status;
+  uint8_t boot[16], result[96], status;
   uint32_t caps = 0;
   char version[64] = {0};
   size_t n = sizeof(result);
@@ -597,6 +554,70 @@ cJSON *gw_nrf_diagnostics(int64_t deadline) {
     cJSON_AddNumberToObject(o, "queuedRecords", gw_get_u16(result + 17));
     cJSON_AddNumberToObject(o, "queuedBytes", gw_get_u32(result + 19));
     cJSON_AddNumberToObject(o, "scanState", result[16]);
+  }
+  if (caps & (1u << 10)) {
+    n = sizeof(result);
+    if (gw_nrf_command(0x0c, NULL, 0, &status, result, &n, deadline) ==
+            ESP_OK &&
+        !status && n == 35) {
+      static const char *states[] = {"STOPPED", "ACTIVE", "FAULT", "PAUSED"};
+      char revision[24];
+      snprintf(revision, sizeof(revision), "%llu",
+               (unsigned long long)gw_get_u64(result));
+      cJSON_AddStringToObject(o, "advertisingRevision", revision);
+      cJSON_AddStringToObject(o, "advertisingState",
+                              result[9] < 4 ? states[result[9]] : "UNKNOWN");
+      cJSON_AddBoolToObject(o, "advertisingEnabled", result[8] != 0);
+      cJSON_AddNumberToObject(o, "advertisingDriverError",
+                              (int32_t)gw_get_u32(result + 15));
+      if (result[9] == 3) {
+        n = sizeof(result);
+        if (gw_nrf_command(0x0d, NULL, 0, &status, result, &n, deadline) ==
+                ESP_OK &&
+            !status && gw_peripheral_live(result, n))
+          cJSON_AddStringToObject(o, "advertisingPauseReason",
+                                  "PERIPHERAL_CONNECTION");
+      }
+    }
+  }
+  if (!(caps & (1u << 10)) && (caps & (1u << 4))) {
+    n = sizeof(result);
+    if (gw_nrf_command(9, NULL, 0, &status, result, &n, deadline) == ESP_OK &&
+        !status && n == 15) {
+      static const char *states[] = {"STOPPED", "ACTIVE", "FAULT", "PAUSED"};
+      char revision[24];
+      snprintf(revision, sizeof(revision), "%llu",
+               (unsigned long long)gw_get_u64(result + 2));
+      cJSON_AddStringToObject(o, "advertisingRevision", revision);
+      cJSON_AddStringToObject(o, "advertisingState",
+                              result[1] < 4 ? states[result[1]] : "UNKNOWN");
+    }
+  }
+  if (caps & (1u << 13)) {
+    n = sizeof(result);
+    if (gw_nrf_command(0x1b, NULL, 0, &status, result, &n, deadline) ==
+            ESP_OK &&
+        !status && n == 96) {
+      cJSON *f = cJSON_AddObjectToObject(o, "scanFilterStatus");
+      char counter[24];
+      snprintf(counter, sizeof(counter), "%llu",
+               (unsigned long long)gw_get_u64(result));
+      cJSON_AddStringToObject(f, "revision", counter);
+      cJSON_AddStringToObject(f, "engine", result[8] ? "V2" : "LEGACY");
+      cJSON_AddStringToObject(f, "scope",
+                              result[9] ? "ADV_SCAN_RSP_PAIR" : "REPORT");
+      cJSON_AddNumberToObject(f, "pendingCount", gw_get_u16(result + 10));
+      cJSON_AddNumberToObject(f, "pendingBytes", gw_get_u32(result + 12));
+      static const char *names[] = {
+          "recordsSeen",        "recordsPassed",  "ruleDropped", "pairTimeout",
+          "pairAmbiguous",      "pairOverflow",   "malformedAd", "unknownRssi",
+          "unsupportedContext", "configDiscarded"};
+      for (unsigned i = 0; i < 10; i++) {
+        snprintf(counter, sizeof(counter), "%llu",
+                 (unsigned long long)gw_get_u64(result + 16 + 8 * i));
+        cJSON_AddStringToObject(f, names[i], counter);
+      }
+    }
   }
   return o;
 }

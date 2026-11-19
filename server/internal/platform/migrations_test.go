@@ -130,7 +130,7 @@ func TestMigrationsRejectModifiedChecksumsAndFutureVersions(t *testing.T) {
 				case "v3-checksum":
 					_, e = db.Exec("UPDATE schema_migrations SET checksum='altered' WHERE version=3")
 				case "future":
-					_, e = db.Exec("INSERT INTO schema_migrations VALUES(5,'future',?,'9.0.0')", Now())
+					_, e = db.Exec("INSERT INTO schema_migrations VALUES(6,'future',?,'9.0.0')", Now())
 				}
 				if e != nil {
 					t.Fatal(e)

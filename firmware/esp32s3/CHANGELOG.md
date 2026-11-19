@@ -1,5 +1,23 @@
 # ESP32-S3 固件变更记录
 
+## 0.3.0 — 2026-11-19
+
+按三方合同落实C02～C09/C11及Beacon V2，保留既有需求编号/功能，SDK仍为ESP-IDF v5.5.6。源码、主机测试、目标构建和实板放行分开记录；证据见[VALIDATION](VALIDATION.md)及[实施记录](../../docs/gateway-alignment-implementation.md)。
+
+| 范围 | 已实现源码 |
+| --- | --- |
+| C02 | MQTT/HTTPS共用任务、journal/spool及应用ACK；PUBACK不确认业务 |
+| C03 | 完整广播配置后核ACTIVE/STOPPED/PAUSED/FAULT、revision和活跃Peripheral；缺证据保留UNKNOWN |
+| C04 | 持久恢复意图/维护租约下开漏reset及新boot核验；GPIO/时序须验证，默认关闭 |
+| C05/C07 | ESP固定Peripheral服务、独立Security2业务认证、PG分片/route授权/持久spool及回发；已有bond恢复加密，不自动首次配对 |
+| C06/C08/C09 | gw_sync核组件镜像/boot/挑战、完整快照和恢复来源；gw_authority核制造签名/能力；签名时间锚、UTC区间与TLS日期核验 |
+| C11 | 区分nRF传输中断、FINISH歧义、试启动与真实回滚，不跨boot续传RAM会话 |
+| C12/BFLT | 两radio共享组合掩码/PAIR、统一JSON编译及0x19/0x1A/0x1B；3070B预算、500ms边界、缓存清理与原始双报告输出 |
+
+持久bond额外修正：以制造既有密钥显式初始化默认nvs分区，补SDK恢复前后的安全材料核对；错误停止BLE初始化，不自动生成eFuse、不清空绑定或擦除分区。
+
+扫描/广播互斥、单连接、同revision完整字节幂等和背压均显式处理，不扩大未验证并发或改变独立radio配置。制造签名、业务/配网秘密、预置bond及实板证据不打包进普通源码发行物。
+
 ## 0.2.1 — 2026-11-19
 
 本次按现有182条需求补齐运行边界，不新增服务器任务类型或UART命令。构建与测试证据见[验证记录](VALIDATION.md)，实板验收仍按[50项计划](../../docs/esp32s3-validation-plan.md)执行。

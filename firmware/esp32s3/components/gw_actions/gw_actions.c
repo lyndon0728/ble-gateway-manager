@@ -335,6 +335,10 @@ esp_err_t gw_actions_configure(const cJSON *patch, const cJSON *complete, uint64
         goto done;
     if (radio_change && !cJSON_IsObject(target))
         goto done;
+    if (radio_change && cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(target,"scan"),"enabled")) &&
+        cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(target,"advertising"),"enabled"))) {
+        e=ESP_ERR_INVALID_STATE; goto done;
+    }
     char key[64], identity[32];
     snprintf(key, sizeof(key), "actions/config/%s/%s",
              radio_change ? (esp ? "esp32" : "nrf54") : "gateway",
@@ -377,6 +381,19 @@ esp_err_t gw_actions_configure(const cJSON *patch, const cJSON *complete, uint64
         e = adv ? gw_nrf_advertise(cJSON_GetObjectItemCaseSensitive(target, "advertising"),
                                    revision, (int64_t)deadline)
                 : gw_nrf_scan(target, revision, (int64_t)deadline);
+        if (e == ESP_OK && adv) {
+            *details = gw_nrf_diagnostics((int64_t)deadline);
+            if (!*details) e = ESP_ERR_TIMEOUT;
+            else {
+                cJSON_AddStringToObject(*details,"radio","NRF54");
+                const char *state=gw_action_string(*details,"advertisingState"),
+                           *seen_revision=gw_action_string(*details,"advertisingRevision");
+                if (!*seen_revision || strtoull(seen_revision,NULL,10)!=revision ||
+                    (strcmp(state,"STOPPED") && strcmp(state,"ACTIVE") &&
+                     (strcmp(state,"PAUSED") || strcmp(gw_action_string(*details,"advertisingPauseReason"),"PERIPHERAL_CONNECTION"))))
+                    e=ESP_ERR_TIMEOUT;
+            }
+        }
         if (e == ESP_OK && !adv)
             gw_capture_radio_enabled(
                 0, cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(

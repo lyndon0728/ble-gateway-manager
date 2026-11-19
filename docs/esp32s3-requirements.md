@@ -2,14 +2,14 @@
 
 | 项目 | 基线 |
 | --- | --- |
-| 文档版本 | 1.4 |
+| 文档版本 | 1.5 |
 | 日期 | 2026-11-19 |
 | 适用项目 | GW32I33V2，ESP32-S3 主处理器 + nRF54L15 蓝牙协处理器 |
-| 对接基线 | [GW32-E2E-1.1 三方贯通标准](gateway-end-to-end-standard.md)；ESP 固件 0.2.1、nRF 固件 0.2.0、UART 协议文档 1.2（线上帧 version=1；新扩展待实现）、现有服务器消息契约 1.0/1.1 |
+| 对接基线 | [GW32-E2E-1.1 三方贯通标准](gateway-end-to-end-standard.md)；ESP固件0.3.0、nRF配套V2固件、UART 协议文档 1.2（线上帧version=1；扩展按能力门控）、现有服务器消息契约 1.0/1.1 |
 
 **状态：软件需求与产品验收基线。** 仓库已有 ESP32-S3、服务器和 nRF 固件源码及分层测试；本地与远程 ESP OTA 的实现入口见[升级设计](esp32s3-ota.md)。源码、主机测试、目标构建及真实硬件验收分别记录，本文不表示全部需求已通过实板验收。
 
-本文包含 182 条带编号的软件需求、50 个验收用例，以及模块职责、持久化数据、恢复流程、开发阶段和待冻结事项。1.1 增加本地与远程配网；1.2 增加 ESP 本地网页 OTA、平台远程 OTA 的共同安全要求与独立恢复流程；1.3 按三方贯通标准统一字段映射、责任和实现差距，保留全部原有功能、需求编号及验收编号。1.4 冻结差距实施方向并纳入 [Beacon 过滤专项规范](beacon-filter-spec.md)，新增过滤要求使用独立 BFLT 编号，不重排或替换原有 182 条 ESP 需求和 50 项验收。本版文档更新不代表源码差距已经修复。
+本文包含 182 条带编号的软件需求、50 个验收用例，以及模块职责、持久化数据、恢复流程、开发阶段和待冻结事项。1.1 增加本地与远程配网；1.2 增加 ESP 本地网页 OTA、平台远程 OTA 的共同安全要求与独立恢复流程；1.3 按三方贯通标准统一字段映射、责任和实现差距，保留全部原有功能、需求编号及验收编号。1.4 冻结差距实施方向并纳入 [Beacon 过滤专项规范](beacon-filter-spec.md)，新增过滤要求使用独立 BFLT 编号，不重排或替换原有 182 条 ESP 需求和 50 项验收。1.5对应0.3.0源码实施并保留全部编号；见[实施记录](gateway-alignment-implementation.md)，未连接硬件不记为验收通过。
 
 实现路线见 [开发指南](esp32s3-development.md)，事务与恢复细节见 [持久化设计](esp32s3-persistence.md)，逐项测试步骤见 [验证计划](esp32s3-validation-plan.md)。这些开发文档不改变本文的需求编号和线上协议。
 
@@ -21,7 +21,7 @@ ESP32-S3 必须完成两层协议之间的转换和可靠执行：服务器下�
 
 | 文档 | 本文使用方式 |
 | --- | --- |
-| [差距统一实施方案](gateway-alignment-development-plan.md) | C02～C09/C11 的唯一实施决策、状态机、接口迁移与完成门槛；本轮为设计交付，扩展接口须与 Schema/源码共同部署 |
+| [差距统一实施方案](gateway-alignment-development-plan.md) | C02～C09/C11 的唯一实施决策、状态机、接口迁移与完成门槛；0.3.0按此合同实施，平台/Schema/固件须共同部署 |
 | [Beacon 过滤专项规范](beacon-filter-spec.md) | BFLT 系列：名称、UUID、RSSI、Major/Minor 的掩码语义、组合规则、跨报告配对和三端一致性向量 |
 | [三方贯通标准](gateway-end-to-end-standard.md) | GW32-E2E-1.1：平台、ESP、nRF 的共同语义、冲突裁决、差距登记和联调门槛 |
 | [UART 协议](../server/docs/gateway-uart-protocol.md) | 帧、字节序、opcode、状态码、能力位、nRF 行为的权威定义 |
@@ -53,7 +53,7 @@ P0：基础可靠性和集成前置条件；P1：本次交付范围内的业务�
 
 | 项目 | 统一要求 |
 | --- | --- |
-| 名称与版本 | 配置键为 `radios.nrf54/esp32`；GATT 的 `radio` 为 `NRF54/ESP32`；升级 `component` 为 `NRF54/GATEWAY`，省略沿用 GATEWAY。文档版本 1.4、UART 文档 1.2 / 既有实现基线 1.1、帧 version=1 与 JSON schemaVersion 是不同版本域，不互相复制 |
+| 名称与版本 | 配置键为 `radios.nrf54/esp32`；GATT 的 `radio` 为 `NRF54/ESP32`；升级 `component` 为 `NRF54/GATEWAY`，省略沿用 GATEWAY。文档版本1.5、UART文档1.2 / 旧设备兼容基线1.1、帧 version=1 与 JSON schemaVersion 是不同版本域，不互相复制 |
 | revision 与整数 | 云端 desiredRevision、网络 generation/localRevision、UART 配置 revision 各自独立；按对应 Schema 的整数/十进制字符串格式处理并保证无损，不能全局转换为浮点数或字符串来绕过校验 |
 | 时间与单位 | 配置扫描/广播为毫秒，UART 对应间隔为 0.625 ms tick，沿用既有舍入公式并可在 effective 报告实际值；单调采集时刻用于配对，可信 UTC 用于任务期限，不能互换 |
 | RSSI 与过滤 | 仅 `radios.<target>.filters.minRssi:null` 表示清除门限，UART 完整目标编码为禁用门限值 -128；旧顶层 filters 仍拒绝 null。UUID/厂商列表和 Beacon 掩码规则按整数组替换及既有数量/长度上限；本机与 nRF 的逻辑过滤含义一致 |
@@ -65,23 +65,24 @@ P0：基础可靠性和集成前置条件；P1：本次交付范围内的业务�
 
 下表引用统一标准的差距编号。限制当前可宣布能力不等于取消需求；涉及完整功能的条目须补实现并通过对应验收后关闭，文档一致不能作为关闭证据。
 
-| 编号 | 当前差距或冲突裁决 | ESP 交付要求 |
+| 编号 | 0.3.0源码状态 | 保留验收要求 |
 | --- | --- | --- |
-| C01 | 旧文档仍将已存在的 ESP/配网扩展描述为未实现 | 按 0.2.1 源码更新状态，区分源码、主机测试、目标构建和实板验收 |
-| C02 | 当前设备云端路径为 HTTPS，MQTT 客户端尚未实现 | 保留 ESP-SYS-002、ESP-CLOUD 的双传输要求；补齐共享 journal/spool 与应用 ACK 的 MQTT 路径 |
-| C03 | nRF 广播适配器目前执行 0x07/0x08 配置写入/读回，尚未完整核对 0x0C 实际广播状态 | 保留 ESP-ADV、ESP-CFG 的实际生效要求；补状态/故障读回及失败恢复证据，不能以配置回显直接宣布实际广播成功 |
-| C04 | 当前板级初始化仅将 GPIO8 释放为输入，尚无完成的 nRF 挂死硬件复位恢复链 | 保留 ESP-BSP-002、ESP-NOTA-010；按真实板卡完成受控拉低/释放及试启动回退验证 |
-| C05 | Peripheral 本地收发存在，云端业务、手机认证和公开回发任务尚未贯通 | 保留对应接收、广播和本地持久 inbox 要求；新增业务契约须统一更新平台/ESP/nRF 文档与 Schema，不能把未认证数据当配置命令 |
-| C06 | 平台没有独立可信 nRF 源版本登记 | 保留升级兼容约束，不以 ESP 版本代替，不移除 fromFirmwareVersions 检查 |
-| C07 | ESP 本机 BLE 与 nRF 的可连接广播、绑定安全等实际能力不同 | 逐目标核对能力与实现，保留系统功能；不得凭 nRF 的能力声明 ESP 已实现同等功能 |
-| C08 | 没有供设备读取的完整目标快照恢复 API | 本机持久完整目标是恢复依据；configuration/effective 的 complete=false 不等于全量实况，存储全失走受控重配置/重放 |
-| C09 | 制造指定 SNTP 已用于校时，但该时间源未做密码学认证 | 保留 ESP-BOOT-007 的可信时间要求及发布验证；无可信时效依据时不执行时间敏感任务，不能关闭 TLS 校验 |
-| C10 | 双路共同过滤与独立射频配置的文字范围需区分 | 同任务分别下发等价目标；独立射频配置、严格一对一去重及原始数据保留均保持 |
-| C11 | 当前 nrf_transfer 遇 nRF boot 变化直接转 nrf_trial，缺少传输中断与实际试启动的阶段分支 | 按升级 journal 和实际镜像区分恢复阶段；旧 boot 的 RAM session/offset 不可续传。若授权、期限及恢复策略允许重新传输，须新 BEGIN 从零开始；不要求同一任务必然自动重传，不把传输中断误报为已试启动或 ROLLED_BACK |
+| C01 | 文档/源码版本与实现状态统一记录 | 源码、主机测试、目标构建、实板分开取证 |
+| C02 | MQTT/HTTPS共用journal/spool和应用ACK | 切换、迟到ACK和broker故障验收 |
+| C03 | 完整广播配置读回后核实际状态；PAUSED核活连接 | 空口、驱动故障/恢复与结果一致 |
+| C04 | 受控开漏reset/新boot及恢复责任已实现，默认禁用 | 核真实GPIO/时序/未接管数据影响与试启动回退 |
+| C05 | 业务Security2、PG分片、持久spool及平台双向路径 | 手机身份、route权限、重放/断线/掉电验收 |
+| C06 | 组件挑战、实际镜像证明和独立库存登记 | 不用ESP版本替代nRF，不去掉fromFirmwareVersions |
+| C07 | ESP固定Peripheral服务、已有bond加密、能力交集 | 单连接、扫描/广播互斥，首次配对未开放 |
+| C08 | 完整设备快照校验与受控恢复来源 | 缺组/摘要/版本拒绝；保护localOverride并逐组配置 |
+| C09 | 签名时间挑战、UTC区间及TLS日期边界 | 100ppm制造上界须板验证，失效锚不授权远程敏感动作 |
+| C10 | 同任务等价规则与独立radio配置保持分离 | 原始字节及严格一对一去重不变 |
+| C11 | nRF重启按传输/FINISH/试启动阶段分派 | 不跨boot续传RAM，不把传输中断误报回滚 |
+| C12/BFLT | 共享组合掩码/REPORT/PAIR，V2编译/读回/计数 | 3070B预算、边界/缓存/原始记录及实板负载验证 |
 
 ### 1.4 差距的统一实施和关闭条件
 
-C01/C10 的文档歧义已处理；其余事项按 [统一实施方案](gateway-alignment-development-plan.md) 执行，不能由 ESP 单方新造云字段、UART opcode 或证明等级。实施方案冻结的是目标行为，源码、目标构建、实板证据分别验收；任何功能不足都继续保留在交付范围。
+0.3.0源码已按下列合同实施；放行仍按 [统一实施方案](gateway-alignment-development-plan.md) 执行，不能由 ESP 单方新造云字段、UART opcode 或证明等级。实施方案冻结的是目标行为，源码、目标构建、实板证据分别验收；任何功能不足都继续保留在交付范围。
 
 | 差距 | ESP 交付物与既有需求映射 | 关闭前必须通过 |
 | --- | --- | --- |
@@ -118,7 +119,7 @@ flowchart LR
 | ESP-SYS-006 | P0 | 正确区分“命令受理”“驱动受理”“实际生效”“数据持久接管”“业务执行成功”；每项成功声明必须有相应证据。 |
 | ESP-SYS-007 | P0 | 能力为签名设备清单、ESP 构建实现、运行时驱动、nRF HELLO 与已验收组合的交集。型号名不能替代能力协商。 |
 
-本期不包括任意 Wi-Fi 帧注入、任意 Flash 写入、nRF bootloader 远程升级、通用 BLE 首次配对管理、多连接或未经验证的多角色并发。手机 Peripheral 云端业务与认证是接口缺口，见第 13 节。
+本期不包括任意 Wi-Fi 帧注入、任意 Flash 写入、nRF bootloader 远程升级、通用 BLE 首次配对管理、多连接或未经验证的多角色并发。手机Peripheral认证与云端业务按第13节实施，代码不替代手机/板级验收。
 
 本期包含无需专用手机 App 的本地网页网络配置：手机或笔记本连接 ESP32-S3 热点后设置上联网参数；已联网设备同时支持网关平台远程配置。两种入口复用网络候选管理器，认证、版本来源和提交证据分别定义，不能把本地保存冒充云端任务成功。
 
@@ -346,7 +347,7 @@ MQTT 前缀为 `gw/v1/{namespaceId}/{gatewayId}/`，QoS 1，retain=false。`resu
 | ESP-CFG-002 | P0 | 合并后的完整配置再次校验能力和互斥；不能通过 patch 省略 mode 等字段绕过可连接广播能力。radios.<target>.filters 扩展支持 minRssi:null 清除阈值，旧版顶层 filters 不接受该 null；空数组用于清除相应过滤列表。 |
 | ESP-CFG-003 | P0 | 持久保存目标及执行意图，应用后读回配置/实际状态，再提交本组生效快照。失败保留错误和真实实际状态，不能只改 reportedRevision。 |
 | ESP-CFG-004 | P0 | 成功结果 details.configuration 回显原 patch，reportedConfigurationRevision 等于 desiredRevision；量化值和实际状态用允许的 details.effective 表达。 |
-| ESP-CFG-005 | P0 | 服务器 configuration 的 desired/reported 是最近补丁，不是全量快照；管理侧 effective 查询可合并已核验补丁，但须尊重 complete=false 等完整性标记，设备 token 不能调用管理查询接口。Flash 清空后当前没有全量设备配置拉取接口，须重新配置/管理重放，不做虚构恢复。 |
+| ESP-CFG-005 | P0 | 服务器 configuration 的 desired/reported 是最近补丁，不是全量快照；管理侧 effective 查询可合并已核验补丁，但须尊重 complete=false 等完整性标记，设备 token 不能调用管理查询接口。设备快照入口须校验完整性、摘要、组revision与来源；Flash全失只能按获授权完整快照/管理重放重新配置，不凭最近补丁虚构恢复。 |
 | ESP-CFG-006 | P1 | 毫秒按既有公式转换到 0.625 ms ticks，统一整数舍入，读回报告实际值；revision 使用无损整数编码，避免 JSON 数值实现丢精度。 |
 
 ## 11. 以太网、Wi-Fi 与网络切换
@@ -382,7 +383,7 @@ Wi-Fi 与 ESP 本机 BLE 共享射频资源，必须启用所选 SDK 的适用�
 | ESP-PROV-008 | P0 | 新密码仅用于安全凭据写入，返回不可反查明文的 credentialRef；界面、日志、配置回读及审计均不回显密码。保留原凭据、替换和清除使用明确不同操作，空输入不能隐含覆盖；旧恢复点仍引用的凭据不得提前清除。 |
 | ESP-PROV-009 | P0 | 所有网络候选持久记录来源、事务 ID、预期基线、完整候选、引用和阶段；同一时刻只允许一个网络写事务。使用覆盖所有来源的 networkGeneration 进行比较并交换，拒绝基线过期；重复相同请求返回原事务状态，ID 相同但内容不同拒绝，页面重试不能产生另一轮配置。 |
 | ESP-PROV-010 | P0 | 本地配置使用独立 transactionId/localRevision，同时检查预期 localRevision 和 networkGeneration；不得生成或递增服务器 desiredRevision，不构造不存在任务的 taskId/resultId。云端 revision、最近本地版本和实际配置来源独立持久保存，reportedRevision 仅按真实远程任务成功推进。 |
-| ESP-PROV-011 | P0 | 本地在线应用必须在候选接口实际完成链路/IP、适用的 DNS、TLS、设备认证及新鲜 challenge 应用响应验证，完成持久提交后才显示在线成功；旧接口、手机互联网或浏览器加载成功均不是候选成功证据。独立平台 probe 接口仍待实现，该结果不证明平台已采用本地配置。 |
+| ESP-PROV-011 | P0 | 本地在线应用必须在候选接口实际完成链路/IP、适用的 DNS、TLS、设备认证及新鲜 challenge 应用响应验证，完成持久提交后才显示在线成功；旧接口、手机互联网或浏览器加载成功均不是候选成功证据。独立平台probe已接入，该探测结果仍不证明平台已采用本地配置。 |
 | ESP-PROV-012 | P1 | 首次无互联网或平台暂不可达时可由用户明确选择 LOCAL_ONLY：校验参数与凭据、展示未完成验证、持久保存 activeLocalSnapshot/验证等级，保留 lastVerified 和旧凭据。普通试用失败不得自动离线提交；后台重试有界，失联回退时保留本地候选供查询/重试，后续联网仍需验证及对账。 |
 | ESP-PROV-013 | P0 | 本地试用超时、认证/证书失败、提交前重启等按持久阶段恢复；普通试用失败回退到试用前可用配置，尚无可用配置时回到受限配网流程。提交后响应丢失可按原 transactionId 查询；热点或手机因信道/接口变化断开不等于事务失败，不能凭页面断线重放配置。 |
 | ESP-PROV-014 | P0 | 本地提交后保留待平台对账状态；重新上线时比较本地来源、完整配置摘要及服务器基线，显式选择采用本地配置或应用平台目标，不能静默覆盖。采用本地配置仍由服务器创建正式 revision，旧任务不得凭较大的云端 revision 越过本地冲突检查；对账接口未实现时准确显示未同步并禁止假报完成。 |
@@ -434,7 +435,7 @@ BFLT 需求与 BFLT-AT 专项向量补充 ESP-AT-19/33；名称跨报告、UUID 
 | ESP-ADV-008 | P1 | enabled=true/PAUSED 且存在有效手机连接是正常状态；enabled=false 不等于断开手机。显式断连需单独授权和本地路由。 |
 | ESP-ADV-009 | P1 | nRF 重启后按持久广播目标恢复，UART 重握手则先读回；ESP 本机广播同样记录目标、驱动实际状态和失败原因。 |
 
-ESP 本机可连接广播需要自己的 GATT 服务与认证实现；nRF Peripheral 已存在不等于 ESP 同时具备该服务。该能力未实现时不登记 ESP32_BLE_PERIPHERAL。
+ESP 本机可连接广播需要自己的 GATT 服务与认证实现；nRF Peripheral 已存在不等于 ESP 同时具备该服务。0.3.0已实现本机INFO/RX/TX及独立业务认证，只有制造授权与实板交集允许才登记ESP32_BLE_PERIPHERAL。
 
 ## 13. GATT 与手机 Peripheral
 
@@ -461,7 +462,7 @@ ESP 本机可连接广播需要自己的 GATT 服务与认证实现；nRF Periph
 | ESP-PER-002 | P0 | 0x22 与其他批次共用接管序列，先写可恢复本地应用 inbox 再 CUSTODY；手机 ATT Write Response 只证明写入 nRF RAM，不能表示 ESP/云端已执行。 |
 | ESP-PER-003 | P0 | 公开 RX 字节不直接执行配网、GATT 写入或升级；必须经过应用认证、授权、抗重放和长度/速率限制。认证未实现时只受限存储/拒绝业务，不开放敏感操作。 |
 | ESP-PER-004 | P1 | 回复检查当前连接和 CCC，持久业务事务 ID 与 tx_seq 后调用 0x0E；OK 只表示栈受理。需要业务送达时采用应用 ACK，不因 UART 丢响应重复业务。 |
-| ESP-PER-005 | P0 | 当前 RawEvent 没有 Peripheral RX 类型，也没有服务器公开的 Peripheral 回复/断连任务。正式云端转发前必须版本化补齐业务 Schema、认证、ACK、路由和权限，不伪装为 GATT_NOTIFY。 |
+| ESP-PER-005 | P0 | RawEvent仍不承载Peripheral业务；使用独立业务事件/ACK及PERIPHERAL_NOTIFY、PERIPHERAL_DISCONNECT，按版本化Schema、认证/路由/权限执行，不伪装为GATT_NOTIFY。 |
 
 因此“支持手机连接和 UART 数据转发”与“手机配置网关/云端交互已完成”必须独立验收。
 

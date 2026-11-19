@@ -10,6 +10,10 @@
 #include "gw_core.h"
 #include "gw_http.h"
 #include "gw_nrf.h"
+#include "gw_peripheral.h"
+#include "gw_signed_time.h"
+#include "gw_sync.h"
+#include "gw_transport.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -116,8 +120,9 @@ static bool revision_number(const cJSON *value, double *revision) {
  * acknowledged result must not roll back the durable reporting watermark. */
 static void advance_reported_revision(const cJSON *value) {
   double current, next;
-  if (revision_number(cJSON_GetObjectItemCaseSensitive(journal, "reportedRevision"),
-                      &current) &&
+  if (revision_number(
+          cJSON_GetObjectItemCaseSensitive(journal, "reportedRevision"),
+          &current) &&
       revision_number(value, &next) && next > current)
     put(journal, "reportedRevision", cJSON_Duplicate(value, true));
 }
@@ -168,8 +173,8 @@ static esp_err_t deliver(const cJSON *result, const char *interface,
   cJSON *batch = envelope("results", array), *ack = NULL;
   if (!batch)
     return ESP_ERR_NO_MEM;
-  esp_err_t e = gw_http_json("/api/v1/gateway-ingress/results", "POST", batch,
-                             interface, deadline, &ack);
+  esp_err_t e = gw_transport_json("/api/v1/gateway-ingress/results", "POST",
+                                  batch, interface, deadline, &ack);
   if (e == ESP_OK &&
       !ack_result(ack, str(result, "taskId"), str(result, "resultId")))
     e = ESP_ERR_INVALID_RESPONSE;
@@ -394,6 +399,10 @@ static void merge_configuration(cJSON *cfg, const cJSON *patch) {
 }
 static esp_err_t execute_config(const cJSON *command, uint64_t deadline,
                                 cJSON **details, bool *async) {
+  esp_err_t recovery =
+      gw_cloud_recovery_check(command, namespace_id, gateway_id, deadline);
+  if (recovery != ESP_OK)
+    return recovery;
   const cJSON *params = cJSON_GetObjectItemCaseSensitive(command, "parameters"),
               *patch =
                   cJSON_GetObjectItemCaseSensitive(params, "configuration");
@@ -459,8 +468,8 @@ static void finish_config(const cJSON *command, const cJSON *details,
                           num(params, "desiredRevision"));
   /* deliver() advances and saves the reporting watermark with the validated
    * ACK. Do not rewrite it here using a possibly older task revision. */
-  (void)result_for(str(command, "taskId"), "terminal", "SUCCEEDED", "VERIFIED", d,
-                   NULL, NULL, deadline);
+  (void)result_for(str(command, "taskId"), "terminal", "SUCCEEDED", "VERIFIED",
+                   d, NULL, NULL, deadline);
   cJSON_Delete(d);
 }
 static bool command_valid(const cJSON *c) {
@@ -500,8 +509,18 @@ static void command(const cJSON *c) {
     return;
   const char *id = str(c, "taskId");
   int64_t expires = parse_utc(str(c, "expiresAt"));
-  if (expires < 0)
+  const char *created_text=str(c,"createdAt");
+  int64_t created=parse_utc(created_text);uint64_t lower;
+  if (expires < 0||created<0||!gw_core_time_bounds(&lower,NULL))
     return;
+  unsigned fraction=0;
+  if(created_text[19]=='.'){
+    const char *digit=created_text+20;
+    for(unsigned i=0;i<3;i++){fraction*=10;if(*digit>='0'&&*digit<='9')fraction+=*digit++-'0';}
+    bool round=false;while(*digit>='0'&&*digit<='9')if(*digit++!='0')round=true;
+    if(round)++fraction;
+  }
+  if(lower<(uint64_t)created*1000+fraction)return;
   xSemaphoreTake(mutex, portMAX_DELAY);
   cJSON *r = find_record(id);
   if (r) { /* Duplicate or conflicting command NEVER repeats the physical
@@ -526,6 +545,11 @@ static void command(const cJSON *c) {
   cJSON_AddArrayToObject(r, "pending");
   cJSON_AddObjectToObject(r, "phases");
   cJSON_AddNumberToObject(r, "nextSequence", 0);
+  char accepted_deadline[24];
+  snprintf(accepted_deadline,sizeof(accepted_deadline),"%llu",
+           (unsigned long long)gw_core_time_deadline((uint64_t)expires*1000));
+  cJSON_AddStringToObject(r,"acceptedDeadlineMono",accepted_deadline);
+  cJSON_AddStringToObject(r,"acceptedBoot",boot_id);
   /* Reserve worst-case result space before accepting a physical action. */
   char *reserve = malloc(24577);
   if (!reserve) {
@@ -547,9 +571,16 @@ static void execute_ready(const cJSON *c) {
   cJSON *r;
   esp_err_t e;
   uint64_t now = gw_core_mono_ms(),
-           deadline = now + (expires > (int64_t)time(NULL)
-                                 ? (uint64_t)(expires - time(NULL)) * 1000
-                                 : 0);
+           deadline = expires > 0
+                          ? gw_core_time_deadline((uint64_t)expires * 1000)
+                          : now;
+  xSemaphoreTake(mutex,portMAX_DELAY);
+  r=find_record(id);
+  if(r&&!strcmp(str(r,"acceptedBoot"),boot_id)){
+    uint64_t original=strtoull(str(r,"acceptedDeadlineMono"),NULL,10);
+    if(original&&deadline>original)deadline=original;
+  }
+  xSemaphoreGive(mutex);
   if (deadline <= now) {
     result_for(id, "terminal", "EXPIRED", "NONE", NULL, "TASK_EXPIRED", NULL,
                now + 5000);
@@ -596,7 +627,9 @@ static void execute_ready(const cJSON *c) {
       gw_core_maintenance_release(id);
     }
   } else
-    e = gw_actions_execute(c, deadline, &details);
+    e = !strncmp(str(c, "type"), "PERIPHERAL_", 11)
+            ? gw_peripheral_execute(c, deadline, &details)
+            : gw_actions_execute(c, deadline, &details);
   if (e == ESP_ERR_NOT_FINISHED)
     async = true; /* trial/recovery obligation remains owned */
   if (!async) {
@@ -722,10 +755,13 @@ static void service_journal(void) {
       continue;
     }
     if (!strcmp(str(c, "type"), "FIRMWARE_UPGRADE") ||
-        !strncmp(str(c, "type"), "GATT_", 5)) {
+        !strncmp(str(c, "type"), "GATT_", 5) ||
+        !strncmp(str(c, "type"), "PERIPHERAL_", 11)) {
       cJSON *details = NULL;
       esp_err_t recovered =
-          gw_actions_recover(c, gw_core_mono_ms() + 30000, &details);
+          !strncmp(str(c, "type"), "PERIPHERAL_", 11)
+              ? gw_peripheral_recover(c, gw_core_mono_ms() + 30000, &details)
+              : gw_actions_recover(c, gw_core_mono_ms() + 30000, &details);
       if (recovered != ESP_ERR_NOT_FINISHED)
         result_for(id, "terminal",
                    recovered == ESP_OK            ? "SUCCEEDED"
@@ -825,7 +861,8 @@ static void heartbeat(void) {
   cJSON_AddStringToObject(body, "namespaceId", namespace_id);
   cJSON_AddStringToObject(body, "gatewayId", gateway_id);
   cJSON_AddStringToObject(body, "observedAt", observed);
-  cJSON_AddStringToObject(body, "firmwareVersion", esp_app_get_description()->version);
+  cJSON_AddStringToObject(body, "firmwareVersion",
+                          esp_app_get_description()->version);
   xSemaphoreTake(mutex, portMAX_DELAY);
   cJSON_AddNumberToObject(body, "reportedConfigurationRevision",
                           num(journal, "reportedRevision"));
@@ -834,8 +871,8 @@ static void heartbeat(void) {
   cJSON_AddStringToObject(body, "timeQuality", "SYNCED");
   cJSON_AddStringToObject(
       body, "health", gw_nrf_identity(NULL, NULL, NULL) ? "OK" : "DEGRADED");
-  gw_http_json("/api/v1/gateway-ingress/status", "POST", body, NULL,
-               gw_core_mono_ms() + 5000, &reply);
+  gw_transport_json("/api/v1/gateway-ingress/status", "POST", body, NULL,
+                    gw_core_mono_ms() + 5000, &reply);
   cJSON_Delete(reply);
   cJSON_Delete(body);
 }
@@ -849,10 +886,11 @@ static void cloud_task(void *unused) {
         credentials();
         network_state();
         heartbeat();
+        gw_cloud_sync(namespace_id, gateway_id, boot_id);
       }
       cJSON *reply = NULL;
-      if (gw_http_json("/api/v1/gateway-ingress/commands", "GET", NULL, NULL,
-                       gw_core_mono_ms() + 5000, &reply) == ESP_OK) {
+      if (gw_transport_json("/api/v1/gateway-ingress/commands", "GET", NULL,
+                            NULL, gw_core_mono_ms() + 5000, &reply) == ESP_OK) {
         const cJSON *c;
         cJSON_ArrayForEach(
             c, cJSON_GetObjectItemCaseSensitive(reply, "commands")) command(c);
@@ -863,11 +901,28 @@ static void cloud_task(void *unused) {
     vTaskDelay(pdMS_TO_TICKS(2000));
   }
 }
+static void time_transport_task(void *unused) {
+  (void)unused;
+  uint64_t refreshed = 0;
+  for (;;) {
+    uint64_t now = gw_core_mono_ms();
+    if (identity_ready &&
+        (!gw_core_time_trusted() || now - refreshed >= 20000)) {
+      if (gw_signed_time_refresh(boot_id) == ESP_OK)
+        refreshed = gw_core_mono_ms();
+    }
+    gw_transport_service();
+    vTaskDelay(pdMS_TO_TICKS(2000));
+  }
+}
 static void upload_task(void *unused) {
   (void)unused;
   for (;;) {
-    if (identity_ready && gw_core_time_trusted())
+    if (identity_ready && gw_core_time_trusted()) {
       gw_capture_upload(namespace_id, gateway_id, gw_core_mono_ms() + 5000);
+      gw_peripheral_service(namespace_id, gateway_id, NULL,
+                            gw_core_mono_ms() + 5000);
+    }
     vTaskDelay(pdMS_TO_TICKS(50));
   }
 }
@@ -881,7 +936,10 @@ esp_err_t gw_cloud_init(void) {
     cJSON_AddArrayToObject(journal, "records");
     cJSON_AddNumberToObject(journal, "reportedRevision", 0);
   }
-  random_id(boot_id, 16);
+  uint8_t controller_boot[16];
+  gw_capture_esp_boot(controller_boot);
+  for (size_t i = 0; i < 16; i++)
+    snprintf(boot_id + 2 * i, 3, "%02x", controller_boot[i]);
   text(journal, "bootId", boot_id);
   esp_err_t e = save();
   if (e != ESP_OK)
@@ -892,6 +950,14 @@ esp_err_t gw_cloud_init(void) {
                                          sizeof(gateway_id)) == ESP_OK &&
                    valid_id(namespace_id) && valid_id(gateway_id);
   gw_core_set_probe_handler(probe, NULL);
+  if (identity_ready &&
+      (e = gw_transport_init(namespace_id, gateway_id)) != ESP_OK)
+    return e;
+  if ((e = gw_peripheral_init()) != ESP_OK)
+    return e;
+  if (xTaskCreate(time_transport_task, "gw_time", 12288, NULL, 5, NULL) !=
+      pdPASS)
+    return ESP_ERR_NO_MEM;
   if (xTaskCreate(upload_task, "gw_upload", 16384, NULL, 4, NULL) != pdPASS)
     return ESP_ERR_NO_MEM;
   return xTaskCreate(cloud_task, "gw_cloud", 16384, NULL, 5, NULL) == pdPASS

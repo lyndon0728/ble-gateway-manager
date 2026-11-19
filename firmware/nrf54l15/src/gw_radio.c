@@ -1,5 +1,6 @@
 #include "gw_radio.h"
 #include "gw_core.h"
+#include "gw_filter_v2.h"
 #include "gw_gatt.h"
 #include "gw_peripheral.h"
 #include <errno.h>
@@ -12,7 +13,14 @@
 #include <zephyr/settings/settings.h>
 
 K_MUTEX_DEFINE(radio_lock);
-static struct gw_profile profile;
+static struct gw_filter_v2_config filter_config, filter_candidate;
+static struct gw_filter_v2_state filter_state;
+static struct gw_filter_v2_pending filter_input[32];
+static uint8_t filter_input_head, filter_input_count;
+_Static_assert(sizeof(filter_input) + sizeof(filter_state.pending) + 2 <= 4096,
+               "V2 ingress and PAIR caches exceed the shared memory budget");
+static uint8_t filter_old_bytes[GW_FILTER_V2_MAX], filter_new_bytes[GW_FILTER_V2_MAX];
+#define profile (filter_config.legacy)
 static struct gw_profile candidate;
 static uint8_t profile_bytes[GW_PROFILE_MAX];
 static uint8_t candidate_bytes[GW_PROFILE_MAX];
@@ -30,7 +38,7 @@ static bool maintenance_waiting;
 static bool radio_ready;
 static atomic_t connect_paused;
 static atomic_t resume_requested;
-static uint64_t reports_seen, reports_filtered, reports_incomplete;
+static uint64_t reports_seen, reports_incomplete;
 static atomic_t callback_contention;
 static bt_addr_le_t bonded_identities[CONFIG_BT_MAX_PAIRED];
 static size_t bonded_identity_count;
@@ -80,6 +88,34 @@ static int start_scan(void)
     return err;
 }
 
+static void filter_emit(void *user, const uint8_t *record, size_t length)
+{
+    ARG_UNUSED(user);
+    gw_app_record(0x20, record, length);
+}
+
+static void filter_discard(void)
+{
+    gw_filter_v2_clear(&filter_state);
+    filter_state.counters[GW_FILTER_SEEN] += filter_input_count;
+    filter_state.counters[GW_FILTER_CONFIG_DISCARDED] += filter_input_count;
+    filter_input_count = filter_input_head = 0;
+}
+
+static void filter_drain(void)
+{
+    while (filter_input_count) {
+        struct gw_filter_v2_pending *input = &filter_input[filter_input_head];
+        gw_filter_v2_feed(&filter_state, &filter_config, input->record, input->length,
+                          filter_emit, NULL);
+        filter_input_head = (filter_input_head + 1) % ARRAY_SIZE(filter_input);
+        --filter_input_count;
+    }
+    /* All published capture timestamps <= this watermark have been consumed.
+     * Producers also acquire radio_lock before assigning their timestamp. */
+    gw_filter_v2_advance(&filter_state, (uint64_t)k_uptime_get());
+}
+
 static void scan_received(const struct bt_le_scan_recv_info *info, struct net_buf_simple *ad)
 {
     uint8_t record[24 + 31];
@@ -94,15 +130,14 @@ static void scan_received(const struct bt_le_scan_recv_info *info, struct net_bu
     /* Extended reports remain disabled until reassembly and board RF are qualified. */
     if (extended || ad->len > 31) {
         reports_incomplete++;
+        if (filter_config.engine) {
+            ++filter_state.counters[GW_FILTER_SEEN];
+            ++filter_state.counters[GW_FILTER_UNSUPPORTED_CONTEXT];
+        }
         k_mutex_unlock(&radio_lock);
         return;
     }
     int8_t rssi = info->rssi == 127 ? -128 : info->rssi;
-    if (!gw_filter_match(&profile, kind, rssi, ad->data, ad->len)) {
-        reports_filtered++;
-        k_mutex_unlock(&radio_lock);
-        return;
-    }
     memset(record, 0, 24);
     gw_put_u64(record, k_uptime_get());
     record[8] = kind;
@@ -126,7 +161,23 @@ static void scan_received(const struct bt_le_scan_recv_info *info, struct net_bu
     record[21] = 0xff;
     gw_put_u16(record + 22, ad->len);
     memcpy(record + 24, ad->data, ad->len);
-    gw_app_record(0x20, record, 24 + ad->len);
+    if (scan_state == 1) {
+        if (!filter_config.engine) {
+            gw_filter_v2_feed(&filter_state, &filter_config, record, 24 + ad->len, filter_emit, NULL);
+        } else if (filter_input_count == ARRAY_SIZE(filter_input)) {
+            ++filter_state.counters[GW_FILTER_SEEN];
+            ++filter_state.counters[GW_FILTER_PAIR_OVERFLOW];
+        } else {
+            struct gw_filter_v2_pending *input =
+                &filter_input[(filter_input_head + filter_input_count) % ARRAY_SIZE(filter_input)];
+            input->length = 24 + ad->len;
+            memcpy(input->record, record, input->length);
+            ++filter_input_count;
+        }
+    } else {
+        ++filter_state.counters[GW_FILTER_SEEN];
+        ++filter_state.counters[GW_FILTER_UNSUPPORTED_CONTEXT];
+    }
     k_mutex_unlock(&radio_lock);
 }
 
@@ -134,6 +185,7 @@ static struct bt_le_scan_cb scan_callbacks = {.recv = scan_received};
 
 static uint8_t apply_scan(const uint8_t *args, size_t length, bool extended)
 {
+    if (filter_config.engine) return GW_CONFLICT;
     if (!gw_profile_parse(args, length, extended, &candidate)) {
         return GW_BAD_PARAM;
     }
@@ -164,6 +216,7 @@ static uint8_t apply_scan(const uint8_t *args, size_t length, bool extended)
     if (scan_state == 1 && bt_le_scan_stop() != 0) {
         return GW_APPLY_FAILED;
     }
+    filter_discard();
     profile = candidate;
     if (start_scan() == 0) {
         return GW_OK;
@@ -173,6 +226,29 @@ static uint8_t apply_scan(const uint8_t *args, size_t length, bool extended)
     if (start_scan() != 0) {
         scan_state = 2;
     }
+    return GW_APPLY_FAILED;
+}
+
+static uint8_t apply_scan_v2(const uint8_t *args, size_t length)
+{
+    if (!gw_filter_v2_parse(args, length, &filter_candidate)) return GW_BAD_PARAM;
+    size_t old_length = gw_filter_v2_encode(&filter_config, filter_old_bytes, sizeof(filter_old_bytes));
+    size_t new_length = gw_filter_v2_encode(&filter_candidate, filter_new_bytes, sizeof(filter_new_bytes));
+    if (!old_length || !new_length) return GW_BAD_PARAM;
+    if (filter_candidate.legacy.revision < profile.revision) return GW_CONFLICT;
+    if (filter_candidate.legacy.revision == profile.revision) {
+        if (old_length != new_length || memcmp(filter_old_bytes, filter_new_bytes, old_length)) return GW_CONFLICT;
+        if (scan_state == 2) return GW_APPLY_FAILED;
+        return scan_state == ((profile.scan_flags & 1) ? 1 : 0) ? GW_OK : GW_BUSY;
+    }
+    if ((filter_candidate.legacy.scan_flags & 1) && (maintenance || gw_peripheral_busy() ||
+        atomic_get(&connect_paused) || gw_gatt_connection_state() != 0 || adv_state != 0)) return GW_BUSY;
+    if (!radio_ready) return GW_UNSUPPORTED;
+    if (scan_state == 1 && bt_le_scan_stop() != 0) return GW_APPLY_FAILED;
+    filter_discard();
+    filter_config = filter_candidate;
+    if (start_scan() == 0) return GW_OK;
+    if (!gw_filter_v2_parse(filter_old_bytes, old_length, &filter_config) || start_scan() != 0) scan_state = 2;
     return GW_APPLY_FAILED;
 }
 
@@ -319,7 +395,9 @@ commit:
 
 int gw_radio_init(void)
 {
-    gw_profile_default(&profile);
+    gw_filter_v2_default(&filter_config);
+    memset(&filter_state, 0, sizeof(filter_state));
+    filter_input_head = filter_input_count = 0;
     gw_put_u16(adv_config + 10, 160);
     if (!IS_ENABLED(CONFIG_GW_RADIO_VERIFIED)) {
         return -ENOTSUP;
@@ -343,7 +421,7 @@ int gw_radio_init(void)
 uint32_t gw_radio_capabilities(void)
 {
     /* Role combinations are gated until tested with the selected FEM and PCB. */
-    return radio_ready ? (BIT(1) | BIT(2) | BIT(3) | BIT(4) | BIT(9) | BIT(10) | BIT(11)) : 0;
+    return radio_ready ? (BIT(1) | BIT(2) | BIT(3) | BIT(4) | BIT(9) | BIT(10) | BIT(11) | BIT(13)) : 0;
 }
 
 uint8_t gw_radio_command(uint8_t opcode, const uint8_t *args, size_t length,
@@ -363,11 +441,25 @@ uint8_t gw_radio_command(uint8_t opcode, const uint8_t *args, size_t length,
         break;
     case 2:
     case 6:
-        if (length) {
+        if (opcode == 6 && filter_config.engine) {
+            status = GW_CONFLICT;
+        } else if (length) {
             status = GW_BAD_PARAM;
         } else {
             *result_length = gw_profile_encode(&profile, opcode == 6, result, GW_PAYLOAD_MAX - 2);
         }
+        break;
+    case 0x19:
+        status = apply_scan_v2(args, length);
+        if (status != GW_OK) break;
+        *result_length = gw_filter_v2_encode(&filter_config, result, GW_PAYLOAD_MAX - 2);
+        break;
+    case 0x1a:
+    case 0x1b:
+        if (length) status = GW_BAD_PARAM;
+        else if (!radio_ready) status = GW_UNSUPPORTED;
+        else if (opcode == 0x1a) *result_length = gw_filter_v2_encode(&filter_config, result, GW_PAYLOAD_MAX - 2);
+        else { filter_drain(); gw_filter_v2_status(&filter_state, &filter_config, result); *result_length = 96; }
         break;
     case 7:
         status = apply_advertising(args, length);
@@ -449,6 +541,7 @@ int gw_radio_prepare_connect(void)
         err = bt_le_scan_stop();
     }
     if (!err) {
+        filter_discard();
         atomic_set(&connect_paused, 1);
         scan_state = (profile.scan_flags & 1) ? 3 : 0;
     }
@@ -489,6 +582,9 @@ static bool stack_connections_alive(void)
 
 void gw_radio_poll(void)
 {
+    k_mutex_lock(&radio_lock, K_FOREVER);
+    filter_drain();
+    k_mutex_unlock(&radio_lock);
     if (maintenance_waiting && !stack_connections_alive() &&
         !gw_peripheral_busy() && gw_gatt_connection_state() == 0) {
         /* BEGIN returned BUSY, so no DFU session owns the reservation. Restore
@@ -547,6 +643,7 @@ int gw_radio_enter_maintenance(void)
         k_mutex_unlock(&radio_lock);
         return -EIO;
     }
+    filter_discard();
     scan_state = (profile.scan_flags & 1) ? 3 : 0;
     adv_state = adv_config[8] ? 3 : 0;
     maintenance = true;
@@ -582,7 +679,8 @@ void gw_radio_counters(uint64_t *seen, uint64_t *filtered, uint64_t *incomplete)
 {
     k_mutex_lock(&radio_lock, K_FOREVER);
     *seen = reports_seen + (uint32_t)atomic_get(&callback_contention);
-    *filtered = reports_filtered;
+    *filtered = 0;
+    for (unsigned i = GW_FILTER_RULE_DROPPED; i < GW_FILTER_COUNTER_COUNT; ++i) *filtered += filter_state.counters[i];
     *incomplete = reports_incomplete + (uint32_t)atomic_get(&callback_contention);
     k_mutex_unlock(&radio_lock);
 }

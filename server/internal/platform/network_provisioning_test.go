@@ -40,6 +40,7 @@ func networkRequest(t *testing.T, a *App, actor, gateway, method, path string, b
 	}
 	router := chi.NewRouter()
 	a.RegisterNetworkProvisioning(router)
+	a.RegisterGatewayIntegration(router)
 	a.RegisterControl(router)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, r)

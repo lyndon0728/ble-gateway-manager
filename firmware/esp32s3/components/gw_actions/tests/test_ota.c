@@ -54,6 +54,10 @@ bool gw_action_hex(const char *s, uint8_t *p, size_t n) {
 }
 uint64_t gw_core_mono_ms(void) { return monotonic; }
 bool gw_core_time_trusted(void) { return !untrusted; }
+uint64_t gw_core_time_deadline(uint64_t expires) {
+    uint64_t now=(uint64_t)ota_test_time(NULL)*1000;
+    return monotonic+(expires>now?expires-now:0);
+}
 bool gw_core_interface_ready(const char *s) {
     (void)s;
     return true;
@@ -804,9 +808,41 @@ static void remote_boundaries(void) {
     cJSON_Delete(c);
     puts("PASS: remote signed size/format/legacy compatibility and erase/write authorization budgets");
 }
+static void nrf_restart_stages(void) {
+    const char *stages[] = {"VERIFIED_ARTIFACT", "BEGIN_INTENT", "TRANSFERRING"};
+    for (unsigned i = 0; i < sizeof(stages) / sizeof(stages[0]); i++) {
+        cJSON *c = setup(true), *j = cJSON_CreateObject(), *details = NULL;
+        char old[33];
+        gw_action_hex_encode(peer_boot, 16, old);
+        cJSON_AddStringToObject(j, "previousBoot", old);
+        cJSON_AddStringToObject(j, "phase", stages[i]);
+        peer_boot[0]++;
+        assert(nrf_transfer(j, 100000, &details) == ESP_FAIL);
+        assert(!strcmp(gw_action_string(j, "phase"), "FAILED"));
+        assert(!strcmp(gw_action_string(j, "failureReason"), "NRF_TRANSFER_INTERRUPTED"));
+        assert(!begin_count && !uart_chunks && !confirms && !aborts && !details);
+        cJSON_Delete(j);
+        cJSON_Delete(c);
+    }
+    cJSON *c = setup(true), *j = cJSON_CreateObject(), *details = NULL;
+    char old[33];
+    gw_action_hex_encode(peer_boot, 16, old);
+    cJSON_AddStringToObject(j, "previousBoot", old);
+    cJSON_AddStringToObject(j, "previousVersion", "v1");
+    cJSON_AddStringToObject(j, "version", "v2");
+    cJSON_AddStringToObject(j, "phase", "FINISH_INTENT");
+    peer_boot[0]++;
+    assert(nrf_transfer(j, 100000, &details) == ESP_ERR_NOT_FINISHED);
+    assert(!strcmp(gw_action_string(j, "phase"), "FINISH_INTENT"));
+    assert(!begin_count && !confirms && !aborts);
+    cJSON_Delete(j);
+    cJSON_Delete(c);
+    puts("PASS: nRF upload reboot is interrupted, ambiguous FINISH is not rollback");
+}
 int main(void) {
     local_tests();
     remote_boundaries();
+    nrf_restart_stages();
     assert(expires_seconds("2024-02-29T12:00:00Z") > 0);
     assert(expires_seconds("2023-02-29T12:00:00Z") < 0);
     assert(expires_seconds("2024-01-01T00:00:00+08:00") == expires_seconds("2023-12-31T16:00:00Z"));

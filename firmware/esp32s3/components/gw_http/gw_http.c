@@ -6,6 +6,7 @@
 #include "freertos/task.h"
 #include "gw_core.h"
 #include "gw_http_parser.h"
+#include "gw_http_private.h"
 #include "lwip/inet.h"
 #include "lwip/netdb.h"
 #include "lwip/sockets.h"
@@ -65,9 +66,9 @@ static bool skip_dns_name(const uint8_t *p, size_t n, size_t *off) {
 }
 /* A fresh connected UDP socket is bound to the candidate source AND netif.
  * No lwIP global resolver cache/default-route proof is used for candidates. */
-static esp_err_t resolve(esp_netif_t *netif, const char *host,
-                         struct in_addr *out, struct ifreq *iface,
-                         uint64_t deadline) {
+esp_err_t gw_http_resolve(esp_netif_t *netif, const char *host,
+                          struct in_addr *out, struct ifreq *iface,
+                          uint64_t deadline) {
   if (!netif || esp_netif_get_netif_impl_name(netif, iface->ifr_name) != ESP_OK)
     return ESP_ERR_INVALID_STATE;
   if (inet_aton(host, out))
@@ -241,6 +242,9 @@ static esp_err_t perform(const char *path, const char *method,
     return ESP_ERR_INVALID_STATE;
   if (strcmp(method, "GET") && strcmp(method, "POST") && strcmp(method, "PUT"))
     return ESP_ERR_INVALID_ARG;
+  esp_err_t prepared = gw_http_tls_prepare();
+  if (prepared != ESP_OK)
+    return prepared;
   for (const char *p = path; *p; p++)
     if ((unsigned char)*p <= 32 || (unsigned char)*p >= 127)
       return ESP_ERR_INVALID_ARG;
@@ -304,11 +308,13 @@ static esp_err_t perform(const char *path, const char *method,
                                  : esp_netif_get_default_netif();
   struct ifreq iface = {0};
   struct in_addr address;
-  if ((e = resolve(netif, host, &address, &iface, result->deadline)) != ESP_OK)
+  if ((e = gw_http_resolve(netif, host, &address, &iface, result->deadline)) !=
+      ESP_OK)
     goto done;
   char ip[INET_ADDRSTRLEN];
   inet_ntop(AF_INET, &address, ip, sizeof(ip));
   esp_tls_cfg_t cfg = {.cacert_buf = (const unsigned char *)ca,
+                       .crt_bundle_attach = gw_http_tls_attach,
                        .cacert_bytes = strlen(ca) + 1,
                        .common_name = host,
                        .skip_common_name = false,
@@ -335,7 +341,7 @@ static esp_err_t perform(const char *path, const char *method,
       break;
     }
     if (connected == 1) {
-      e = ESP_OK;
+      e = gw_http_tls_interval(connection.tls);
       break;
     }
     if (connected < 0) {
@@ -388,7 +394,7 @@ static esp_err_t perform(const char *path, const char *method,
   }
   /* A final sink (for example a Flash write) can cross the deadline after the
    * last TLS read; completion must also pass the absolute deadline check. */
-  if (e == ESP_OK && !budget(result->deadline))
+  if (e == ESP_OK && (!budget(result->deadline) || !gw_core_time_trusted()))
     e = ESP_ERR_TIMEOUT;
   if (raw) {
     wipe(raw, strlen(raw));

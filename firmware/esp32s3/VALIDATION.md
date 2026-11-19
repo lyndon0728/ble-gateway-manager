@@ -1,6 +1,40 @@
-# ESP32-S3 0.2.1 验证记录
+# ESP32-S3 0.3.0 验证记录
 
 日期：2026-11-19。该文件记录实际验证，完整产品放行条件仍为[50项验收计划](../../docs/esp32s3-validation-plan.md)。
+
+## 0.3.0 三方对齐验证
+
+本次源码落实C02～C09/C11及BFLT-2.0，版本和制造前置条件见[实施记录](../../docs/gateway-alignment-implementation.md)。以下是包含最后Peripheral内存故障处理、平台旧boot关联和ESP加密bond初始化修复的最终本地验证；后续0.2.x章节只保留历史证据。
+
+| 对象 | 实际结果与边界 |
+| --- | --- |
+| ESP完整生产主机入口 | `scripts/test_host.py`全部通过；Zig 0.14.1、锁定ESP-IDF v5.5.6 cJSON/MbedTLS源码，C11 `-Wall -Wextra -Werror` |
+| 原功能回归 | 网络候选/本地配网、云任务、GATT、广播、采集、HTTP、双OTA；6项打包、145项独立Ed25519、69个spool断电注入点和7份生产批次Schema检查通过 |
+| V2过滤与无线状态 | ESP JSON编译/共享引擎、完整原子配置、掩码/PAIR/长度拒绝、实际广播状态证据通过；nRF七套生产模块主机测试通过，详见[nRF记录](../nrf54l15/VALIDATION.md) |
+| MQTT生产适配器 | 订阅/迟到SUBACK、可选业务通道、主题与身份、分片/深度/NUL、互斥后期限、队列OOM、PUBACK与业务ACK区分、绑定接口HTTPS回退通过 |
+| Peripheral生产业务 | 独立会话/PG重组、持久STORED、重连同businessId去重、spool/INBOX满、平台逐项ACK及隔离、手机APPLIED和实际CLOSED完成证据通过；SDK密码与设备I/O在本套中为替身 |
+| Peripheral逐分配点故障 | 861次cJSON分配失败注入通过：69业务构建、187接收/提交/STORED、248 NOTIFY、195 DISCONNECT、49上传、62 APPLIED、22结果证据、29 UART序号预留；无完整持久数据不回STORED，无完整持久意图不发送动作 |
+| 授权/时间/同步 | 独立Ed25519制造与时间签名向量、原始字节/身份/nonce/boot绑定、UTC保守区间/漂移/期限、快照完整组/规范摘要/世代/历史来源、组件当前镜像/boot变化/回执绑定通过 |
+| ESP bond持久化 | 默认nvs显式使用已有制造密钥初始化；原始记录及SDK恢复前后核验测试通过，含打开/读取失败、尺寸/密钥非法、恢复缺失/不一致；没有擦除或生成eFuse |
+| 本地网页与凭据生成 | 11项Node Security2/OTA协议测试、Generate-Setup的10个独立向量通过；新增peripheral用途与setup凭据隔离 |
+| 平台 | 最终`go vet ./...`、`go test ./... -count=1`全部通过；95个Go文件格式检查通过，platform包58.467秒。旧boot迟到数据持久接管但不能新建可回发关联，NOTIFY/DISCONNECT再次核当前boot |
+| 管理前端 | Vue类型检查、Vite构建通过，嵌入资源同步；10项Node测试和21项网关输入检查全部通过。PAIR超时提示与实际拒绝行为一致 |
+| Windows ESP目标 | 全组件编译/完整链接/镜像生成/分区容量检查通过；228个源码、头、测试、资源及构建输入与独立ASCII副本逐字节一致 |
+
+目标使用ESP-IDF v5.5.6（`880a203ae603d08a94d06aa01e0d6761958e5e9e`）、Xtensa `esp-14.2.0_20260121`、CH390 0.4.1和`sdkconfig.local-setup-test`。确认实际配置 `CONFIG_GW_FACTORY_AUTHORIZED_SETUP=y`，完整本地网页/OTA入口被链接。量产默认授权开窗/板级复位配置保持独立门控，不能把该测试配置作为量产授权。
+
+| 最终Windows 0.3.0产物 | 实测值 |
+| --- | --- |
+| 应用版本 | `0.3.0`，读取实际bin应用描述 |
+| 应用bin | 1,513,712字节，`0x1718F0` |
+| 最小OTA槽 | `0x280000`，剩余`0x10E710`，约42% |
+| 应用bin SHA-256 | `5a0ff70aece46eb040ca438c689aa359d9bf7c209dd737598e042553e8696ee6` |
+| 应用ELF SHA-256 | `5255b9a4e6e052e0334097b8829d6964d31e5fa51917ce0a6388bdb0d4176658` |
+| Bootloader | 20,544字节；SHA-256 `ad17e18dd333686b20f2da8929202665dcd3929b587c7a5a812a6c2abb84fd2a` |
+
+实际ELF包含有效地址：`gw_actions_local_ota=0x4201d66c`、`gw_provision_open_window=0x4201023c`、`gw_peripheral_execute=0x420177f0`、`gw_transport_json=0x42058dd4`、`gw_signed_time_verify=0x42012d5c`、`gw_ble_bonds_check=0x420206dc`及`_binary_app_js_start=0x3c1316e8`。GitHub目标工作流同步增加新模块符号检查。
+
+上述镜像摘要属于本次Windows构建；不同平台/构建时间产生的CI镜像须以其独立产物为准。SDK、临时测试密钥、本地日志和未签名构建产物不上传源码仓库。未连接/烧录实板、未执行eFuse；NCS目标构建、双射频空口、手机实机、真实MQTT/TLS切换、100ppm时钟漂移、Flash掉电、复位脉冲及整机双OTA回退仍待验收。
 
 ## 0.2.1 需求落实与回归
 

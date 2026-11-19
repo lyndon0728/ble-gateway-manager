@@ -131,10 +131,20 @@ esp_err_t gw_nrf_scan(const cJSON *p, uint64_t r, int64_t d) {
     effects++;
     return effect_result;
 }
-esp_err_t gw_nrf_advertise(const cJSON *p, uint64_t r, int64_t d) { return gw_nrf_scan(p, r, d); }
+static uint64_t advertised_revision;
+static bool advertising_missing_evidence;
+esp_err_t gw_nrf_advertise(const cJSON *p, uint64_t r, int64_t d) {
+    advertised_revision=r; return gw_nrf_scan(p,r,d);
+}
 cJSON *gw_nrf_diagnostics(int64_t d) {
     (void)d;
-    return cJSON_CreateObject();
+    cJSON *j=cJSON_CreateObject();
+    if (!advertising_missing_evidence && advertised_revision) {
+        char revision[24]; snprintf(revision,sizeof(revision),"%llu",(unsigned long long)advertised_revision);
+        cJSON_AddStringToObject(j,"advertisingRevision",revision);
+        cJSON_AddStringToObject(j,"advertisingState","ACTIVE");
+    }
+    return j;
 }
 void gw_capture_radio_enabled(uint8_t r, bool e) {
     (void)r;
@@ -336,6 +346,19 @@ int main(void) {
            !strcmp(gw_action_string(ap, "authentication"), "WPA2_PSK"));
     cJSON_Delete(out);
     cJSON_Delete(diagnostic);
+    reset_test();
+    cJSON *adv_patch=cJSON_Parse("{\"radios\":{\"nrf54\":{\"advertising\":{\"enabled\":true}}}}"),
+          *adv_complete=cJSON_Duplicate(complete,true);
+    cJSON *adv_radio=cJSON_GetObjectItem(cJSON_GetObjectItem(adv_complete,"radios"),"nrf54");
+    cJSON_AddItemToObject(adv_radio,"advertising",cJSON_Parse("{\"enabled\":true,\"mode\":\"NONCONNECTABLE\"}"));
+    assert(gw_actions_configure(adv_patch,adv_complete,1,10000,&out)==ESP_ERR_INVALID_STATE && effects==0);
+    cJSON_ReplaceItemInObject(cJSON_GetObjectItem(adv_radio,"scan"),"enabled",cJSON_CreateFalse());
+    assert(gw_actions_configure(adv_patch,adv_complete,1,10000,&out)==ESP_OK && effects==1);
+    assert(!strcmp(gw_action_string(out,"advertisingState"),"ACTIVE"));cJSON_Delete(out);
+    reset_test(); advertising_missing_evidence=true;
+    assert(gw_actions_configure(adv_patch,adv_complete,2,10000,&out)==ESP_ERR_TIMEOUT && effects==1);
+    cJSON_Delete(out);assert(!gw_store_get_json("actions/target/nrf54/advertising"));
+    cJSON_Delete(adv_patch);cJSON_Delete(adv_complete);
     cJSON_Delete(patch);
     cJSON_Delete(complete);
     cJSON_Delete(database);

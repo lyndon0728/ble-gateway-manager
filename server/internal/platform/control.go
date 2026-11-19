@@ -61,6 +61,12 @@ func (a *App) gatewayView(ctx context.Context, q ctlQuery, id string) (map[strin
 	if seen.Valid {
 		m["lastSeenAt"] = Timestamp(seen.Int64)
 	}
+	var runtime string
+	if err := q.QueryRowContext(ctx, "SELECT available_json FROM gateway_runtime_capabilities WHERE gateway_id=?", id).Scan(&runtime); err == nil {
+		m["availableCapabilities"] = parseList(runtime)
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
 	return m, nil
 }
 func (a *App) listGateways(w http.ResponseWriter, r *http.Request) {
@@ -258,6 +264,9 @@ func (a *App) putConfiguration(w http.ResponseWriter, r *http.Request) {
 	if pre, present := body["networkPrecondition"]; present {
 		Obj(req, "parameters")["networkPrecondition"] = pre
 	}
+	if source, present := body["sourceSnapshotId"]; present {
+		Obj(req, "parameters")["sourceSnapshotId"] = source
+	}
 	status, v, e := a.DoIdempotent(r.Context(), p.ID, "configuration.put", r.Header.Get("Idempotency-Key"), map[string]any{"request": req, "ifMatch": r.Header.Get("If-Match")}, func(tx *sql.Tx) (int, string, any, error) {
 		m, e := a.configurationView(r.Context(), tx, id)
 		if e != nil {
@@ -275,7 +284,7 @@ func (a *App) putConfiguration(w http.ResponseWriter, r *http.Request) {
 	JSON(w, status, v)
 }
 
-var taskPermission = map[string]string{"CONFIGURE": "gateway:configure", "REBOOT": "gateway:reboot", "DIAGNOSTICS": "diagnostics:run", "FIRMWARE_UPGRADE": "firmware:deploy", "GATT_READ": "gatt:execute", "GATT_WRITE": "gatt:execute", "GATT_CONNECT": "gatt:execute", "GATT_DISCONNECT": "gatt:execute", "GATT_SUBSCRIBE": "gatt:execute", "GATT_UNSUBSCRIBE": "gatt:execute"}
+var taskPermission = map[string]string{"CONFIGURE": "gateway:configure", "REBOOT": "gateway:reboot", "DIAGNOSTICS": "diagnostics:run", "FIRMWARE_UPGRADE": "firmware:deploy", "GATT_READ": "gatt:execute", "GATT_WRITE": "gatt:execute", "GATT_CONNECT": "gatt:execute", "GATT_DISCONNECT": "gatt:execute", "GATT_SUBSCRIBE": "gatt:execute", "GATT_UNSUBSCRIBE": "gatt:execute", "PERIPHERAL_NOTIFY": "gatt:execute", "PERIPHERAL_DISCONNECT": "gatt:execute"}
 
 func (a *App) createTask(w http.ResponseWriter, r *http.Request) {
 	p, ok := a.Require(w, r, "task:create")
@@ -320,13 +329,20 @@ func (a *App) newTask(ctx context.Context, tx *sql.Tx, actor, key string, req ma
 		return 0, "", nil, Problem(409, "GATEWAY_INACTIVE", "gateway is not active")
 	}
 	supported := false
-	for _, x := range List(g, "capabilities") {
+	capabilityKey := "capabilities"
+	if _, ok := g["availableCapabilities"]; ok {
+		capabilityKey = "availableCapabilities"
+	}
+	for _, x := range List(g, capabilityKey) {
 		if x == op {
 			supported = true
 		}
 	}
 	if !supported {
 		return 0, "", nil, Problem(422, "CAPABILITY_UNSUPPORTED", "signed gateway capability does not support this operation")
+	}
+	if op == "PERIPHERAL_NOTIFY" && Num(params, "timeoutMs") > t.UnixMilli()-Now() {
+		return 0, "", nil, Problem(422, "INVALID_TIMEOUT", "peripheral timeout exceeds task TTL")
 	}
 	if e = a.validateGW32Task(ctx, tx, g, op, params); e != nil {
 		return 0, "", nil, e
@@ -342,6 +358,30 @@ func (a *App) newTask(ctx context.Context, tx *sql.Tx, actor, key string, req ma
 	var configID, artifactID any
 	risk := "idempotent"
 	if op == "CONFIGURE" {
+		if source := Str(params, "sourceSnapshotId"); source != "" {
+			if e = gw32Require(g, "CONFIG_SNAPSHOT_1"); e != nil {
+				return 0, "", nil, e
+			}
+			current, err := a.buildConfigurationSnapshot(ctx, tx, gateway)
+			if err != nil {
+				return 0, "", nil, err
+			}
+			var raw string
+			err = tx.QueryRowContext(ctx, "SELECT snapshot_json FROM gateway_configuration_snapshot_history WHERE gateway_id=? AND snapshot_id=?", gateway, source).Scan(&raw)
+			snapshot := pm(raw)
+			if err != nil || snapshot["complete"] != true || len(List(current, "blockedReasons")) > 0 {
+				return 0, "", nil, Problem(409, "SNAPSHOT_NOT_RECOVERABLE", "restoration requires current complete unblocked snapshot")
+			}
+			groups := snapshotPatchGroups(frontendCanonicalPatch(Obj(params, "configuration"), true))
+			if len(groups) != 1 {
+				return 0, "", nil, Problem(422, "SNAPSHOT_GROUP_REQUIRED", "restore exactly one complete configuration group")
+			}
+			for group, value := range groups {
+				if networkSnapshotID(value.(map[string]any)) != networkSnapshotID(Obj(Obj(Obj(snapshot, "groups"), group), "value")) {
+					return 0, "", nil, Problem(409, "SNAPSHOT_VALUE_MISMATCH", "restoration value must equal the referenced complete target group")
+				}
+			}
+		}
 		if e = a.prepareNetworkTask(ctx, tx, gateway, params); e != nil {
 			return 0, "", nil, e
 		}
@@ -364,7 +404,7 @@ func (a *App) newTask(ctx context.Context, tx *sql.Tx, actor, key string, req ma
 		params["desiredRevision"] = rev
 		risk = "readback"
 	}
-	if op == "REBOOT" || op == "GATT_WRITE" {
+	if op == "REBOOT" || op == "GATT_WRITE" || op == "PERIPHERAL_NOTIFY" {
 		risk = "nonrepeatable"
 	}
 	if op == "FIRMWARE_UPGRADE" {
@@ -389,6 +429,15 @@ func (a *App) newTask(ctx context.Context, tx *sql.Tx, actor, key string, req ma
 	if e != nil {
 		return 0, "", nil, e
 	}
+	if op == "PERIPHERAL_NOTIFY" {
+		business := map[string]any{"clientId": params["clientId"], "direction": "DOWNLINK", "businessId": params["businessId"], "route": params["route"], "payloadBase64": params["payloadBase64"]}
+		if v, ok := params["inReplyTo"]; ok {
+			business["inReplyTo"] = v
+		}
+		if _, e = tx.ExecContext(ctx, "INSERT INTO peripheral_business(namespace_id,gateway_id,client_id,direction,business_id,content_hash,event_id) VALUES(?,?,?,'DOWNLINK',?,?,?)", a.Config.NamespaceID, gateway, params["clientId"], params["businessId"], Hash(business), id); e != nil {
+			return 0, "", nil, e
+		}
+	}
 	if token := Str(Obj(params, "networkPrecondition"), "resolutionToken"); token != "" {
 		if _, e = tx.ExecContext(ctx, "UPDATE gateway_network_resolutions SET task_id=? WHERE resolution_token=? AND task_id IS NULL", id, token); e != nil {
 			return 0, "", nil, e
@@ -399,7 +448,7 @@ func (a *App) newTask(ctx context.Context, tx *sql.Tx, actor, key string, req ma
 	}
 	_, e = tx.ExecContext(ctx, "INSERT INTO command_outbox(message_id,task_id,kind,payload_json,state,next_attempt_at_ms,created_at_ms) VALUES(?,?,'command',?,'pending',?,?)", ID("msg"), id, encode(command), now, now)
 	if e == nil {
-		e = a.Audit(ctx, tx, actor, "task.create", "task", id, map[string]any{"gatewayId": gateway, "type": op})
+		e = a.Audit(ctx, tx, actor, "task.create", "task", id, map[string]any{"gatewayId": gateway, "type": op, "sourceSnapshotId": params["sourceSnapshotId"]})
 	}
 	if e != nil {
 		return 0, "", nil, e

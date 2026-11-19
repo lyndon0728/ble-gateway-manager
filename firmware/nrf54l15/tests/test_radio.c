@@ -1,4 +1,5 @@
 #include "gw_core.h"
+#include "gw_filter_v2.h"
 #include "gw_radio.h"
 #include "gw_gatt.h"
 #include <radio_mock.h>
@@ -294,6 +295,64 @@ int main(void)
     assert(configure_scan(&profile) == GW_OK);
     assert(gw_radio_enter_maintenance() == 0 && gw_radio_scan_state() == 3);
     gw_radio_leave_maintenance(); assert(gw_radio_scan_state() == 1);
-    puts("gw_radio: scan/ADV rollback, role gating, bonded-address redaction tests passed");
+    /* Full V2 wrapper reaches the production command dispatcher and radio callback. */
+    struct gw_filter_v2_config v2, actual_v2;
+    uint8_t wrapper[GW_FILTER_V2_MAX], old_wrapper[GW_FILTER_V2_MAX];
+    gw_filter_v2_default(&v2);v2.legacy.revision=9;v2.legacy.scan_flags=3;
+    v2.engine=1;v2.scope=1;v2.pair_window_ms=500;v2.rule_count=1;
+    v2.rules[0].action=1;v2.rules[0].kind_mask=1;v2.rules[0].field_mask=1;
+    v2.rules[0].name_mode=1;v2.rules[0].name_length=4;
+    memcpy(v2.rules[0].name_value,"Bcn-",4);memset(v2.rules[0].name_mask,255,4);
+    size_t wrapper_len=gw_filter_v2_encode(&v2,wrapper,sizeof(wrapper));assert(wrapper_len);
+    assert(gw_radio_capabilities() & BIT(13));
+    assert(command(0x19,wrapper,wrapper_len)==GW_OK);
+    assert(response_length==wrapper_len&&!memcmp(response,wrapper,wrapper_len));
+    unsigned starts_before=scan_starts;
+    assert(command(0x19,wrapper,wrapper_len)==GW_OK && scan_starts==starts_before);
+    assert(command(6,NULL,0)==GW_CONFLICT && configure_scan(&profile)==GW_CONFLICT);
+    assert(command(2,NULL,0)==GW_OK); /* documented basic read remains available */
+    assert(command(0x1a,NULL,0)==GW_OK && response_length==wrapper_len);
+    assert(!memcmp(response,wrapper,wrapper_len));memcpy(old_wrapper,wrapper,wrapper_len);
+    v2.rules[0].name_value[0]='b';size_t changed_len=gw_filter_v2_encode(&v2,wrapper,sizeof(wrapper));
+    assert(command(0x19,wrapper,changed_len)==GW_CONFLICT);v2.rules[0].name_value[0]='B';
+    v2.legacy.revision=10;changed_len=gw_filter_v2_encode(&v2,wrapper,sizeof(wrapper));
+    fail_scan_starts=1;assert(command(0x19,wrapper,changed_len)==GW_APPLY_FAILED);
+    assert(command(0x1a,NULL,0)==GW_OK&&!memcmp(response,old_wrapper,wrapper_len));
+    assert(gw_radio_scan_state()==1);
+    assert(command(0x19,wrapper,changed_len-1)==GW_BAD_PARAM);
+    uint8_t v2_adv[]={2,1,6},v2_rsp[]={7,9,'B','c','n','-','0','1'};
+    buffer.data=v2_adv;buffer.len=sizeof(v2_adv);info.addr=&unbonded;info.adv_props=BT_GAP_ADV_PROP_SCANNABLE;info.rssi=-60;
+    radio_mock_now=20000;unsigned before_records=record_count;
+    registered_scan->recv(&info,&buffer);assert(record_count==before_records);
+    gw_radio_poll();assert(command(0x1b,NULL,0)==GW_OK && response_length==96);
+    assert(gw_get_u16(response+10)==1 && gw_get_u32(response+12)==sizeof(v2_adv));
+    radio_mock_now=20500;buffer.data=v2_rsp;buffer.len=sizeof(v2_rsp);info.adv_props=BT_GAP_ADV_PROP_SCAN_RESPONSE;info.rssi=127;
+    registered_scan->recv(&info,&buffer);
+    /* Worker delay must not expire a response captured exactly on the deadline. */
+    radio_mock_now=21000;gw_radio_poll();assert(record_count==before_records+2);
+    assert(gw_get_u64(last_record)==20500 && last_record[8]==1 && last_record[17]==128);
+    assert(command(0x1b,NULL,0)==GW_OK&&!gw_get_u16(response+10));
+    buffer.data=v2_adv;buffer.len=sizeof(v2_adv);info.adv_props=BT_GAP_ADV_PROP_SCANNABLE;
+    radio_mock_now=22000;registered_scan->recv(&info,&buffer);gw_radio_poll();
+    assert(gw_radio_prepare_connect()==0 && gw_radio_scan_state()==3);
+    assert(command(0x1b,NULL,0)==GW_OK&&!gw_get_u16(response+10)&&gw_get_u64(response+88)==1);
+    assert(command(0x1a,NULL,0)==GW_OK&&gw_filter_v2_parse(response,response_length,&actual_v2));
+    assert(actual_v2.engine==1&&actual_v2.legacy.revision==9);
+    gw_radio_connect_complete();gw_radio_poll();assert(gw_radio_scan_state()==1);
+    radio_mock_now=23000;registered_scan->recv(&info,&buffer); /* queued but not yet filtered */
+    assert(gw_radio_enter_maintenance()==0);
+    assert(command(0x1b,NULL,0)==GW_OK&&gw_get_u64(response+88)==2);
+    gw_radio_leave_maintenance();assert(gw_radio_scan_state()==1);
+    radio_mock_now=24000;registered_scan->recv(&info,&buffer);gw_radio_poll();
+    radio_mock_now=24500;gw_radio_poll();assert(command(0x1b,NULL,0)==GW_OK&&gw_get_u16(response+10)==1);
+    ++radio_mock_now;gw_radio_poll();assert(command(0x1b,NULL,0)==GW_OK&&gw_get_u64(response+40)==1);
+    radio_mock_now=25000;for(unsigned i=0;i<33;i++)registered_scan->recv(&info,&buffer);
+    assert(command(0x1b,NULL,0)==GW_OK&&gw_get_u64(response+56)==1&&gw_get_u16(response+10)==32);
+    v2.engine=0;v2.scope=0;v2.pair_window_ms=0;v2.rule_count=0;v2.legacy.scan_flags=0;
+    changed_len=gw_filter_v2_encode(&v2,wrapper,sizeof(wrapper));assert(command(0x19,wrapper,changed_len)==GW_OK);
+    assert(command(6,NULL,0)==GW_OK && gw_radio_scan_state()==0);
+    assert(command(0x1b,NULL,0)==GW_OK&&response[8]==0&&gw_get_u64(response+88)==34);
+    assert(command(0x1b,wrapper,1)==GW_BAD_PARAM && command(0x1a,wrapper,1)==GW_BAD_PARAM);
+    puts("gw_radio: legacy/ADV regressions, V2 atomic commands, callback queue, 500ms boundary, pause/DFU and rollback passed");
     return 0;
 }

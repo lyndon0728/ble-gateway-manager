@@ -1,10 +1,10 @@
 # 无线动作与双组件升级执行器
 
-本组件面向 ESP-IDF **v5.5.6**。它包含实际 NimBLE、UART DFU 和 ESP 应用 OTA 调用，主机测试替换硬件边界；通过主机测试不等于已经完成目标板射频、断电、MCUboot 或整机升级验收。
+本组件对应 ESP32-S3 固件 **0.3.0**，面向 ESP-IDF **v5.5.6**。它包含实际 NimBLE、UART DFU 和 ESP 应用 OTA 调用，主机测试替换硬件边界；通过主机测试不等于已经完成目标板射频、断电、MCUboot 或整机升级验收。
 
 ## 对外接口和初始化
 
-`gw_actions_init()` 在 `gw_core_init()`、`gw_capture_init()`、`gw_nrf_init()` 后、云端任务执行前调用一次。`gw_actions_configure(patch, complete, revision, deadline, &details)` 接收云端已合并的完整目标；`gw_actions_execute(command, deadline, &details)` 接收已认证、授权、去重并持久接受的完整任务。deadline 为本启动单调毫秒，不能直接保存后跨启动复用。
+`gw_actions_init()` 在 `gw_core_init()`、`gw_capture_init()`、`gw_nrf_init()` 后、云端任务执行前调用一次；制造能力授权也须在动作执行前初始化。`gw_actions_configure(patch, complete, revision, deadline, &details)` 接收云端已合并的完整目标；`gw_actions_execute(command, deadline, &details)` 接收已认证、授权、去重并持久接受的完整任务。deadline 为本启动单调毫秒，不能直接保存后跨启动复用。
 
 `gw_actions_recover()` 仅恢复已持久任务的证据或已知升级会话。返回 `ESP_ERR_NOT_FINISHED` 时云端继续保留执行状态和维护义务；`ESP_ERR_TIMEOUT` 表示无法证明副作用结果，应报告 UNKNOWN，不能新建动作重做。`ESP_OK` 才是成功证据，错误不可转换成成功。
 
@@ -12,28 +12,36 @@
 
 | 路径 | 实际行为 |
 | --- | --- |
-| nRF 扫描/过滤 | 完整扫描配置经 `gw_nrf_scan()` 写入和读回；Beacon 规则在无线对象的 `beaconRules` 字段 |
-| nRF 广播 | 完整模式、开关、间隔、AD/ScanRsp 经 `gw_nrf_advertise()` 写入和读回 |
+| nRF 扫描/过滤 | 旧版完整 ScanProfile 保持兼容；V2 JSON 编译为完整二进制对象，经 `0x19/0x1A/0x1B` 写入、完整读回并核验状态，不静默降级 |
+| nRF 广播 | 完整模式、开关、间隔、AD/ScanRsp 写入和读回后核实际状态；PAUSED 必须有真实 Peripheral 连接证据 |
 | 上报聚合配置 | 1.0 upload-only 或 scan/filters/upload 组合；上传参数先校验，capture 原子持久保存后切换，upload-only 不触发无线操作 |
-| ESP 扫描 | NimBLE legacy 主动/被动扫描，禁用栈重复过滤，复用同一 ISO C UUID/厂商/Beacon 规则；ADV 与 SCAN_RSP 独立处理 |
-| ESP 广播 | `NONCONNECTABLE`、`SCANNABLE_NONCONNECTABLE`，完整 AD 边界检查，31 B 上限，100～10240 ms；异步事件启动规避 NimBLE 启停上下文限制 |
-| ESP GATT | 单 Central 连接；CONNECT/DISCONNECT、服务和特征发现、READ、WITH_RESPONSE WRITE、READBACK、SUBSCRIBE/UNSUBSCRIBE；临时读写在任务内关闭连接 |
+| ESP 扫描 | NimBLE legacy 主动/被动扫描，禁用栈重复过滤；与 nRF 共享 V2 名称、UUID、RSSI、major/minor 和服务 UUID 掩码引擎，支持 REPORT/PAIR 及完整状态计数 |
+| ESP 广播 | `NONCONNECTABLE`、`SCANNABLE_NONCONNECTABLE`、`CONNECTABLE_SCANNABLE`；完整 AD 边界检查，31 B 上限，100～10240 ms；异步事件启动规避 NimBLE 启停上下文限制 |
+| ESP GATT / Peripheral | Central 与 Peripheral 共用单连接预算；Central 支持连接、发现、读写、读回、订阅；Peripheral 提供固定 INFO/RX/TX 服务，业务认证及持久接管由 `gw_peripheral` 负责 |
 | nRF GATT | 独立 `gw_gatt_nrf.c`；持久 op_seq、异步结果查询、发现、连接身份、订阅和读回验证；按 capture 保存的原始证据复核自动连接 |
 | ESP OTA | 独立制品验签、非运行应用槽下载、文件摘要和 Flash 读回、目标版本核验、持久重启意图、IDF 试运行确认/回退 |
 | nRF OTA | 完整 Flash 缓存、UART BEGIN/CHUNK/FINISH、排空原始队列、REBOOT、新启动核验、运行镜像读回、CONFIRM 与 confirmed 状态回读 |
 | 网络诊断 | `NETWORK` 的 OFF/PASSIVE/ACTIVE，复用 core 的网络租约和有界异步扫描，返回最多 32 个标准 `accessPoints` |
 
-ESP 原生广播**不支持** `CONNECTABLE_SCANNABLE` / Peripheral 业务服务，返回不支持；这项能力不能登记为 ESP 已支持。nRF 可连接广播由其固件和能力位控制。
+V2 分别受 `NRF54_BLE_FILTER_V2` / `ESP32_BLE_FILTER_V2` 门控，本机 Peripheral 受 `ESP32_BLE_PERIPHERAL` 门控。能力来自制造签名授权、实际编译/HELLO 和实板验证的交集，不能因源码已存在便自动登记可用。自动连接规则仍仅选择 nRF。
 
-ESP 原生 GATT 当前只接受 `UNENCRYPTED`；没有实现 ESP bond 安装契约，因此关闭 `CONFIG_BT_NIMBLE_SECURITY_ENABLE`，防止远端安全请求触发默认首次配对。`BONDED_ENCRYPTED` 返回不支持，不能把“bonding=false”误当成“禁止配对”。nRF 使用已有 bond 的能力保持独立。没有实现应用协议级 APPLICATION_REPLY、长写、无应答写、多连接或完整扩展广播；这些能力均不得宣告。
+ESP 原生 GATT 支持 `UNENCRYPTED` 及使用已有预置 bond 的 `BONDED_ENCRYPTED`。NimBLE 安全与 NVS 持久化已启用，首次配对仍关闭：只从受保护存储读取既有密钥、显式发起已有密钥加密并核实际安全级别；缺 bond 拒绝，不能降级明文。禁止新安全记录写入/删除、拒绝重复配对及首次配对请求，不能只依赖 `bonding=false`。没有实现通用 GATT `APPLICATION_REPLY`、长写、无应答写、多连接或完整扩展广播；独立手机业务的 APPLIED 应答属于 [Peripheral 业务合同](../gw_peripheral/README.md)，不能替代通用 GATT 写入证据。
+
+### 预置 bond 与初始化失败
+
+SDK 固定使用默认 `nvs` 分区的 `nimble_bond` 命名空间。`gw_store_init()` 从既有制造 NVS 密钥显式调用 secure init 初始化 `gwfactory`、`gwstore` 和 `nvs`；不调用会生成密钥或操作 eFuse 的默认初始化流程。预置记录须匹配锁定的 IDF/NimBLE 结构、地址类型、密钥长度和配置容量。
+
+`gw_ble_bonds_check(false)` 在 BLE 初始化前检查加密命名空间及原始安全记录；`ble_store_config_init()` 返回后再用 `gw_ble_bonds_check(true)` 对照 SDK 恢复的安全材料与记录数量。不能仅依赖 SDK 的错误日志：读失败、长度不符、非法密钥或恢复不完整均阻止 BLE host 启动。空库可使用不依赖 bond 的功能，但请求 `BONDED_ENCRYPTED` 明确失败。旧明文或不兼容 NVS 必须由受授权制造流程迁移，设备不会自动擦除、重建密钥或清空 bond。
+
+历史边界：0.2.x 曾仅提供非连接广播与 `UNENCRYPTED` GATT，并关闭 NimBLE security。上述限制记录的是旧版交付范围，不代表 0.3.0 当前实现。
 
 ## 数据路径与生命周期
 
-NimBLE 回调只复制数据到 32 项有界队列；独立工作任务调用 `gw_capture_esp()` / `gw_capture_esp_gatt()` 持久接管。队列或持久介质满时保留旧数据并计数丢弃新样本，回调不等待 Flash。扫描每条记录使用既有 UART 24 B 格式和 ESP 单调采集时间，后续双射频去重由 capture 实现。身份解析后的地址类型不会伪装为空中 PUBLIC/RANDOM 地址。
+NimBLE 扫描回调只复制数据到 32 项有界队列；独立工作任务按时间顺序调用共享 V2 引擎，REPORT 独立判定报告，PAIR 在有界窗口内组合 ADV/SCAN_RSP 判定后仍输出原始报告。队列与 PAIR 状态共同受固定内存预算约束，队列排空后才推进过期水位。随后调用 `gw_capture_esp()` / `gw_capture_esp_gatt()` 持久接管。队列或持久介质满时保留旧数据并计数丢弃新样本，回调不等待 Flash。扫描每条记录使用既有 UART 24 B 格式和 ESP 单调采集时间，后续双射频去重由 capture 实现。身份解析后的地址类型不会伪装为空中 PUBLIC/RANDOM 地址。
 
 连接引用复用 `gw32-conn-v1` 派生规范，使用 capture 的本次 ESP 控制器启动 ID 和不复用的 32 位连接号。连接登记先持久再返回成功；重启时为旧连接提交 `ESP_RESTART` 关闭事件。断链先保留待持久关闭记录，关闭事件成功落盘前不开始新连接。旧操作回调使用单调 token 隔离，超时或断链不能把新操作变成成功。已经提交给 ATT 的写入若丢失应答且不是明确 ATT 错误，返回 UNKNOWN。
 
-扫描与连接当前不并行。可连接/广播资源冲突先拒绝；配置更新失败尝试恢复旧目标，恢复失败进入 fault。OTA 暂停 ESP 原生扫描/广播，已接管数据不清空。nRF 在 DFU 维护模式自行暂停无线，原队列持续接管；队列未排空时不重启 nRF。
+扫描与连接当前不并行；未验证扫描/广播同时运行时，完整目标同时启用两者会拒绝，不静默修改服务器字段。切换角色须在同一原子配置中停止旧角色并启动新角色；实际资源冲突先拒绝，配置更新失败尝试恢复旧目标，恢复失败进入 fault。Peripheral 建链后实际广播暂停，状态须保留连接证据。OTA 暂停 ESP 原生扫描/广播，已接管数据不清空。nRF 在 DFU 维护模式自行暂停无线，原队列持续接管；队列未排空时不重启 nRF。
 
 ## 持久化和幂等
 
@@ -64,20 +72,22 @@ nRF 相同启动、相同 session/size/SHA 的恢复以 DFU_STATUS 的实际 acc
 
 ESP 试运行窗口为 **90 秒**，在启动时建立独立定时器。确认检查持久状态恢复、当前运行槽/文件摘要/版本、可信时间、可用网络接口、nRF UART 健康及不存在未确认 nRF 镜像；云端通过认证通道进入恢复流程后才能确认。到期调用 IDF 回退并重启。原任务 expiresAt 和同一启动冻结的 deadline 同时约束恢复，重新轮询不能延长授权。无可信时间或过期任务不能确认新镜像；nRF 已知可终止会话按原 session ABORT，试启动等待回退。
 
-本实现使用 IDF OTA rollback 与 nRF MCUboot 机制，但没有完成实板切电、看门狗/卡死、FEM/RF 共存和已签名发行镜像验收。nRF 自身超时复位以其固件为准；当前执行器不会猜测板级复位引脚并强拉复位。硬件挂死恢复策略、安全启动制造、eFuse 和防降级仍需独立制造/实板验证。
+本实现使用 IDF OTA rollback 与 nRF MCUboot 机制，但没有完成实板切电、看门狗/卡死、FEM/RF 共存和已签名发行镜像验收。nRF 恢复先做有限 UART 重握手；只有持久恢复意图、维护租约及已验证板级配置均满足时，才允许一次受控硬件复位，随后必须核对新 boot。`CONFIG_GW_NRF_RESET_VERIFIED` 默认关闭；GPIO、低脉冲及释放等待的默认值不代表实板证据，未验证时不会拉复位。安全启动制造、eFuse 和防降级仍需独立制造/实板验证。
 
 ## 本轮验证
 
 - `test_actions.c` 直接编译生产调度器，验证意图写入失败无副作用、重复回放、同身份不同内容冲突、修订倒退、配置目标原子保存、UNKNOWN 不重发和升级恢复。
+- `gw_nrf/tests/test_scan_config.c` 覆盖实际 V2 JSON 编译器的完整配置、掩码/范围/PAIR 校验及广播实际状态证据；共享过滤引擎向量由 nRF 主机套件验证。
+- `test_bonds.c` 直接编译生产 `gw_ble_bonds.c`，覆盖空库、NVS 打开/读取失败、损坏长度、非法密钥、SDK 恢复缺失/材料不符及恢复一致；不以替身证明空口加密或实际 NVS 断电行为。
 - `test_ota.c` 直接编译生产升级执行器，注入错误签名、存储失败、下载内容改变、ESP 试启动/授权过期、nRF 分块/确认应答丢失。Flash/UART/HTTP/时钟和 SHA API 为主机替身；它证明控制流屏障，不证明物理 Flash 或 mbedTLS 的算法实现。
 - `test_ed25519.py` 使用独立 Python cryptography/OpenSSL 和 RFC 8032 向量验证实际 Monocypher C verifier：145 项通过，含错误 key/signature、原文重排、追加字节与非规范 scalar。
 - `test_gatt_nrf.c` 由 nRF GATT 子模块维护，覆盖真实执行状态机的操作序列、失去应答、未知写入和连接结果原子发布。
 - 上述 actions/OTA/verifier 已以 C11 `-Wall -Wextra -Werror` 编译通过。目标 ESP-IDF 编译及其准确结果以仓库统一验证记录为准；没有用这些主机结果替代目标板通过。
 
-运行本组件主机测试：`python tests/run_host.py --cjson-dir <cJSON.c和cJSON.h目录> --compiler <cc路径>`。使用 Zig 时增加 `--compiler-arg cc`。脚本需要 Python cryptography；不下载依赖、不安装生产密钥、不修改设备。
+运行原动作/OTA 主机测试：`python tests/run_host.py --cjson-dir <cJSON.c和cJSON.h目录> --compiler <cc路径>`。使用 Zig 时增加 `--compiler-arg cc`。完整 ESP 主机入口 `firmware/esp32s3/scripts/test_host.py --cc <cc路径> --idf <ESP-IDF v5.5.6目录>` 另包含扫描编译器、bond 初始化及其他组件检查。脚本需要 Python cryptography；不下载依赖、不安装生产密钥、不修改设备。
 
 ## 依赖来源
 
 NimBLE 的 API 对照 ESP-IDF v5.5.6 固定子模块 `espressif/esp-nimble@71a1fd7bfd0654c6d174cc3f9cb007864f767cbc`。编译实际使用 IDF 自带组件。
 
-Ed25519 使用 [Monocypher 4.0.3 官方发布包](https://monocypher.org/download/)，源码保存在 `vendor/monocypher`，没有修改。`SOURCE.json` 记录官方下载地址、已与官方 checksum 核对的 SHA-512；`LICENCE.md` 保留上游双许可证。只使用可选 Ed25519/SHA-512 实现做制品签名验证，不使用 Monocypher 默认的其他签名方案替代标准 Ed25519。
+Ed25519 使用 [Monocypher 4.0.3 官方发布包](https://monocypher.org/download/)，源码保存在 `vendor/monocypher`，没有修改。`SOURCE.json` 记录官方下载地址、已与官方 checksum 核对的 SHA-512；`LICENCE.md` 保留上游双许可证。生产构建由公共 `gw_crypto` 组件编译并供制品、制造清单和签名时间验证复用；使用可选标准 Ed25519/SHA-512 实现，不使用 Monocypher 默认的其他签名方案替代标准 Ed25519。

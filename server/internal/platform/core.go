@@ -47,6 +47,8 @@ type Config struct {
 	RawRetention, DedupRetention, WorkerInterval, HTTPTimeout             time.Duration
 	PipelineURL                                                           string
 	NetworkCredentialKey                                                  string
+	TimeSigningKey, TimeKeyID                                             string
+	TimeSourceVerified                                                    bool
 }
 
 func ConfigFromEnv() (Config, error) {
@@ -59,6 +61,8 @@ func ConfigFromEnv() (Config, error) {
 		c.MaxQueueBytes = n
 	}
 	c.NetworkCredentialKey = os.Getenv("GW_NETWORK_CREDENTIAL_KEY")
+	c.TimeSigningKey, c.TimeKeyID = os.Getenv("GW_TIME_SIGNING_KEY"), os.Getenv("GW_TIME_KEY_ID")
+	c.TimeSourceVerified = os.Getenv("GW_TIME_SOURCE_VERIFIED") == "true"
 	if v := os.Getenv("GW_ALLOWED_TARGET_HOSTS"); v != "" {
 		c.AllowedTargetHosts = strings.Split(v, ",")
 	}
@@ -107,6 +111,8 @@ type App struct {
 	loginMu              sync.Mutex
 	loginBuckets         map[string]loginBucket
 	globalLogins         loginBucket
+	timeMu               sync.Mutex
+	timeRequests         loginBucket
 	runtimeLock          *flock.Flock
 }
 type loginBucket struct {
@@ -368,6 +374,7 @@ func (a *App) Handler() http.Handler {
 	a.RegisterFrontendAPI(r)
 	a.RegisterControl(r)
 	a.RegisterNetworkProvisioning(r)
+	a.RegisterGatewayIntegration(r)
 	a.RegisterPipeline(r)
 	a.RegisterAI(r)
 	a.RegisterProtocol(r)

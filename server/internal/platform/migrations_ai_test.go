@@ -43,11 +43,11 @@ func TestAIUpgradeFromV2PreservesDataAndMigrationHistory(t *testing.T) {
 				t.Fatal("pre-upgrade data changed", sentinel, err)
 			}
 			var latest int
-			if err = db.QueryRow("SELECT max(version) FROM schema_migrations").Scan(&latest); err != nil || latest != 4 {
-				t.Fatal("v3 not applied", latest, err)
+			if err = db.QueryRow("SELECT max(version) FROM schema_migrations").Scan(&latest); err != nil || latest != 5 {
+				t.Fatal("latest migration not applied", latest, err)
 			}
 			if schema == "management.sql" {
-				for _, table := range []string{"ai_providers", "ai_documents", "ai_jobs", "ai_drafts", "ai_model_versions", "protocol_parsers", "protocol_bindings", "gatt_discovery_snapshots"} {
+				for _, table := range []string{"ai_providers", "ai_documents", "ai_jobs", "ai_drafts", "ai_model_versions", "protocol_parsers", "protocol_bindings", "gatt_discovery_snapshots", "gateway_component_inventory", "peripheral_business", "gateway_configuration_snapshots"} {
 					var count int
 					if err = db.QueryRow("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&count); err != nil || count != 1 {
 						t.Fatal("new table unavailable", table, err)

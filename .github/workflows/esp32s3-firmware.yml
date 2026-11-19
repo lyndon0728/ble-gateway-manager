@@ -6,12 +6,14 @@ on:
     paths:
       - 'firmware/esp32s3/**'
       - 'firmware/nrf54l15/src/gw_core.*'
+      - 'firmware/nrf54l15/src/gw_filter_v2.*'
       - 'firmware/nrf54l15/include/**'
       - '.github/workflows/esp32s3-firmware.yml'
   pull_request:
     paths:
       - 'firmware/esp32s3/**'
       - 'firmware/nrf54l15/src/gw_core.*'
+      - 'firmware/nrf54l15/src/gw_filter_v2.*'
       - 'firmware/nrf54l15/include/**'
       - '.github/workflows/esp32s3-firmware.yml'
 
@@ -63,6 +65,10 @@ jobs:
           xtensa-esp32s3-elf-nm build/gw32_esp32s3.elf > target-symbols.txt
           grep -E '^[0-9a-fA-F]+ [Tt] gw_actions_local_ota$' target-symbols.txt
           grep -E '^[0-9a-fA-F]+ [Tt] gw_provision_open_window$' target-symbols.txt
+          grep -E '^[0-9a-fA-F]+ [Tt] gw_transport_json$' target-symbols.txt
+          grep -E '^[0-9a-fA-F]+ [Tt] gw_peripheral_execute$' target-symbols.txt
+          grep -E '^[0-9a-fA-F]+ [Tt] gw_signed_time_verify$' target-symbols.txt
+          grep -E '^[0-9a-fA-F]+ [Tt] gw_ble_bonds_check$' target-symbols.txt
           grep -F '_binary_app_js_start' target-symbols.txt
       - name: Preserve target build evidence
         if: always()

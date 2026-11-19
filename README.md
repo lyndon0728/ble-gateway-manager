@@ -4,7 +4,7 @@
 
 ## 本次交付
 
-2026-11-18 文档基线；nRF 应用版本 `0.2.0`，SDK 基线为 nRF Connect SDK `v3.2.1`。UART 线上帧版本仍为 `1`，新增功能使用能力位协商。服务器消息版本按消息类别区分，不能用固件版本代替协议版本。
+2026-11-19源码交付：nRF与ESP应用版本均为 `0.3.0`，SDK基线为NCS `v3.2.1` / ESP-IDF `v5.5.6`。已落实三方对齐、Beacon组合掩码、MQTT、独立Peripheral业务、镜像盘点/配置恢复及签名时间，详见[实现与制造配置](docs/gateway-alignment-implementation.md)。UART线上帧版本仍为 `1`，新增功能使用能力位协商；固件版本不代替消息协议版本。
 
 | 文档 / 目录 | 内容 |
 | --- | --- |
@@ -13,7 +13,7 @@
 | [ESP32-S3 开发指南](docs/esp32s3-development.md) | 工程结构、模块接口、任务调度、状态机、配置与升级执行方案 |
 | [本地网页配网与平台远程配置](docs/esp32s3-network-provisioning.md) | 手机/笔记本连接热点、网络参数、凭据安装、候选回退和双入口版本对账 |
 | [ESP 持久化与恢复设计](docs/esp32s3-persistence.md) | 事务、接管水位、事件/任务日志、重放与 GC |
-| [ESP 验证计划](docs/esp32s3-validation-plan.md) | 44 项验收的前置、注入、步骤、预期及证据要求 |
+| [ESP 验证计划](docs/esp32s3-validation-plan.md) | 50项验收的前置、注入、步骤、预期及证据要求 |
 | [系统流程与对接指南](docs/gateway-integration.md) | 启动、扫描去重、自动连接、广播、UART OTA 和异常恢复时序 |
 | [ESP32-S3 ↔ nRF54L15 UART 协议](server/docs/gateway-uart-protocol.md) | 串口参数、二进制帧、能力、命令、扫描/GATT/Peripheral 数据和 DFU |
 | [ESP32-S3 ↔ 服务器协议](server/docs/gateway-protocol.md) | MQTT/HTTP、配置、任务、应用 ACK、广播和组件升级 |
@@ -32,7 +32,7 @@
 ## 使用顺序
 
 1. 先读需求清单，确认系统职责与当前边界。
-2. 实现 ESP32 执行器时，同时遵循两份协议；以系统对接指南连接两个接口。
+2. 部署和联调时同时遵循两份协议；按实现记录准备制造信任材料，以系统对接指南连接两个接口。
 3. 按固件 README 在匹配的官方 NCS 环境中构建。自定义板默认关闭射频，完成板级核对与测量后再启用。
 4. 使用项目专用签名密钥建立 MCUboot 升级链，并逐项完成验收清单。
 

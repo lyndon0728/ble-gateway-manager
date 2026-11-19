@@ -4,13 +4,13 @@
 
 本文以仓库中的 [OpenAPI](../internal/platform/assets/openapi.json)、[消息 Schema](../internal/platform/assets/message-contracts.schema.json) 和服务器业务校验为准。服务器能创建任务，不等于网关已执行；以下职责与交付状态须分别验收。
 
-2026-11-19 三方文档统一基线：**[GW32-E2E-1.1](../../docs/gateway-end-to-end-standard.md)**。本次不改变当前部署的 Schema、API 或功能；跨层语义和待补齐项按该标准处理。[平台专项需求](gateway-platform-requirements.md) / [平台开发文档](gateway-platform-development.md) 是本协议的实现及验收映射。新增 Beacon V2 及 C02～C11 扩展为**开发设计已冻结、尚未上线**，精确合同见[Beacon 过滤规范](../../docs/beacon-filter-spec.md)与[差距统一开发方案](../../docs/gateway-alignment-development-plan.md)；旧接口定义与新设计明确分开，不能把新示例直接投递给当前版本。
+2026-11-19 三方文档统一基线：**[GW32-E2E-1.1](../../docs/gateway-end-to-end-standard.md)**。本轮同步更新三方源码、Schema/API与验证，保留原功能及旧消息兼容；实际部署状态与实板验收另行记录。[平台专项需求](gateway-platform-requirements.md) / [平台开发文档](gateway-platform-development.md) 是本协议的实现及验收映射。新增 Beacon V2 及 C02～C11 扩展已完成源码实现，部署前须满足制造能力和板级验证，精确合同见[Beacon 过滤规范](../../docs/beacon-filter-spec.md)与[差距统一开发方案](../../docs/gateway-alignment-development-plan.md)；旧部署仍须按能力拒绝新字段；交付状态见[实现记录](../../docs/gateway-alignment-implementation.md)。
 
 | 层级 | 当前提供的内容 | 尚需完成的执行与验证 |
 | --- | --- | --- |
 | 服务器 | 配置/能力/权限校验，持久任务与 ACK，广播字段，UUID 解析和自动连接规则，NRF54 组件 OTA 制品与结果校验 | 与真实 ESP 执行器联调及部署验证 |
 | nRF54L15 | 独立固件源码、UART 扫描/过滤/Central/广播/Peripheral，以及可选 MCUboot UART DFU | 目标 SDK 构建、镜像签名及实板验证，见 [验证记录](../../firmware/nrf54l15/VALIDATION.md) |
-| ESP32-S3 | [0.2.1 固件](../../firmware/esp32s3/README.md)：HTTPS、UART、采集/spool、本地/远程配网、本地/远程 ESP OTA 与 nRF OTA；已有主机测试和目标构建 | MQTT、实际广播状态核对、本机 BLE 部分能力、nRF 硬件恢复等缺口见统一标准；实板及整机链路待验收 |
+| ESP32-S3 | [0.3.0 固件](../../firmware/esp32s3/README.md)：HTTPS、UART、采集/spool、本地/远程配网、本地/远程 ESP OTA 与 nRF OTA；已有主机测试和目标构建 | 新增MQTT、实际广播状态、本机Peripheral、签名时间、组件盘点及受控恢复；实板及整机链路待验收 |
 
 示例中的网关、对端、任务、制品和摘要必须替换为实际已登记值。JSON 中的时间仅说明格式；创建任务时 `expiresAt` 必须晚于服务器当前时间，且不超过未来 7 天，不能直接重用文档日期。下文将内层 `configuration` 示例与完整 API 请求明确区分。
 
@@ -46,7 +46,7 @@ flowchart LR
 
 所有网关业务 MQTT 消息使用 QoS 1、`retain=false`。重复是预期行为；PUBACK 不是应用 ACK。
 
-MQTT 与 HTTPS 是保留的双传输需求，载荷和应用确认语义相同；当前 ESP 固件实现 HTTPS，尚缺 MQTT 适配（C02）。不能把平台 MQTT 已实现等同于设备已经支持，也不能因此删除 MQTT 需求。
+MQTT 与 HTTPS 是保留的双传输需求，载荷和应用确认语义相同；ESP 0.3.0已实现统一MQTT/HTTPS适配（C02），使用相同持久对象与应用ACK；候选网络试用仍走绑定接口的HTTPS。
 
 | 方向 | MQTT topic | HTTP |
 | --- | --- | --- |
@@ -159,7 +159,7 @@ OTA 设备凭据仅能读取与有效任务匹配的 `/api/v1/artifacts/{artifac
 
 组件库存与可信更新的开发合同已在[统一开发方案 C06](../../docs/gateway-alignment-development-plan.md)冻结；当前机器接口尚未实施，以上拒绝行为继续有效。配置完整恢复及可信 UTC 的新增合同同样以该方案 C08/C09 为准，不能仅凭本文设计新增线上字段。
 
-ESP 接到授权任务后先验证 manifest 签名、组件、型号/硬件版本、镜像大小和 SHA-256，再通过 [UART DFU](gateway-uart-protocol.md#esp-经-uart-升级-nrf) 传送：BEGIN → 顺序 CHUNK → FINISH → REBOOT → 新 HELLO 与健康检查 → VERIFY_RUNNING → CONFIRM。VERIFY_RUNNING 使用期望制品的准确文件大小和签名 manifest 的 sha256，从运行中的主镜像槽读回校验；即使版本字符串匹配，也不能跳过这一步。CONFIRM 要求本次启动已经校验成功，即使镜像当前已确认亦如此。MCUboot 使用固件内置的板级镜像公钥进行独立验签；服务器制品签名不能替代这一检查。传输 session 和偏移保存在 ESP journal，UART 重连先查询状态；下载尚未完成时 nRF 复位，旧会话失效，重新传输须有效授权后从 0 BEGIN；FINISH/READY 后的重启先核对试启动/回滚及当前镜像，不能重新 BEGIN 擦写。当前 ESP 分阶段恢复缺口与统一方案见 C11。升级不能通过未经认证的 Peripheral RX 字节自动触发。
+ESP 接到授权任务后先验证 manifest 签名、组件、型号/硬件版本、镜像大小和 SHA-256，再通过 [UART DFU](gateway-uart-protocol.md#esp-经-uart-升级-nrf) 传送：BEGIN → 顺序 CHUNK → FINISH → REBOOT → 新 HELLO 与健康检查 → VERIFY_RUNNING → CONFIRM。VERIFY_RUNNING 使用期望制品的准确文件大小和签名 manifest 的 sha256，从运行中的主镜像槽读回校验；即使版本字符串匹配，也不能跳过这一步。CONFIRM 要求本次启动已经校验成功，即使镜像当前已确认亦如此。MCUboot 使用固件内置的板级镜像公钥进行独立验签；服务器制品签名不能替代这一检查。传输 session 和偏移保存在 ESP journal，UART 重连先查询状态；下载尚未完成时 nRF 复位，旧会话失效，重新传输须有效授权后从 0 BEGIN；FINISH/READY 后的重启先核对试启动/回滚及当前镜像，不能重新 BEGIN 擦写。ESP 0.3.0已按 C11实现分阶段恢复及故障测试。升级不能通过未经认证的 Peripheral RX 字节自动触发。
 
 只有新镜像版本等于 expectedFirmwareVersion、运行镜像字节与期望制品一致且明确确认了 MCUboot 测试镜像，ESP 才报告 `SUCCEEDED/VERIFIED`。结果 details 必须包含 `component=NRF54`、`firmwareVersion`、32 位小写十六进制的 `nrfBootId`、`bootConfirmed=true` 和 64 位小写十六进制的 `imageSha256`。服务器把 imageSha256 与该任务绑定制品记录的 sha256 比较，缺失或不同返回 `NRF54_FIRMWARE_IMAGE_MISMATCH`，不能仅凭相同版本号接受另一镜像。仅收到 FINISH 或重启命令的 OK 不足以成功。该结果是经过网关认证通道提交的执行报告，不是对芯片状态的独立硬件证明。nRF 升级结果不会覆盖网关主机 firmwareVersion；未确认测试镜像默认在 120 s 确认窗口后复位回滚，挂死时由 ESP 复位线恢复。
 
@@ -460,9 +460,9 @@ PAIR只关联同radio、同boot、同扫描组revision、同真实地址/类型�
 
 当前 nRF 基线不声明扫描/广播/连接并行能力。切换到广播前须先结束或关闭冲突扫描任务；由服务器分开提交的停扫、启播是两个可观察步骤，不是跨任务原子事务。Central 和 Peripheral 合计最多一个活动连接。`enabled=false` 取消新的广播及断连后的自动恢复，**不会断开已经连接的手机**；断连须由获授权的 ESP 会话使用 UART Peripheral 断连命令完成。广播暂停也不代表连接故障，应用应同时读取 Peripheral 状态。
 
-本机服务为 `7be00001-4b5a-4c31-9d91-6c2f9a0b5400`，具有公开 INFO 读取、RX Write 和 TX Notify。UUID 和 UART 命令详见 [Peripheral 协议](gateway-uart-protocol.md#可连接广播与本机-peripheral-服务)。远端写入通过 `PERIPHERAL_BATCH`（UART 类型 0x22）到 ESP，只是不透明应用输入；它不直接执行服务器配置或固件升级。ESP 须完成应用认证、授权和防重放后再解释或转发数据，不能把 BLE 连接成功当作管理授权，也不能把该写入伪装成已有 `GATT_NOTIFY` 上行事件。当前 RawEvent capture.kind 没有 Peripheral RX 类型，也没有服务器公开的 Peripheral 回复/断连任务；云端字段映射、应用认证和手机端到端闭环尚未实现。现有数据传输命令只定义 ESP ↔ nRF 接口。
+本机服务为 `7be00001-4b5a-4c31-9d91-6c2f9a0b5400`，具有公开 INFO 读取、RX Write 和 TX Notify。UUID 和 UART 命令详见 [Peripheral 协议](gateway-uart-protocol.md#可连接广播与本机-peripheral-服务)。远端写入通过 `PERIPHERAL_BATCH`（UART 类型 0x22）到 ESP，只是不透明应用输入；它不直接执行服务器配置或固件升级。ESP 须完成应用认证、授权和防重放后再解释或转发数据，不能把 BLE 连接成功当作管理授权，也不能把该写入伪装成已有 `GATT_NOTIFY` 上行事件。RawEvent capture.kind继续不包含Peripheral RX；业务使用独立PeripheralEventBatch/PERIPHERAL_PERSISTED及PERIPHERAL_NOTIFY/PERIPHERAL_DISCONNECT，Security2、业务路由和手机APPLIED均有实现。
 
-对应的正式开发合同统一使用[开发方案 C05](../../docs/gateway-alignment-development-plan.md)中的封装、身份绑定、授权、防重放、下行及业务确认设计。本轮完成合同对齐，不改变当前RawEvent/任务Schema；必须下一阶段联合更新后再开启平台业务入口，不能用现有GATT_NOTIFY或未授权RX临时绕过。
+对应的正式开发合同统一使用[开发方案 C05](../../docs/gateway-alignment-development-plan.md)中的封装、身份绑定、授权、防重放、下行及业务确认设计。本轮已同步独立业务Schema、任务与设备桥接；须通过PERIPHERAL_BRIDGE_1及客户端授权启用，不使用GATT_NOTIFY或未授权RX绕过。
 
 ### ESP 双路采集去重
 

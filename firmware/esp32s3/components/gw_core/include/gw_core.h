@@ -75,6 +75,11 @@ esp_netif_t *gw_core_ap_netif(void);
 esp_netif_t *gw_core_uplink_netif(const char *interface);
 bool gw_core_interface_ready(const char *interface);
 bool gw_core_time_trusted(void);
+bool gw_core_time_bounds(uint64_t *lower_utc_ms, uint64_t *upper_utc_ms);
+uint64_t gw_core_time_deadline(uint64_t expires_utc_ms);
+/* Only the nonce-bound signed-time verifier may call this entry point. */
+esp_err_t gw_core_time_accept(uint64_t issued_ms, uint32_t uncertainty_ms,
+                              uint64_t sent_mono_ms, uint64_t received_mono_ms);
 /* Bounded real Wi-Fi scan for an already authorized diagnostic caller.
  * Uses the same network ownership lease as provisioning/candidates. */
 esp_err_t gw_core_wifi_scan(bool active, uint64_t deadline_mono_ms, cJSON **aps);

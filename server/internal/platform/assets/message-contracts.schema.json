@@ -542,6 +542,15 @@
         "revision": {
           "type": "integer",
           "minimum": 1
+        },
+        "availableCapabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/GatewayRuntimeCapability"
+          },
+          "minItems": 0,
+          "maxItems": 128,
+          "uniqueItems": true
         }
       },
       "required": [
@@ -665,6 +674,12 @@
         },
         "networkPrecondition": {
           "$ref": "#/$defs/NetworkPrecondition"
+        },
+        "sourceSnapshotId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
         }
       },
       "required": [
@@ -687,6 +702,12 @@
         },
         "networkPrecondition": {
           "$ref": "#/$defs/NetworkPrecondition"
+        },
+        "sourceSnapshotId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
         }
       },
       "required": [
@@ -924,7 +945,9 @@
             "GATT_CONNECT",
             "GATT_DISCONNECT",
             "GATT_SUBSCRIBE",
-            "GATT_UNSUBSCRIBE"
+            "GATT_UNSUBSCRIBE",
+            "PERIPHERAL_NOTIFY",
+            "PERIPHERAL_DISCONNECT"
           ]
         },
         "parameters": {
@@ -1103,6 +1126,38 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "PERIPHERAL_NOTIFY"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "$ref": "#/$defs/TaskParamsPeripheralNotify"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "PERIPHERAL_DISCONNECT"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "$ref": "#/$defs/TaskParamsPeripheralDisconnect"
+              }
+            }
+          }
         }
       ],
       "examples": [
@@ -1143,7 +1198,9 @@
             "GATT_CONNECT",
             "GATT_DISCONNECT",
             "GATT_SUBSCRIBE",
-            "GATT_UNSUBSCRIBE"
+            "GATT_UNSUBSCRIBE",
+            "PERIPHERAL_NOTIFY",
+            "PERIPHERAL_DISCONNECT"
           ]
         },
         "state": {
@@ -2993,7 +3050,9 @@
             "GATT_CONNECT",
             "GATT_DISCONNECT",
             "GATT_SUBSCRIBE",
-            "GATT_UNSUBSCRIBE"
+            "GATT_UNSUBSCRIBE",
+            "PERIPHERAL_NOTIFY",
+            "PERIPHERAL_DISCONNECT"
           ]
         },
         "parameters": {
@@ -3182,6 +3241,38 @@
             "properties": {
               "parameters": {
                 "$ref": "#/$defs/TaskParamsGattUnsubscribe"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "PERIPHERAL_NOTIFY"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "$ref": "#/$defs/CommandParamsPeripheralNotify"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "PERIPHERAL_DISCONNECT"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "$ref": "#/$defs/TaskParamsPeripheralDisconnect"
               }
             }
           }
@@ -4113,6 +4204,12 @@
         },
         "networkPrecondition": {
           "$ref": "#/$defs/NetworkPrecondition"
+        },
+        "sourceSnapshotId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
         }
       },
       "required": [
@@ -4810,6 +4907,16 @@
               "minItems": 0,
               "maxItems": 8,
               "uniqueItems": true
+            },
+            "beaconFilterV2": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/$defs/BeaconFilterV2"
+                }
+              ]
             }
           },
           "required": [],
@@ -7048,6 +7155,1977 @@
             "required": [
               "network"
             ]
+          }
+        }
+      ]
+    },
+    "BeaconNameMaskV2": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "EXACT",
+            "PREFIX"
+          ]
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "COMPLETE",
+            "SHORTENED",
+            "ANY"
+          ]
+        },
+        "valueBase64": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 40
+        },
+        "maskBase64": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 40
+        }
+      },
+      "required": [
+        "mode",
+        "source",
+        "valueBase64",
+        "maskBase64"
+      ],
+      "additionalProperties": false
+    },
+    "BeaconUUIDMaskV2": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "maskHex": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        }
+      },
+      "required": [
+        "value",
+        "maskHex"
+      ],
+      "additionalProperties": false
+    },
+    "BeaconRSSIMaskV2": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "const": "RANGE"
+            },
+            "minDbm": {
+              "type": "integer",
+              "minimum": -127,
+              "maximum": 20
+            },
+            "maxDbm": {
+              "type": "integer",
+              "minimum": -127,
+              "maximum": 20
+            }
+          },
+          "required": [
+            "mode",
+            "minDbm",
+            "maxDbm"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "const": "BITS"
+            },
+            "valueDbm": {
+              "type": "integer",
+              "minimum": -127,
+              "maximum": 20
+            },
+            "mask": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 255
+            }
+          },
+          "required": [
+            "mode",
+            "valueDbm",
+            "mask"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "BeaconIntegerMaskV2": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "mask": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        }
+      },
+      "required": [
+        "value",
+        "mask"
+      ],
+      "additionalProperties": false
+    },
+    "BeaconRuleV2": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "ALLOW",
+            "DENY"
+          ]
+        },
+        "reportKinds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "LEGACY_ADV",
+              "LEGACY_SCAN_RSP",
+              "EXT_ADV",
+              "EXT_SCAN_RSP"
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 4,
+          "uniqueItems": true
+        },
+        "fieldMask": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 63
+        },
+        "name": {
+          "$ref": "#/$defs/BeaconNameMaskV2"
+        },
+        "ibeaconUuid": {
+          "$ref": "#/$defs/BeaconUUIDMaskV2"
+        },
+        "rssi": {
+          "$ref": "#/$defs/BeaconRSSIMaskV2"
+        },
+        "major": {
+          "$ref": "#/$defs/BeaconIntegerMaskV2"
+        },
+        "minor": {
+          "$ref": "#/$defs/BeaconIntegerMaskV2"
+        },
+        "serviceUuid": {
+          "$ref": "#/$defs/BeaconUUIDMaskV2"
+        }
+      },
+      "required": [
+        "action",
+        "reportKinds",
+        "fieldMask"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "fieldMask": {
+                "enum": [
+                  1,
+                  3,
+                  5,
+                  7,
+                  9,
+                  11,
+                  13,
+                  15,
+                  17,
+                  19,
+                  21,
+                  23,
+                  25,
+                  27,
+                  29,
+                  31,
+                  33,
+                  35,
+                  37,
+                  39,
+                  41,
+                  43,
+                  45,
+                  47,
+                  49,
+                  51,
+                  53,
+                  55,
+                  57,
+                  59,
+                  61,
+                  63
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "name"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "name"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "fieldMask": {
+                "enum": [
+                  2,
+                  3,
+                  6,
+                  7,
+                  10,
+                  11,
+                  14,
+                  15,
+                  18,
+                  19,
+                  22,
+                  23,
+                  26,
+                  27,
+                  30,
+                  31,
+                  34,
+                  35,
+                  38,
+                  39,
+                  42,
+                  43,
+                  46,
+                  47,
+                  50,
+                  51,
+                  54,
+                  55,
+                  58,
+                  59,
+                  62,
+                  63
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "ibeaconUuid"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "ibeaconUuid"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "fieldMask": {
+                "enum": [
+                  4,
+                  5,
+                  6,
+                  7,
+                  12,
+                  13,
+                  14,
+                  15,
+                  20,
+                  21,
+                  22,
+                  23,
+                  28,
+                  29,
+                  30,
+                  31,
+                  36,
+                  37,
+                  38,
+                  39,
+                  44,
+                  45,
+                  46,
+                  47,
+                  52,
+                  53,
+                  54,
+                  55,
+                  60,
+                  61,
+                  62,
+                  63
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "rssi"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "rssi"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "fieldMask": {
+                "enum": [
+                  8,
+                  9,
+                  10,
+                  11,
+                  12,
+                  13,
+                  14,
+                  15,
+                  24,
+                  25,
+                  26,
+                  27,
+                  28,
+                  29,
+                  30,
+                  31,
+                  40,
+                  41,
+                  42,
+                  43,
+                  44,
+                  45,
+                  46,
+                  47,
+                  56,
+                  57,
+                  58,
+                  59,
+                  60,
+                  61,
+                  62,
+                  63
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "major"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "major"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "fieldMask": {
+                "enum": [
+                  16,
+                  17,
+                  18,
+                  19,
+                  20,
+                  21,
+                  22,
+                  23,
+                  24,
+                  25,
+                  26,
+                  27,
+                  28,
+                  29,
+                  30,
+                  31,
+                  48,
+                  49,
+                  50,
+                  51,
+                  52,
+                  53,
+                  54,
+                  55,
+                  56,
+                  57,
+                  58,
+                  59,
+                  60,
+                  61,
+                  62,
+                  63
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "minor"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "minor"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "fieldMask": {
+                "enum": [
+                  32,
+                  33,
+                  34,
+                  35,
+                  36,
+                  37,
+                  38,
+                  39,
+                  40,
+                  41,
+                  42,
+                  43,
+                  44,
+                  45,
+                  46,
+                  47,
+                  48,
+                  49,
+                  50,
+                  51,
+                  52,
+                  53,
+                  54,
+                  55,
+                  56,
+                  57,
+                  58,
+                  59,
+                  60,
+                  61,
+                  62,
+                  63
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "serviceUuid"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "serviceUuid"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "BeaconFilterV2": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "version": {
+              "const": 2
+            },
+            "scope": {
+              "const": "REPORT"
+            },
+            "rules": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/BeaconRuleV2"
+              },
+              "minItems": 1,
+              "maxItems": 8,
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "version",
+            "scope",
+            "rules"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "version": {
+              "const": 2
+            },
+            "scope": {
+              "const": "ADV_SCAN_RSP_PAIR"
+            },
+            "pairWindowMs": {
+              "const": 500
+            },
+            "rules": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/BeaconRuleV2"
+              },
+              "minItems": 1,
+              "maxItems": 8,
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "version",
+            "scope",
+            "pairWindowMs",
+            "rules"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ScanProfilePreview": {
+      "type": "object",
+      "properties": {
+        "radio": {
+          "type": "string",
+          "enum": [
+            "nrf54",
+            "esp32"
+          ]
+        },
+        "profile": {
+          "$ref": "#/$defs/RadioConfiguration"
+        },
+        "samples": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BeaconPreviewSample"
+          },
+          "minItems": 0,
+          "maxItems": 16
+        }
+      },
+      "required": [
+        "radio",
+        "profile"
+      ],
+      "additionalProperties": false
+    },
+    "GatewayTimeChallenge": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0"
+        },
+        "nonce": {
+          "type": "string",
+          "minLength": 44,
+          "maxLength": 44
+        },
+        "bootId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "nonce",
+        "bootId"
+      ],
+      "additionalProperties": false
+    },
+    "GatewayTimeResponse": {
+      "type": "object",
+      "properties": {
+        "keyId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "payloadBase64": {
+          "type": "string",
+          "maxLength": 1368
+        },
+        "signatureBase64": {
+          "type": "string",
+          "minLength": 88,
+          "maxLength": 88
+        }
+      },
+      "required": [
+        "keyId",
+        "payloadBase64",
+        "signatureBase64"
+      ],
+      "additionalProperties": false
+    },
+    "GatewayTimePayload": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0"
+        },
+        "nonce": {
+          "type": "string",
+          "minLength": 44,
+          "maxLength": 44
+        },
+        "bootId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "issuedAtUnixMs": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]{0,19})$"
+        },
+        "uncertaintyMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "validForMs": {
+          "const": 60000
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "nonce",
+        "bootId",
+        "issuedAtUnixMs",
+        "uncertaintyMs",
+        "validForMs"
+      ],
+      "additionalProperties": false
+    },
+    "GatewayComponentChallenge": {
+      "type": "object",
+      "properties": {
+        "component": {
+          "type": "string",
+          "enum": [
+            "GATEWAY",
+            "NRF54"
+          ]
+        }
+      },
+      "required": [
+        "component"
+      ],
+      "additionalProperties": false
+    },
+    "GatewayComponentChallengeResponse": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0"
+        },
+        "challengeId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "component": {
+          "type": "string",
+          "enum": [
+            "GATEWAY",
+            "NRF54"
+          ]
+        },
+        "inventoryGeneration": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]{0,19})$"
+        },
+        "nonce": {
+          "type": "string",
+          "minLength": 44,
+          "maxLength": 44
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expiresAtUnixMs": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]{0,19})$"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "challengeId",
+        "component",
+        "inventoryGeneration",
+        "nonce",
+        "expiresAt",
+        "expiresAtUnixMs"
+      ],
+      "additionalProperties": false
+    },
+    "GatewayComponentReport": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0"
+        },
+        "namespaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "gatewayId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "challengeId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "nonce": {
+          "type": "string",
+          "minLength": 44,
+          "maxLength": 44
+        },
+        "inventoryGeneration": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]{0,19})$"
+        },
+        "component": {
+          "type": "string",
+          "enum": [
+            "GATEWAY",
+            "NRF54"
+          ]
+        },
+        "controllerBootId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "evidenceLevel": {
+          "type": "string",
+          "enum": [
+            "CONFIRMED_ARTIFACT",
+            "VERSION_ONLY",
+            "UNKNOWN"
+          ]
+        },
+        "firmwareVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "imageSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "artifactId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "bootConfirmed": {
+          "type": "boolean"
+        },
+        "upgradeTaskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "namespaceId",
+        "gatewayId",
+        "challengeId",
+        "nonce",
+        "inventoryGeneration",
+        "component",
+        "evidenceLevel"
+      ],
+      "additionalProperties": false
+    },
+    "GatewayRuntimeCapability": {
+      "type": "string",
+      "enum": [
+        "CONFIGURE",
+        "REBOOT",
+        "DIAGNOSTICS",
+        "FIRMWARE_UPGRADE",
+        "GATT_CONNECT",
+        "GATT_DISCONNECT",
+        "GATT_READ",
+        "GATT_WRITE",
+        "GATT_SUBSCRIBE",
+        "GATT_UNSUBSCRIBE",
+        "PERIPHERAL_NOTIFY",
+        "PERIPHERAL_DISCONNECT",
+        "GW32_CONTROL_PROFILE_1",
+        "GW32_CAPTURE_CONTEXT_1",
+        "NETWORK_ETHERNET",
+        "NETWORK_WIFI_STA",
+        "COMPONENT_INVENTORY_1",
+        "CONFIG_SNAPSHOT_1",
+        "SIGNED_TIME_1",
+        "PERIPHERAL_BRIDGE_1",
+        "NRF54_UART_DFU_1",
+        "NRF54_BLE_SCAN",
+        "NRF54_BLE_ADV",
+        "NRF54_BLE_BEACON_FILTER",
+        "NRF54_BLE_FILTER_V2",
+        "NRF54_BLE_GATT_CENTRAL",
+        "NRF54_BLE_GATT_NOTIFY",
+        "NRF54_BLE_GATT_SERVICE_DISCOVERY",
+        "NRF54_BLE_PERIPHERAL",
+        "ESP32_BLE_SCAN",
+        "ESP32_BLE_ADV",
+        "ESP32_BLE_BEACON_FILTER",
+        "ESP32_BLE_FILTER_V2",
+        "ESP32_BLE_GATT_CENTRAL",
+        "ESP32_BLE_GATT_NOTIFY",
+        "ESP32_BLE_GATT_SERVICE_DISCOVERY",
+        "ESP32_BLE_PERIPHERAL"
+      ]
+    },
+    "GatewayRuntimeCapabilities": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0"
+        },
+        "namespaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "gatewayId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "espBootId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "nrfBootId": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$"
+            }
+          ]
+        },
+        "manifestDigest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "espImplemented": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/GatewayRuntimeCapability"
+          },
+          "minItems": 0,
+          "maxItems": 128,
+          "uniqueItems": true
+        },
+        "nrfHelloCapabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/GatewayRuntimeCapability"
+          },
+          "minItems": 0,
+          "maxItems": 128,
+          "uniqueItems": true
+        },
+        "boardVerified": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/GatewayRuntimeCapability"
+          },
+          "minItems": 0,
+          "maxItems": 128,
+          "uniqueItems": true
+        },
+        "unavailableReasons": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "enum": [
+              "CONFIGURE",
+              "REBOOT",
+              "DIAGNOSTICS",
+              "FIRMWARE_UPGRADE",
+              "GATT_CONNECT",
+              "GATT_DISCONNECT",
+              "GATT_READ",
+              "GATT_WRITE",
+              "GATT_SUBSCRIBE",
+              "GATT_UNSUBSCRIBE",
+              "PERIPHERAL_NOTIFY",
+              "PERIPHERAL_DISCONNECT",
+              "GW32_CONTROL_PROFILE_1",
+              "GW32_CAPTURE_CONTEXT_1",
+              "NETWORK_ETHERNET",
+              "NETWORK_WIFI_STA",
+              "COMPONENT_INVENTORY_1",
+              "CONFIG_SNAPSHOT_1",
+              "SIGNED_TIME_1",
+              "PERIPHERAL_BRIDGE_1",
+              "NRF54_UART_DFU_1",
+              "NRF54_BLE_SCAN",
+              "NRF54_BLE_ADV",
+              "NRF54_BLE_BEACON_FILTER",
+              "NRF54_BLE_FILTER_V2",
+              "NRF54_BLE_GATT_CENTRAL",
+              "NRF54_BLE_GATT_NOTIFY",
+              "NRF54_BLE_GATT_SERVICE_DISCOVERY",
+              "NRF54_BLE_PERIPHERAL",
+              "ESP32_BLE_SCAN",
+              "ESP32_BLE_ADV",
+              "ESP32_BLE_BEACON_FILTER",
+              "ESP32_BLE_FILTER_V2",
+              "ESP32_BLE_GATT_CENTRAL",
+              "ESP32_BLE_GATT_NOTIFY",
+              "ESP32_BLE_GATT_SERVICE_DISCOVERY",
+              "ESP32_BLE_PERIPHERAL"
+            ]
+          },
+          "additionalProperties": {
+            "type": "string",
+            "enum": [
+              "NOT_IMPLEMENTED",
+              "NRF_CAPABILITY_ABSENT",
+              "BOARD_NOT_VERIFIED",
+              "ROLE_BUSY",
+              "MANIFEST_NOT_AUTHORIZED"
+            ]
+          }
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "namespaceId",
+        "gatewayId",
+        "espBootId",
+        "nrfBootId",
+        "manifestDigest",
+        "espImplemented",
+        "nrfHelloCapabilities",
+        "boardVerified",
+        "unavailableReasons"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "nrfBootId": {
+                "type": "null"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "nrfHelloCapabilities": {
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      ]
+    },
+    "PeripheralClientAuthorization": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "routes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$"
+          },
+          "minItems": 0,
+          "maxItems": 64,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "enabled",
+        "routes"
+      ],
+      "additionalProperties": false
+    },
+    "PeripheralEvent": {
+      "type": "object",
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "radio": {
+          "type": "string",
+          "enum": [
+            "NRF54",
+            "ESP32"
+          ]
+        },
+        "controllerBootId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "connectionRef": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "clientId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "transportSeq": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "businessId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "inReplyTo": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "route": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$"
+        },
+        "payloadBase64": {
+          "type": "string",
+          "maxLength": 2732
+        },
+        "receivedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        },
+        "timeQuality": {
+          "type": "string",
+          "enum": [
+            "SYNCED",
+            "UNSYNCED"
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "radio",
+        "controllerBootId",
+        "connectionRef",
+        "clientId",
+        "transportSeq",
+        "businessId",
+        "route",
+        "payloadBase64",
+        "timeQuality"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "timeQuality": {
+                "const": "SYNCED"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "receivedAt"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "receivedAt"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "PeripheralEventBatch": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0"
+        },
+        "namespaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "gatewayId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "batchId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PeripheralEvent"
+          },
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "namespaceId",
+        "gatewayId",
+        "batchId",
+        "events"
+      ],
+      "additionalProperties": false
+    },
+    "PeripheralEventAck": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0"
+        },
+        "namespaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "gatewayId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "batchId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "durability": {
+          "const": "PERIPHERAL_PERSISTED"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "eventId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "ACCEPTED",
+                  "DUPLICATE",
+                  "RETRY",
+                  "REJECTED"
+                ]
+              },
+              "code": {
+                "type": "string",
+                "enum": [
+                  "CAPACITY_TEMPORARY",
+                  "INTERNAL_TEMPORARY",
+                  "NOT_AUTHORIZED",
+                  "INVALID_EVENT",
+                  "EVENT_ID_CONFLICT",
+                  "BUSINESS_ID_CONFLICT"
+                ]
+              }
+            },
+            "required": [
+              "eventId",
+              "status"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "namespaceId",
+        "gatewayId",
+        "batchId",
+        "durability",
+        "items"
+      ],
+      "additionalProperties": false
+    },
+    "TaskParamsPeripheralDisconnect": {
+      "type": "object",
+      "properties": {
+        "radio": {
+          "type": "string",
+          "enum": [
+            "NRF54",
+            "ESP32"
+          ]
+        },
+        "connectionRef": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "clientId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        }
+      },
+      "required": [
+        "radio",
+        "connectionRef",
+        "clientId"
+      ],
+      "additionalProperties": false
+    },
+    "TaskParamsPeripheralNotify": {
+      "type": "object",
+      "properties": {
+        "radio": {
+          "type": "string",
+          "enum": [
+            "NRF54",
+            "ESP32"
+          ]
+        },
+        "connectionRef": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "clientId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "inReplyTo": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "route": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$"
+        },
+        "payloadBase64": {
+          "type": "string",
+          "maxLength": 2732
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 30000
+        }
+      },
+      "required": [
+        "radio",
+        "connectionRef",
+        "clientId",
+        "route",
+        "payloadBase64",
+        "timeoutMs"
+      ],
+      "additionalProperties": false
+    },
+    "CommandParamsPeripheralNotify": {
+      "type": "object",
+      "properties": {
+        "radio": {
+          "type": "string",
+          "enum": [
+            "NRF54",
+            "ESP32"
+          ]
+        },
+        "connectionRef": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "clientId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "inReplyTo": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "route": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$"
+        },
+        "payloadBase64": {
+          "type": "string",
+          "maxLength": 2732
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 30000
+        },
+        "businessId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        }
+      },
+      "required": [
+        "radio",
+        "connectionRef",
+        "clientId",
+        "route",
+        "payloadBase64",
+        "timeoutMs",
+        "businessId"
+      ],
+      "additionalProperties": false
+    },
+    "BeaconPreviewSample": {
+      "type": "object",
+      "properties": {
+        "reportKind": {
+          "type": "string",
+          "enum": [
+            "LEGACY_ADV",
+            "LEGACY_SCAN_RSP",
+            "EXT_ADV",
+            "EXT_SCAN_RSP"
+          ]
+        },
+        "rssiDbm": {
+          "type": "integer",
+          "minimum": -128,
+          "maximum": 20
+        },
+        "payloadBase64": {
+          "type": "string",
+          "maxLength": 2200
+        },
+        "responseBase64": {
+          "type": "string",
+          "maxLength": 44
+        },
+        "responseDelayMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60000
+        },
+        "candidateCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 32
+        }
+      },
+      "required": [
+        "reportKind",
+        "rssiDbm",
+        "payloadBase64"
+      ],
+      "additionalProperties": false
+    },
+    "BeaconPreviewResult": {
+      "type": "object",
+      "properties": {
+        "passed": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "V2_NOT_ENABLED",
+            "INVALID_SAMPLE",
+            "UNSUPPORTED_CONTEXT",
+            "MALFORMED_AD",
+            "PAIR_TIMEOUT",
+            "PAIR_AMBIGUOUS",
+            "UNKNOWN_RSSI",
+            "BASE_FILTER",
+            "ALLOW",
+            "DENY",
+            "DEFAULT"
+          ]
+        },
+        "matchedRuleIndex": {
+          "type": "integer",
+          "minimum": -1,
+          "maximum": 7
+        }
+      },
+      "required": [
+        "passed",
+        "reason",
+        "matchedRuleIndex"
+      ],
+      "additionalProperties": false
+    },
+    "ScanProfilePreviewResponse": {
+      "type": "object",
+      "properties": {
+        "profile": {
+          "type": "object"
+        },
+        "bodyLength": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3070
+        },
+        "maximumBodyLength": {
+          "const": 3070
+        },
+        "bodyBase64": {
+          "type": "string"
+        },
+        "revisionForPreview": {
+          "const": 1
+        },
+        "sampleResults": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BeaconPreviewResult"
+          },
+          "minItems": 0,
+          "maxItems": 16
+        }
+      },
+      "required": [
+        "profile",
+        "bodyLength",
+        "maximumBodyLength",
+        "bodyBase64",
+        "revisionForPreview"
+      ],
+      "additionalProperties": false
+    },
+    "GatewayComponentArtifact": {
+      "type": "object",
+      "properties": {
+        "artifactId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "component": {
+          "type": "string",
+          "enum": [
+            "GATEWAY",
+            "NRF54"
+          ]
+        },
+        "firmwareVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "imageSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "sizeBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "artifactId",
+        "component",
+        "firmwareVersion",
+        "imageSha256",
+        "sizeBytes"
+      ],
+      "additionalProperties": false
+    },
+    "GatewayComponentInventory": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0"
+        },
+        "namespaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "gatewayId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "challengeId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "nonce": {
+          "type": "string",
+          "minLength": 44,
+          "maxLength": 44
+        },
+        "inventoryGeneration": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]{0,19})$"
+        },
+        "component": {
+          "type": "string",
+          "enum": [
+            "GATEWAY",
+            "NRF54"
+          ]
+        },
+        "controllerBootId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "evidenceLevel": {
+          "type": "string",
+          "enum": [
+            "CONFIRMED_ARTIFACT",
+            "VERSION_ONLY",
+            "UNKNOWN"
+          ]
+        },
+        "firmwareVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "imageSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "artifactId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "bootConfirmed": {
+          "type": "boolean"
+        },
+        "upgradeTaskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "evidenceReceivedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "namespaceId",
+        "gatewayId",
+        "challengeId",
+        "nonce",
+        "inventoryGeneration",
+        "component",
+        "evidenceLevel",
+        "evidenceReceivedAt"
+      ],
+      "additionalProperties": false
+    },
+    "GatewayComponentReceipt": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0"
+        },
+        "namespaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "gatewayId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "challengeId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "inventoryGeneration": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]{0,19})$"
+        },
+        "evidenceReceivedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "inventory": {
+          "$ref": "#/$defs/GatewayComponentInventory"
+        },
+        "component": {
+          "type": "string",
+          "enum": [
+            "GATEWAY",
+            "NRF54"
+          ]
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "namespaceId",
+        "gatewayId",
+        "challengeId",
+        "inventoryGeneration",
+        "evidenceReceivedAt",
+        "inventory",
+        "component"
+      ],
+      "additionalProperties": false
+    },
+    "GatewayRuntimeCapabilitiesResponse": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0"
+        },
+        "namespaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "gatewayId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "espBootId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "nrfBootId": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$"
+            }
+          ]
+        },
+        "availableCapabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/GatewayRuntimeCapability"
+          },
+          "minItems": 0,
+          "maxItems": 128
+        },
+        "unavailableReasons": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "enum": [
+              "NOT_IMPLEMENTED",
+              "NRF_CAPABILITY_ABSENT",
+              "BOARD_NOT_VERIFIED",
+              "ROLE_BUSY",
+              "MANIFEST_NOT_AUTHORIZED"
+            ]
+          }
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "namespaceId",
+        "gatewayId",
+        "espBootId",
+        "nrfBootId",
+        "availableCapabilities",
+        "unavailableReasons"
+      ],
+      "additionalProperties": false
+    },
+    "GatewaySnapshotGroup": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "value": {
+          "type": "object"
+        },
+        "source": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "VERIFIED_TASK",
+                "FACTORY_MANIFEST",
+                "LOCAL_ADOPTED"
+              ]
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "verifiedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "revision",
+        "value",
+        "source",
+        "verifiedAt"
+      ],
+      "additionalProperties": false
+    },
+    "GatewayConfigurationSnapshot": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0"
+        },
+        "namespaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "gatewayId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "snapshotId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "generation": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]{0,19})$"
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "groups": {
+          "type": "object",
+          "properties": {
+            "network": {
+              "$ref": "#/$defs/GatewaySnapshotGroup"
+            },
+            "nrf54Scan": {
+              "$ref": "#/$defs/GatewaySnapshotGroup"
+            },
+            "nrf54Advertising": {
+              "$ref": "#/$defs/GatewaySnapshotGroup"
+            },
+            "esp32Scan": {
+              "$ref": "#/$defs/GatewaySnapshotGroup"
+            },
+            "esp32Advertising": {
+              "$ref": "#/$defs/GatewaySnapshotGroup"
+            },
+            "upload": {
+              "$ref": "#/$defs/GatewaySnapshotGroup"
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "missingGroups": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "network",
+              "nrf54Scan",
+              "nrf54Advertising",
+              "esp32Scan",
+              "esp32Advertising",
+              "upload"
+            ]
+          },
+          "minItems": 0,
+          "maxItems": 6,
+          "uniqueItems": true
+        },
+        "blockedReasons": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "UNKNOWN_TASK",
+              "LOCAL_OVERRIDE",
+              "MISSING_BASELINE",
+              "PENDING_CONFIGURATION"
+            ]
+          },
+          "minItems": 0,
+          "maxItems": 4,
+          "uniqueItems": true
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "namespaceId",
+        "gatewayId",
+        "snapshotId",
+        "generation",
+        "complete",
+        "groups",
+        "missingGroups",
+        "blockedReasons",
+        "digest"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "complete": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "groups": {
+                "required": [
+                  "network",
+                  "nrf54Scan",
+                  "nrf54Advertising",
+                  "esp32Scan",
+                  "esp32Advertising",
+                  "upload"
+                ]
+              },
+              "missingGroups": {
+                "maxItems": 0
+              },
+              "blockedReasons": {
+                "maxItems": 0
+              }
+            }
           }
         }
       ]

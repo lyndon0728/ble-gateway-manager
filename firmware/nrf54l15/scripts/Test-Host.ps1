@@ -15,13 +15,18 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Protocol core compilation failed.' }
     & $coreExe
     if ($LASTEXITCODE -ne 0) { throw 'Protocol core tests failed.' }
+    $filterExe = Join-Path $buildPath 'test_filter_v2.exe'
+    & $compilerPath @prefix @flags '-Isrc' 'src/gw_core.c' 'src/gw_filter_v2.c' 'tests/test_filter_v2.c' '-o' $filterExe
+    if ($LASTEXITCODE -ne 0) { throw 'Beacon V2 compilation failed.' }
+    & $filterExe
+    if ($LASTEXITCODE -ne 0) { throw 'Beacon V2 tests failed.' }
     $gattExe = Join-Path $buildPath 'test_gatt.exe'
     & $compilerPath @prefix @flags '-Itests/gatt_mock' 'tests/test_gatt.c' '-o' $gattExe
     if ($LASTEXITCODE -ne 0) { throw 'GATT lifecycle test compilation failed.' }
     & $gattExe
     if ($LASTEXITCODE -ne 0) { throw 'GATT lifecycle tests failed.' }
     $radioExe = Join-Path $buildPath 'test_radio.exe'
-    & $compilerPath @prefix @flags '-Itests/radio_mock' '-Isrc' 'src/gw_radio.c' 'src/gw_core.c' 'tests/test_radio.c' '-o' $radioExe
+    & $compilerPath @prefix @flags '-Itests/radio_mock' '-Isrc' 'src/gw_radio.c' 'src/gw_core.c' 'src/gw_filter_v2.c' 'tests/test_radio.c' '-o' $radioExe
     if ($LASTEXITCODE -ne 0) { throw 'Radio behavior test compilation failed.' }
     & $radioExe
     if ($LASTEXITCODE -ne 0) { throw 'Radio behavior tests failed.' }

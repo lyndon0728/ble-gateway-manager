@@ -274,9 +274,27 @@ func (a *App) checkFirmwareComponent(ctx context.Context, q ctlQuery, id string,
 		}
 	}
 	if component == "NRF54" && len(List(c, "fromFirmwareVersions")) > 0 {
-		// Registry firmwareVersion describes the gateway host, not the nRF.
-		// Never compare it as if it were authenticated nRF version evidence.
-		return Problem(422, "FIRMWARE_COMPONENT_VERSION_UNKNOWN", "NRF54 source-version constraints require separately verified component inventory")
+		var raw string
+		var at int64
+		err := q.QueryRowContext(ctx, "SELECT inventory_json,received_at_ms FROM gateway_component_inventory WHERE gateway_id=? AND component='NRF54'", Str(g, "gatewayId")).Scan(&raw, &at)
+		inventory := pm(raw)
+		if err != nil || Now()-at >= 60000 || Str(inventory, "evidenceLevel") != "CONFIRMED_ARTIFACT" || inventory["bootConfirmed"] != true {
+			return Problem(422, "FIRMWARE_COMPONENT_VERSION_UNKNOWN", "fresh confirmed NRF54 inventory required")
+		}
+		var runtime string
+		err = q.QueryRowContext(ctx, "SELECT report_json FROM gateway_runtime_capabilities WHERE gateway_id=?", Str(g, "gatewayId")).Scan(&runtime)
+		if err != nil || Str(pm(runtime), "nrfBootId") != Str(inventory, "controllerBootId") {
+			return Problem(422, "FIRMWARE_COMPONENT_VERSION_UNKNOWN", "current NRF54 boot must match inventory")
+		}
+		matched := false
+		for _, v := range List(c, "fromFirmwareVersions") {
+			if v == Str(inventory, "firmwareVersion") {
+				matched = true
+			}
+		}
+		if !matched {
+			return Problem(422, "FIRMWARE_INCOMPATIBLE", "NRF54 source version does not match signed artifact constraints")
+		}
 	}
 	return nil
 }

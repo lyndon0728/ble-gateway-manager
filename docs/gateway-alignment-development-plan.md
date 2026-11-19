@@ -2,11 +2,11 @@
 
 | 项目 | 基线 |
 | --- | --- |
-| 文档 / 日期 | 1.0 / 2026-11-19；GW32-E2E-1.1 |
-| 审查源码 | `b8ba3ef74af05fe33459f429f4f1f9438b71340a`；ESP 0.2.1 / nRF 0.2.0；未改变SDK |
-| 本轮状态 | **统一实现方案已确定；运行源码、Schema和实板验收尚未完成** |
+| 文档 / 日期 | 1.1 / 2026-11-19；GW32-E2E-1.1 |
+| 审查源码 | 原审查基线 `b8ba3ef`；当前源码 ESP/nRF 0.3.0；SDK不变 |
+| 本轮状态 | **统一实现方案及三方源码/机器合同已落实；实板验收待完成**，软件验证见[交付记录](gateway-alignment-implementation.md) |
 | 不变项 | 原有功能、系统93条/ESP182条/平台59条需求及既有验收编号保留；新增过滤使用独立BFLT编号 |
-| 文档权责 | 本文冻结C02～C11的跨端实施选择；C12由[Beacon过滤规范](beacon-filter-spec.md)冻结。现行接口仍以既有协议/机器合同为准，规划接口须联合实现才生效 |
+| 文档权责 | 本文冻结C02～C11的跨端实施选择；C12由[Beacon过滤规范](beacon-filter-spec.md)冻结。现行接口仍以既有协议/机器合同为准，接口按联合实现与能力门控生效 |
 
 ## 1. 闭合矩阵与发布顺序
 
@@ -29,16 +29,16 @@
 
 ## 2. 新合同登记与兼容规则
 
-下表全部是**规划新增**，当前源码/API不提供。路径和对象在本文件冻结，后续不得三方分别取名；实现时应以同一变更同步OpenAPI、Schema、验证器、SDK适配、UI、模拟器及测试。现有消息信封1.0/1.1及UART frame1不改；新独立对象各带自己的schemaVersion=1.0。版本不支持或缺能力时显式拒绝，不忽略新字段。
+下表新增合同已在本轮源码落地，路径与对象统一，并已同步OpenAPI、Schema、业务验证器、设备适配与测试；发布启用须匹配制造能力及板级验证。现有消息信封1.0/1.1及UART frame1不改；新独立对象各带自己的schemaVersion=1.0。版本不支持或缺能力时显式拒绝，不忽略新字段。
 
-| 合同标识 | 规划入口/能力 | 内容 |
+| 合同标识 | 实现入口/能力 | 内容 |
 | --- | --- | --- |
 | GW-CAPS-1 | `PUT /api/v1/gateway-runtime-capabilities`；签名清单增加相应功能授权 | ESP报告本次boot实际实现/板验证/nRF HELLO；平台计算可用交集 |
 | GW-PERIPHERAL-1 | `POST /api/v1/gateway-peripheral/batches`；`PERIPHERAL_BRIDGE_1` | 业务事件与PERIPHERAL_PERSISTED确认，独立于RawEvent |
 | GW-COMPONENT-1 | `POST /api/v1/gateway-component-challenges`、`PUT /api/v1/gateway-components`；`COMPONENT_INVENTORY_1` | 新鲜组件盘点挑战和镜像证据 |
 | GW-SNAPSHOT-1 | `GET /api/v1/gateway-configuration-snapshot`；`CONFIG_SNAPSHOT_1` | 设备身份范围内的完整目标快照；本身不执行配置 |
 | GW-TIME-1 | `POST /api/v1/gateway-time-challenges`；`SIGNED_TIME_1` | 不含秘密的签名时间响应，建立UTC信任后才开始普通TLS业务 |
-| BFLT-2.0 | `beaconFilterV2`；平台 `BLE_FILTER_V2`、nRF bit13 | 详见过滤规范；UART规划0x19/0x1A/0x1B |
+| BFLT-2.0 | `beaconFilterV2`；平台 `NRF54_BLE_FILTER_V2` / `ESP32_BLE_FILTER_V2`、nRF bit13 | 详见过滤规范；UART 0x19/0x1A/0x1B |
 
 除时间引导的公开挑战入口外，新设备API沿用每设备身份及TLS要求，不能使用平台管理员凭据。管理查询/操作沿用范围权限；设备只能读写自己的对象。能力增加须经制造清单授权、实际驱动可用和验证门槛，不接受正文自报即授权。
 
@@ -97,9 +97,9 @@ GPIO/极性/拉低时长/释放方式必须来自目标板已核对配置；本�
 
 认证复用工程已锁定的protocomm Security2实现（SRP6a和认证加密），使用**独立的Peripheral业务客户端身份/凭据与权限**，不共享现场配网管理员会话或自动取得OTA/网络权限。凭据通过既有授权制造/维护流程写入加密存储；服务端登记clientId及业务route权限，不从未认证payload自报clientId授信。离线时仅已预置授权可使用，未知客户端拒绝。
 
-协议组件支持业务扩展、可插入传输及Security2的SRP6a/AES-GCM会话，依据[ESP-IDF v5.5.6官方说明](https://docs.espressif.com/projects/esp-idf/en/v5.5.6/esp32s3/api-reference/provisioning/protocomm.html)。本项目的分片、客户端权限与平台业务桥接是本次规划，不能因SDK提供密码组件而宣称这些功能已有实现。
+协议组件支持业务扩展、可插入传输及Security2的SRP6a/AES-GCM会话，依据[ESP-IDF v5.5.6官方说明](https://docs.espressif.com/projects/esp-idf/en/v5.5.6/esp32s3/api-reference/provisioning/protocomm.html)。本项目的分片、客户端权限与平台业务桥接已由独立gw_peripheral和平台模块实现；SDK密码接口与业务持久确认分别测试。
 
-BLE承载规划固定12字节片头：`magic[2]="PG",version:u8=1,type:u8,transportSeq:u32,totalLength:u16,offset:u16`，数值小端，后接非空fragment。type=0承载Security2会话protobuf，1承载认证后的加密业务信封，2承载认证后的加密应答；type不赋予身份。totalLength上限4096，offset连续。transportSeq每连接、每方向分别从1单调递增，u32耗尽须重建会话；应答使用发送方向自己的新序号，不回显对向序号。最近相同片可重试，同序号不同内容拒绝。每连接每方向最多一个在途重组，5s固定预算、不随分片续期；断链/boot变化清理并废除会话。
+BLE承载固定12字节片头：`magic[2]="PG",version:u8=1,type:u8,transportSeq:u32,totalLength:u16,offset:u16`，数值小端，后接非空fragment。type=0承载Security2会话protobuf，1承载认证后的加密业务信封，2承载认证后的加密应答；type不赋予身份。totalLength上限4096，offset连续。transportSeq每连接、每方向分别从1单调递增，u32耗尽须重建会话；应答使用发送方向自己的新序号，不回显对向序号。最近相同片可重试，同序号不同内容拒绝。每连接每方向最多一个在途重组，5s固定预算、不随分片续期；断链/boot变化清理并废除会话。
 
 单次RX/TX包括片头的总长度≤min(512,MTU−3)，普通MTU23仍可携带8字节分片。TX须先订阅，按0x0E的tx_seq幂等受理；TX受理/ATT成功不代表业务送达。所有Security2包和重组边界做长度/状态校验，禁用自制加密算法；抗重放由会话密码状态与业务ID共同约束。
 
@@ -107,7 +107,7 @@ BLE承载规划固定12字节片头：`magic[2]="PG",version:u8=1,type:u8,transp
 
 ### 6.2 平台事件与独立持久确认
 
-规划事件批次：`{schemaVersion,namespaceId,gatewayId,batchId,events:[...]}`；最多16项、每项业务payload≤2048B、完整JSON≤128KiB。事件字段固定为`eventId,radio,controllerBootId,connectionRef,clientId,transportSeq,businessId,inReplyTo?,route,payloadBase64,receivedAt?,timeQuality`，radio为NRF54/ESP32。timeQuality仅SYNCED/UNSYNCED；SYNCED要求RFC3339 UTC毫秒receivedAt及有效时间锚，UNSYNCED省略该字段。连接引用增加角色域，使用新Peripheral引用算法，不能碰撞Central引用：SHA256(`"gw32-peripheral-v1"`ASCII + radioByte + boot16 + conn_idLE4)前16字节小写hex；radioByte仍0nRF/1ESP。
+事件批次：`{schemaVersion,namespaceId,gatewayId,batchId,events:[...]}`；最多16项、每项业务payload≤2048B、完整JSON≤128KiB。事件字段固定为`eventId,radio,controllerBootId,connectionRef,clientId,transportSeq,businessId,inReplyTo?,route,payloadBase64,receivedAt?,timeQuality`，radio为NRF54/ESP32。timeQuality仅SYNCED/UNSYNCED；SYNCED要求RFC3339 UTC毫秒receivedAt及有效时间锚，UNSYNCED省略该字段。连接引用增加角色域，使用新Peripheral引用算法，不能碰撞Central引用：SHA256(`"gw32-peripheral-v1"`ASCII + radioByte + boot16 + conn_idLE4)前16字节小写hex；radioByte仍0nRF/1ESP。
 
 平台按namespace/gateway/eventId与规范内容摘要幂等事务写入，再返回`{schemaVersion,namespaceId,gatewayId,batchId,durability:"PERIPHERAL_PERSISTED",items:[{eventId,status,code?}]}`；逐项status为ACCEPTED/DUPLICATE才可回收对应业务spool，冲突/暂不可接管保留或隔离。不能复用RAW_PERSISTED而混淆RawEvent。MQTT对应新topic为既有设备前缀下`peripheral-events`/`peripheral-ack`，QoS1、retain=false，内容与HTTP相同。
 
@@ -121,7 +121,7 @@ Security2会话密钥不要求跨启动持久化；ESP重启/断链后，尚未�
 
 ### 6.3 下行任务与业务应答
 
-规划新任务`PERIPHERAL_NOTIFY`参数固定`radio,connectionRef,clientId,inReplyTo?,businessId,route,payloadBase64,timeoutMs`；businessId由平台在任务受理时生成并稳定保留，transportSeq由ESP在持久发送意图中按本方向分配，不由平台猜测。`PERIPHERAL_DISCONNECT`参数固定`radio,connectionRef,clientId`。timeoutMs为100～30000且不超过任务TTL。平台校验路由权限/当前客户端关联，ESP再次校验相同boot/连接/会话/client，禁止旧连接复用误投。
+新任务`PERIPHERAL_NOTIFY`参数固定`radio,connectionRef,clientId,inReplyTo?,businessId,route,payloadBase64,timeoutMs`；businessId由平台在任务受理时生成并稳定保留，transportSeq由ESP在持久发送意图中按本方向分配，不由平台猜测。`PERIPHERAL_DISCONNECT`参数固定`radio,connectionRef,clientId`。timeoutMs为100～30000且不超过任务TTL。平台校验路由权限/当前客户端关联，ESP再次校验相同boot/连接/会话/client，禁止旧连接复用误投。
 
 ESP持久发送意图，分片加密发送；对端type2明文为`{schemaVersion:"1.0",transportSeq,inReplyTo,status,responseBase64?}`，inReplyTo引用业务ID，status仅STORED/APPLIED/REJECTED，responseBase64解码≤2048B。STORED仅表示接收方已持久收件，APPLIED才表示业务处理成功；NOTIFY收到匹配APPLIED才可SUCCEEDED/VERIFIED，STORED或本机受理仍为EXECUTING。断链/超时且送达不明为UNKNOWN，不能重新投递副作用；REJECTED为明确业务失败。DISCONNECT以实际释放连接为完成证据。上行业务也只在本地持久后发送STORED，平台持久ACK不自动生成APPLIED；平台业务处理完成后经关联回复表达结果。
 
@@ -145,7 +145,7 @@ evidenceLevel只允许CONFIRMED_ARTIFACT/VERSION_ONLY/UNKNOWN。CONFIRMED_ARTIFA
 
 ## 8. C07：实际能力交集和ESP本机BLE
 
-能力对账输入是签名清单的授权上限、ESP编译实现/实板启用项、当前nRF HELLO、角色资源及固件版本。规划GW-CAPS-1对象为`schemaVersion,namespaceId,gatewayId,espBootId,nrfBootId,manifestDigest,espImplemented,nrfHelloCapabilities,boardVerified,unavailableReasons`；列表为确定能力字符串，完整值在Schema枚举中登记，不能任意文本当授权。
+能力对账输入是签名清单的授权上限、ESP编译实现/实板启用项、当前nRF HELLO、角色资源及固件版本。GW-CAPS-1对象为`schemaVersion,namespaceId,gatewayId,espBootId,nrfBootId,manifestDigest,espImplemented,nrfHelloCapabilities,boardVerified,unavailableReasons`；列表为确定能力字符串，完整值在Schema枚举中登记，不能任意文本当授权。
 
 平台验证已保存的签名清单，返回交集及原因。ESP保存并验签同一制造清单原文/签名，用本机实现和HELLO再次求交集；没有清单或验签失败不能开放新增能力。网络报告只是可见性，不代替执行前再次检查。角色暂时忙与功能未实现分别表达，不能把暂停永久取消能力。
 
@@ -155,7 +155,7 @@ ESP本机完善可连接广播与Peripheral服务，按既有服务/业务合同
 
 ## 9. C08：完整目标快照与受控恢复
 
-平台另存各组已确认完整目标，和当前desired/reported补丁查询并存；不把已有`complete=false`视图改名冒充完整快照。规划快照包含`schemaVersion,namespaceId,gatewayId,snapshotId,generation,complete,groups,missingGroups,blockedReasons,digest`，generation为u64十进制字符串，digest为除digest外对象的既定规范JSON SHA256。missingGroups只列下述固定组名；blockedReasons为UNKNOWN_TASK、LOCAL_OVERRIDE、MISSING_BASELINE、PENDING_CONFIGURATION的非重复子集；complete=true时两数组必须为空，所有组必须齐全。
+平台另存各组已确认完整目标，和当前desired/reported补丁查询并存；不把已有`complete=false`视图改名冒充完整快照。快照包含`schemaVersion,namespaceId,gatewayId,snapshotId,generation,complete,groups,missingGroups,blockedReasons,digest`，generation为u64十进制字符串，digest为除digest外对象的既定规范JSON SHA256。missingGroups只列下述固定组名；blockedReasons为UNKNOWN_TASK、LOCAL_OVERRIDE、MISSING_BASELINE、PENDING_CONFIGURATION的非重复子集；complete=true时两数组必须为空，所有组必须齐全。
 
 固定组为`network,nrf54Scan,nrf54Advertising,esp32Scan,esp32Advertising,upload`；每组包含`revision,value,source,verifiedAt`，source为`{kind,id}`，kind仅VERIFIED_TASK/FACTORY_MANIFEST/LOCAL_ADOPTED，id分别引用成功任务、已验签制造清单或采用本地目标的成功对账任务。verifiedAt是平台完成来源核验的UTC时间，不是当前设备读回时间。revision沿平台安全整数约束，制造初值允许0；value是完整目标且无明文凭据。旧顶层scan/filters归一到nrf54Scan，所有组用其Schema默认值补齐仅限有可证明初始化基线；不能凭空把缺失历史组填默认后称完整。
 
@@ -165,7 +165,7 @@ ESP接收快照后校验身份、digest、generation、各组revision及完整�
 
 1. 本机目标仍完整且有localOverride时不覆盖，先按既有ADOPT_LOCAL/APPLY_PLATFORM对账；网络凭据只引用已安装credentialRef，缺凭据拒绝自动切网。
 2. 本机目标丢失则只自动恢复旧身份、journal/spool等可证明数据，不因下载快照而立即执行物理配置。
-3. 平台使用既有配置任务语义逐组生成受控恢复任务，标明来源snapshotId（规划增加该受审计引用），分配新的desiredRevision；每网关仍一个在途任务，组间不声称原子事务。
+3. 平台使用既有配置任务语义逐组生成受控恢复任务，标明来源snapshotId（已增加该受审计引用），分配新的desiredRevision；每网关仍一个在途任务，组间不声称原子事务。
 4. 每组写候选→实际执行/完整读回→稳定结果/应用ACK→提交；失败停止后续组并保留已完成组/剩余组清单。新运行revision可大于快照历史值，禁止拿旧revision覆盖设备更新目标。
 5. 网络组先保当前可达接口，候选探测后提交；本地覆盖、在途OTA和UNKNOWN副作用阻止恢复，不通过cancelQueued绕过。
 
@@ -183,13 +183,13 @@ ESP接收快照后校验身份、digest、generation、各组revision及完整�
 
 ### 10.2 UTC区间与动作期限
 
-ESP记录发起/接收单调时间，要求往返≤2000ms，nonce为本次尚未消费值、boot相同、签名正确。100ppm是待板级验证的单调时钟漂移上限，未经验证不能提升时间为可信；若实测上界更大则先更新受审查的预算与向量。定义q=2ms+ceil(RTT×100ppm)，覆盖时间戳量化及测量漂移；接收时UTC保守区间为`[issuedAt−uncertainty−q, issuedAt+uncertainty+RTT+q]`，以后按单调时长推进，下界减、上界加ceil(age×100ppm)。所有加减、转换及deadline计算必须检查溢出/下溢。
+ESP独立时间worker记录发起/接收单调时间，要求往返≤2000ms，nonce为本次尚未消费值、boot相同、签名正确。100ppm是待板级验证的单调时钟漂移上限，未经验证不能提升时间为可信；若实测上界更大则先更新受审查的预算与向量。定义q=2ms+ceil(RTT×100ppm)，覆盖时间戳量化及测量漂移；接收时UTC保守区间为`[issuedAt−uncertainty−q, issuedAt+uncertainty+RTT+q]`，以后按单调时长推进，下界减、上界加ceil(age×100ppm)。所有加减、转换及deadline计算必须检查溢出/下溢。
 
 validForMs从签名的issuedAtUnixMs起算，可信截止UTC为issuedAt+60000；本机上界到达该值即失效，不是收到旧包后重新获得完整60s。接收时可用单调预算最多60000−uncertainty−RTT−q，随误差增长可进一步缩短；到期前必须取得新nonce的签名锚。服务器签名端必须有经运维验证的时间来源，否则停止签发，不签一个自称准确的普通错误时钟。
 
 平台任务尚未到期的判断使用UTC上界：上界≥expiresAt则不能开始新副作用；任务创建时间/证书notBefore用下界检查。TLS验证必须在整个可信区间内满足日期约束。已受理动作固定单调deadline，后续校时只可缩短，不能延长或复活已过期动作。
 
-当前源码`clock_synced && year>=2025`不足以达到这个标准，须替换为有效签名锚/误差区间状态；SNTP仅提供候选或诊断，不能单独把状态升为可信。锚过期停止新远程授权动作，保留持久数据和安全对账；不会删除离线采集。
+旧源码`clock_synced && year>=2025`已替换为有效签名锚/误差区间状态；SNTP仅提供候选或诊断，不能单独把状态升为可信。锚过期停止新远程授权动作，保留持久数据和安全对账；不会删除离线采集。
 
 本地配网及本地OTA的现场认证、单调窗口、签名镜像、离线试启动/恢复均不增加互联网或UTC前提。重启后旧单调锚失效；远程恢复须重新建立时间证据，本地恢复按LOCAL授权journal继续既有流程。
 
@@ -227,10 +227,16 @@ VERIFY_RUNNING参数仍为目标size/SHA，版本字符串相同不足以证明�
 | D4 实板贯通 | 网络切换、UART背压、真实Beacon/手机/GATT、双OTA和掉电回退 | 文档/模拟器不等于整机通过 |
 | D5 发布 | 先兼容服务端，再经验证设备，最后按能力启用新功能；回滚到旧固件前恢复旧过滤目标 | 不让旧固件静默忽略V2配置或未知持久版本 |
 
-各差距只有D1～D4对应证据齐备才标“实现闭合”；本轮只达到D0。新增持久对象/配置引擎须版本化保存，旧固件不认识时拒绝危险恢复并进入明确维护状态；降级前必须备份和迁移目标，不能把未知字段当空配置。所有后续记录继续使用Markdown，源码/Schema保留原生格式。
+各差距只有D1～D4对应证据齐备才标“实现闭合”；0.3.0已完成D1/D2的软件实现和验证，ESP有D3目标构建，nRF目标构建及D4实板证据尚缺。新增持久对象/配置引擎须版本化保存，旧固件不认识时拒绝危险恢复并进入明确维护状态；降级前必须备份和迁移目标，不能把未知字段当空配置。所有后续记录继续使用Markdown，源码/Schema保留原生格式。
 
-## 13. 本版文档校核记录
+## 13. 前版设计校核记录
 
-2026-11-19完成17份Markdown一致性检查：294个相对文件链接、14个章节锚点、15个JSON示例及代码围栏通过；系统93条需求正文及18项ACC、ESP182条需求/50项验收、平台59条需求/11项验收的既有编号与顺序保持，新BFLT为18条需求/16项验收。系统PER-005仅更新实施状态说明，需求正文不变。
+2026-11-19前版设计交付完成17份Markdown一致性检查：294个相对文件链接、14个章节锚点、15个JSON示例及代码围栏通过；系统93条需求正文及18项ACC、ESP182条需求/50项验收、平台59条需求/11项验收的既有编号与顺序保持，新BFLT为18条需求/16项验收。系统PER-005仅更新实施状态说明，需求正文不变。
 
-独立计算核对了名称Base64、iBeacon字段偏移/端序、RSSI范围/位掩码、87B完整配置向量、3070B预算及96B状态布局。交叉审阅已修正未知RSSI默认放行歧义、PAIR边界/计数、双向业务序号/掉电重传、组件证据条件字段、快照来源、时间有效期及OTA阶段名称。`git diff --check`通过；本次未运行新固件构建或硬件测试，规划V2尚未实现。
+独立计算核对了名称Base64、iBeacon字段偏移/端序、RSSI范围/位掩码、87B完整配置向量、3070B预算及96B状态布局。交叉审阅修正了未知RSSI默认放行歧义、PAIR边界/计数、双向业务序号/掉电重传、组件证据条件字段、快照来源、时间有效期及OTA阶段名称。上述记录属于当时仅文档的交付，不代表0.3.0源码测试或目标构建结果。
+
+## 14. 本轮实现补充
+
+实际状态、制造键、部署和验证见[实现记录](gateway-alignment-implementation.md)。GW-CAPS-1 的 nrfBootId 在当前nRF身份不可读时为null，HELLO列表为空；不构造假boot。GW-COMPONENT-1 增加设备只读 `GET /api/v1/gateway-component-artifact?component=...&sha256=...`，只把本机已验签/实际重读的镜像关联到平台已验签制品，不提高证据等级。GW-SNAPSHOT-1 支持按 `?snapshotId=...` 取不可变历史；已有配置API/任务接收 sourceSnapshotId，逐组匹配完整目标并分配新revision。
+
+制造阶段100ppm漂移/射频组合/复位脉冲的实测门槛不因本轮编译通过而免除。当前ESP默认硬件复位关闭，nRF默认GW_RADIO_VERIFIED=n。

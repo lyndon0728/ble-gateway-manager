@@ -20,7 +20,7 @@ LOG_MODULE_REGISTER(gw_app, LOG_LEVEL_INF);
 #define RX_DMA_SIZE 256
 #define RX_DMA_COUNT 3
 #define RX_RING_SIZE 8192
-#define FW_VERSION "gw-nrf54l15/0.2.0"
+#define FW_VERSION "gw-nrf54l15/0.3.0"
 
 static const struct device *const link_uart = DEVICE_DT_GET(DT_ALIAS(gw_uart));
 static uint8_t rx_dma[RX_DMA_COUNT][RX_DMA_SIZE] __aligned(4);
@@ -228,7 +228,8 @@ static uint8_t dispatch_command(uint8_t opcode, const uint8_t *args, size_t leng
     }
     if (gw_dfu_active() && opcode != 0x02 && opcode != 0x03 && opcode != 0x04 &&
         opcode != 0x06 && opcode != 0x08 && opcode != 0x09 && opcode != 0x0a &&
-        opcode != 0x0c && opcode != 0x0d && opcode != 0x17) {
+        opcode != 0x0c && opcode != 0x0d && opcode != 0x17 &&
+        opcode != 0x1a && opcode != 0x1b) {
         return GW_BUSY;
     }
     switch (opcode) {

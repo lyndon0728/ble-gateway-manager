@@ -24,7 +24,7 @@ def main():
     idf = Path(args.idf).resolve()
     cc = [args.cc] + (["cc"] if Path(args.cc).stem == "zig" else [])
     common = ["-std=c11", "-Wall", "-Wextra", "-Werror", f"-I{component / 'include'}",
-              f"-I{component.parent / 'gw_wire/include'}"]
+              f"-I{component.parent / 'gw_wire/include'}", f"-I{component.parent / 'gw_transport/include'}"]
     if os.name != "nt":
         common.append("-D_POSIX_C_SOURCE=200809L")
     sources = [component / "gw_spool.c", component / "gw_capture_rules.c", repo / "firmware/nrf54l15/src/gw_core.c"]

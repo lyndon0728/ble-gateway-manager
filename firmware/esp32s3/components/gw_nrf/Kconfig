@@ -1,0 +1,23 @@
+menu "GW32 nRF recovery"
+config GW_NRF_RESET_BOARD_VERIFIED
+    bool "Enable reset only for a verified board configuration"
+    default n
+    help
+        Requires confirmed schematic, open-drain reset circuit and pulse timing.
+        The caller must hold a durable recovery intent and maintenance ownership.
+config GW_NRF_RESET_GPIO
+    int "Verified nRF reset GPIO"
+    range 0 48
+    default 8
+    depends on GW_NRF_RESET_BOARD_VERIFIED
+config GW_NRF_RESET_LOW_MS
+    int "Verified reset assertion duration (ms)"
+    range 1 1000
+    default 10
+    depends on GW_NRF_RESET_BOARD_VERIFIED
+config GW_NRF_RESET_SETTLE_MS
+    int "Verified release settling duration (ms)"
+    range 1 10000
+    default 100
+    depends on GW_NRF_RESET_BOARD_VERIFIED
+endmenu

@@ -17,7 +17,11 @@ var gw32ConnectionPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
 var gw32PeerPattern = regexp.MustCompile(`(?i)^(?:[0-9a-f]{12}|[0-9a-f]{2}(?::[0-9a-f]{2}){5})$`)
 
 func gw32Has(g map[string]any, cap string) bool {
-	for _, v := range List(g, "capabilities") {
+	key := "capabilities"
+	if _, ok := g["availableCapabilities"]; ok {
+		key = "availableCapabilities"
+	}
+	for _, v := range List(g, key) {
 		if v == cap {
 			return true
 		}
@@ -416,7 +420,7 @@ func validateGW32ConfigurationShape(c map[string]any) error {
 			if e != nil {
 				return e
 			}
-			if e = gw32Keys(m, "scan", "filters", "beaconRules", "advertising"); e != nil {
+			if e = gw32Keys(m, "scan", "filters", "beaconRules", "beaconFilterV2", "advertising"); e != nil {
 				return e
 			}
 			if ad, ok := m["advertising"]; ok {
@@ -447,6 +451,11 @@ func validateGW32ConfigurationShape(c map[string]any) error {
 					return e
 				}
 			}
+			if v, ok := m["beaconFilterV2"]; ok && v != nil {
+				if e = BeaconV2Shape(v); e != nil {
+					return e
+				}
+			}
 			if v, ok := m["beaconRules"]; ok {
 				if e = gw32BeaconShape(v); e != nil {
 					return e
@@ -462,7 +471,7 @@ func gw32Merge(base, patch map[string]any) map[string]any {
 	out := map[string]any{}
 	_ = json.Unmarshal([]byte(encode(base)), &out)
 	for k, v := range patch {
-		if child, ok := v.(map[string]any); ok && k != "ipv4" {
+		if child, ok := v.(map[string]any); ok && k != "ipv4" && k != "beaconFilterV2" {
 			out[k] = gw32Merge(Obj(out, k), child)
 		} else {
 			out[k] = v
@@ -598,6 +607,14 @@ func (a *App) validateGatewayConfiguration(ctx context.Context, tx *sql.Tx, g ma
 					return e
 				}
 			}
+			if merged["beaconFilterV2"] != nil {
+				if e = gw32Require(g, prefix+"BLE_FILTER_V2"); e != nil {
+					return e
+				}
+				if _, e = CompileScanProfileV2(merged, 1); e != nil {
+					return e
+				}
+			}
 			return gw32ScanShape(Obj(merged, "scan"))
 		}
 	}
@@ -612,7 +629,7 @@ func (a *App) validateGatewayConfiguration(ctx context.Context, tx *sql.Tx, g ma
 		}
 	}
 	if _, scan := c["scan"]; scan || c["filters"] != nil {
-		if len(List(Obj(Obj(before, "radios"), "nrf54"), "beaconRules")) > 0 {
+		if len(List(Obj(Obj(before, "radios"), "nrf54"), "beaconRules")) > 0 || Obj(Obj(before, "radios"), "nrf54")["beaconFilterV2"] != nil {
 			return Problem(409, "SCAN_PROFILE_REQUIRED", "active Beacon rules require a radio scan-profile update")
 		}
 		return gw32ScanShape(Obj(Obj(Obj(after, "radios"), "nrf54"), "scan"))

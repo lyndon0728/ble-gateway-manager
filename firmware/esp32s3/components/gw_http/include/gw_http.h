@@ -16,3 +16,10 @@ typedef esp_err_t (*gw_http_sink_fn)(const uint8_t *data, size_t n,
                                      void *context);
 esp_err_t gw_http_stream(const char *path, uint64_t deadline_ms, size_t limit,
                          gw_http_sink_fn sink, void *context, size_t *received);
+/* Dedicated unauthenticated transport for nonce-bound signed time ONLY.
+ * Sends no credentials. The response is untrusted until signature verification. */
+esp_err_t gw_http_time_challenge(const char *nonce, const char *boot_id,
+                                 uint64_t deadline_ms, cJSON **response);
+/* Pinned CA + full signed UTC interval verification, shared with MQTT TLS. */
+esp_err_t gw_http_tls_prepare(void);
+esp_err_t gw_http_tls_attach(void *ssl_configuration);

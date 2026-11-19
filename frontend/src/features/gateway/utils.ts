@@ -62,7 +62,7 @@ export function payload(text: string, encoding: string, max: number, min = 0, ad
   if (ad) for (let i=0;i<binary.length;) { const n=binary.charCodeAt(i); if (!n) { if ([...binary.slice(i)].some(c => c.charCodeAt(0)!==0)) throw new Error('AD 终止字节后不能包含非零数据'); break }; if (i+n+1>binary.length) throw new Error('AD Length 超出剩余载荷'); i+=n+1 }
   return btoa(binary)
 }
-export function hasCapability(gateway: Row | undefined, operation: string) { return !!gateway?.capabilities?.includes(operation) }
+export function hasCapability(gateway: Row | undefined, operation: string) { return !!(gateway?.availableCapabilities??gateway?.capabilities)?.includes(operation) }
 export function gattProtocol(gateway: Row | undefined): 'GW32'|'LEGACY'|'UNAVAILABLE' {
   if (!gateway) return 'UNAVAILABLE'
   const model=String(gateway.model||''), gw32=model==='GW32I33V2'||model.startsWith('GW32I33V2-')

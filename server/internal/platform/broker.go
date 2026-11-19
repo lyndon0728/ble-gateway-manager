@@ -50,6 +50,9 @@ func (a *App) prepareGatewayBroker() (func(context.Context), error) {
 	statusQueue := make(chan incoming, 32)
 	options := mqtt.NewClientOptions().AddBroker(a.Config.BrokerURL).SetClientID("manager-" + a.Config.InstanceID + "-" + a.Config.NodeID).SetUsername(a.Config.BrokerUser).SetPassword(a.Config.BrokerPassword).SetTLSConfig(tlsConfig).SetCleanSession(false).SetAutoReconnect(true).SetConnectRetry(false).SetOrderMatters(false).SetConnectTimeout(10 * time.Second).SetWriteTimeout(10 * time.Second).SetKeepAlive(30 * time.Second)
 	handler := func(_ mqtt.Client, m mqtt.Message) {
+		if m.Retained() && strings.HasSuffix(m.Topic(), "/peripheral-events") {
+			return
+		}
 		if len(m.Payload()) > 2<<20 {
 			return
 		}
@@ -70,7 +73,7 @@ func (a *App) prepareGatewayBroker() (func(context.Context), error) {
 	options.SetDefaultPublishHandler(handler)
 	options.SetOnConnectHandler(func(c mqtt.Client) {
 		topic := "gw/v1/" + a.Config.NamespaceID + "/+/"
-		subs := map[string]byte{topic + "telemetry": 1, topic + "command-results": 1, topic + "status": 1}
+		subs := map[string]byte{topic + "telemetry": 1, topic + "command-results": 1, topic + "status": 1, topic + "peripheral-events": 1}
 		token := c.SubscribeMultiple(subs, handler)
 		if !token.WaitTimeout(10*time.Second) || token.Error() != nil {
 			a.Logger.Error("gateway MQTT subscribe failed")
@@ -172,6 +175,9 @@ func (a *App) handleGatewayMessage(ctx context.Context, topic string, payload []
 	var e error
 	suffix := ""
 	switch parts[4] {
+	case "peripheral-events":
+		response, e = a.AcceptPeripheralBatch(ctx, gateway, m)
+		suffix = "peripheral-ack"
 	case "telemetry":
 		response, e = a.AcceptIngress(ctx, a.Config.NamespaceID, gateway, m)
 		suffix = "telemetry-ack"

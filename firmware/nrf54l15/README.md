@@ -1,6 +1,6 @@
 # GW32 nRF54L15 嵌入式软件
 
-这是 GW32 网关的 nRF54L15 蓝牙协处理器应用，当前版本 **0.2.0**，基于 **nRF Connect SDK v3.2.1 / Zephyr**。固件实现 ESP32-S3 ↔ nRF 的二进制 UART 协议；ESP 的 Wi-Fi、跨芯片去重、服务器连接和服务器规则引擎仍由 ESP/服务器负责。
+这是 GW32 网关的 nRF54L15 蓝牙协处理器应用，当前版本 **0.3.0**，基于 **nRF Connect SDK v3.2.1 / Zephyr**。固件实现 ESP32-S3 ↔ nRF 的二进制 UART 协议；ESP 的 Wi-Fi、跨芯片去重、服务器连接和服务器规则引擎仍由 ESP/服务器负责。
 
 SDK 版本是本次新工程选定的基线，原工程没有已有 SDK 锁定文件。本文提供构建入口；主机测试与真实 SDK 构建、实板验证分别记录，不能互相替代。当前开发机未安装完整 NCS 工作区及 ARM toolchain，因此尚未完成 NCS 目标编译，也未烧录或做实板射频验证；板级定义和关键 API 已对照固定版本的官方源码检查。
 
@@ -8,6 +8,7 @@ SDK 版本是本次新工程选定的基线，原工程没有已有 SDK 锁定�
 
 - COBS + CRC32C 流式解码、长度和会话校验、HELLO 能力协商、控制请求幂等重放。
 - Legacy 主动/被动扫描、RSSI/服务 UUID/厂商 ID/Beacon 掩码过滤；原始广播内容和元数据上报。
+- Beacon V2：名称、iBeacon UUID、RSSI、Major/Minor、服务 UUID 的组合掩码与首条规则匹配；REPORT 或显式 500 ms ADV/SCAN_RSP 配对；完整包装配置原子切换、回读与96字节过滤状态。
 - 数据 RAM 队列、批次重传、ESP `CUSTODY/BUSY/FAULT` ACK；跨无线电去重由 ESP 执行。
 - 服务器经 ESP 下发连接目标；nRF 执行单个 Central 连接、GATT 发现、按 UUID 查服务、读写、订阅和通知上报。
 - Legacy 非连接、可扫描非连接、可连接三种对外广播；服务器可配置启停、内容和间隔。只更新内容时在线写入，失败恢复旧内容；模式或间隔改变时重启广播。
@@ -15,17 +16,18 @@ SDK 版本是本次新工程选定的基线，原工程没有已有 SDK 锁定�
 - 可选 MCUboot 双槽 UART DFU：ESP 下载签名固件后分块交给 nRF，支持进度查询、重传、读回 SHA-256、试启动、运行镜像校验与确认、未确认复位回退。
 - RTT 日志、UART 驱动恢复、状态和丢弃计数。蓝牙 bond 使用 Zephyr settings/NVS；扫描目标配置由 ESP 重启后重新对账下发。
 
-当前不声明完整扩展广播接收或并行扫描/广播/连接组合。Central 与 Peripheral 共用一个连接资源；启动冲突角色返回 BUSY。HELLO bit10 为广播管理、bit11 为 Peripheral，bit12 仅在实际具备可用 MCUboot 双槽 DFU 时声明。首次配对不在当前协议中；Peripheral 的公开 INFO 和不透明 RX/TX 不自动执行配置命令，ESP 须在解释数据前完成应用身份认证和授权。含网络凭据的业务不能假设该公开 BLE 通道已加密。
+当前不声明完整扩展广播接收或并行扫描/广播/连接组合。Central 与 Peripheral 共用一个连接资源；启动冲突角色返回 BUSY。HELLO bit10 为广播管理、bit11 为 Peripheral、bit13 为完整 Beacon V2；均受实际射频初始化与板级门控约束。bit12 仅在实际具备可用 MCUboot 双槽 DFU 时声明。首次配对不在当前协议中；Peripheral 的公开 INFO 和不透明 RX/TX 不自动执行配置命令，由 ESP 的独立 [Peripheral 业务桥接](../esp32s3/components/gw_peripheral/README.md) 执行 Security2 认证、路由授权与持久收件。应用层认证不能替代 Bluetooth 链路配对状态。
 
 Zephyr 的扫描回调可能将已绑定设备的空中 RPA 替换为 identity address，且不会保留原始地址类型。为避免把 identity 冒充空中 MAC，本版本对匹配已保存 bond identity 的报告发送 `addr_type=0xFF`、全零地址，原始广播数据仍可上传。服务器不能按此地址自动连接；真实 identity 广播也会被保守地标为未知。关闭 `CONFIG_BT_PRIVACY` 无法关闭这条 Host IRK 解析路径。要让已绑定设备的 RPA 也参与原始地址去重/自动连接，需要后续接入原始 HCI 报告或扩展显式 identity 字段。
 
-三方共同基准为 [GW32-E2E-1.1 端到端统一标准](../../docs/gateway-end-to-end-standard.md)。协议来源：[UART 协议 1.1](../../server/docs/gateway-uart-protocol.md)、[ESP ↔ 服务器协议](../../server/docs/gateway-protocol.md)；UART 线上帧版本仍为 1，平台 Schema 保持 1.0/1.1。详细要求见 [nRF 专项需求](../../docs/nrf54l15-requirements.md) 与 [nRF 开发文档](../../docs/nrf54l15-development.md)，完整范围见 [需求与验收清单](../../docs/gateway-requirements.md) 和 [系统对接指南](../../docs/gateway-integration.md)。UUID 16/32/128 位的服务器规则解析与标准化由服务器完成，nRF 接收协议规定的标准形式及连接参数。
+三方共同基准为 [GW32-E2E-1.1 端到端统一标准](../../docs/gateway-end-to-end-standard.md)。协议来源：[UART 协议 1.2](../../server/docs/gateway-uart-protocol.md)、[ESP ↔ 服务器协议](../../server/docs/gateway-protocol.md)；UART 线上帧版本仍为 1，平台 Schema 保持 1.0/1.1。详细要求见 [nRF 专项需求](../../docs/nrf54l15-requirements.md) 与 [nRF 开发文档](../../docs/nrf54l15-development.md)，完整范围见 [需求与验收清单](../../docs/gateway-requirements.md) 和 [系统对接指南](../../docs/gateway-integration.md)。UUID 16/32/128 位的服务器规则解析与标准化由服务器完成，nRF 接收协议规定的标准形式及连接参数。
 
 ## 文件结构
 
 | 文件 | 作用 |
 | --- | --- |
-| `src/gw_core.c` | 与 RTOS 无关的帧、过滤、队列与批次逻辑 |
+| `src/gw_core.c` | 与 RTOS 无关的帧、旧过滤、队列与批次逻辑 |
+| `src/gw_filter_v2.c/h` | nRF/ESP 共用的完整V2包装编解码、字段掩码、REPORT/PAIR及计数 |
 | `src/gw_app.c` | UART EasyDMA、会话、命令分发、ACK 与主循环 |
 | `src/gw_radio.c` | 扫描、过滤上报、广播与资源状态 |
 | `src/gw_gatt.c` | 异步 Central/GATT 生命周期和通知 |
@@ -34,6 +36,10 @@ Zephyr 的扫描回调可能将已绑定设备的空中 RPA 替换为 identity a
 | `tools/adv_payload.py`、`tools/uart_probe.py` | 广播内容生成、联调命令和 ESP 升级传输参考 |
 | `boards/gw32/gw32_nrf54l15` | Oct29 GW32 独立板级定义 |
 | `tests` | 可执行的主机协议测试、模拟 Zephyr 回调的 GATT 测试 |
+
+V2 命令为 `0x19 SET_SCAN_PROFILE_V2`、`0x1A GET_SCAN_PROFILE_V2`、`0x1B GET_SCAN_FILTER_STATUS`。扫描目标最多3070字节，同 revision 必须与完整原配置逐字节相同才幂等；旧引擎最大2755字节仍可在2763字节包装中完整承载。V2 活跃时旧0x01/0x05/0x06返回 CONFLICT，退回旧引擎使用0x19 engine=0。
+
+PAIR缓存最多32条；回调输入队列与待配缓存合计3586字节，编译期断言不超过4096字节。回调在同锁下分配时间并复制，poll先消费已发布报告再推进时间水位，恰500 ms可配、501 ms过期。配置/连接暂停/DFU清旧上下文并计数，不丢失完整配置目标。host 已运行字段掩码、96字节状态、最大长度、原子切换/回滚/暂停和5000个变异输入的UBSan检查；NCS目标及实板证据边界见 [贯通实现记录](../../docs/gateway-alignment-implementation.md)。
 
 ## UART 与板级基线
 
@@ -128,9 +134,9 @@ python tools/uart_probe.py --port COM8 dfu confirm D:\release\zephyr.signed.bin 
 .\scripts\Test-Host.ps1 -Compiler D:\tools\zig\zig.exe
 ```
 
-`test_core` 检查帧、过滤和 FIFO；`test_gatt` 检查 Central 生命周期；`test_radio` 检查扫描/广播、热更新恢复、快速连接断开及 DFU 维护准入；`test_app` 检查 UART 会话与可靠传输；`test_peripheral` 检查手机连接、订阅、写入背压及回复去重；`test_dfu` 检查升级状态机、运行镜像校验和确认。后五组使用精简 Zephyr/蓝牙/串口/Flash 替身，不验证控制器射频、真实 ATT 时序、DMA 并发、镜像数字签名或 SDK ABI。
+`test_core` 检查帧、旧过滤和 FIFO；`test_filter_v2`检查V2字段/长度/配对向量；`test_gatt` 检查 Central 生命周期；`test_radio` 检查扫描/广播、V2原子命令、输入队列水位、回滚与DFU暂停恢复；`test_app` 检查 UART 会话、可靠传输及V2维护查询；`test_peripheral` 检查手机连接、订阅、写入背压及回复去重；`test_dfu` 检查升级状态机、运行镜像校验和确认。后五组使用精简 Zephyr/蓝牙/串口/Flash 替身，不验证控制器射频、真实 ATT 时序、DMA 并发、镜像数字签名或 SDK ABI。
 
-2026-11-18 已通过 `Test-Host.ps1` 使用 Zig 0.14.1 的 C 编译器执行以上六组测试，编译参数为 `-std=c11 -Wall -Wextra -Werror`。其中 Central 为 7 组、Peripheral 为 8 组生命周期场景，UART 应用为 6 组传输场景。Python 工具测试运行 `python -m unittest discover -s tests -p 'test_*.py' -v`。当前仍未完成 SDK 目标编译、MCUboot 真实签名启动、掉电回退和实板联调。
+2026-11-19 已通过 `Test-Host.ps1` 使用 Zig 0.14.1 的 C 编译器执行以上七个测试程序，编译参数为 `-std=c11 -Wall -Wextra -Werror`。其中 Central 为7组、Peripheral为8组生命周期场景，UART应用为7组传输场景；V2另以UBSan执行5000个畸形/变异解码输入。Python 工具测试运行 `python -m unittest discover -s tests -p 'test_*.py' -v`。当前仍未完成 NCS 目标编译、MCUboot 真实签名启动、掉电回退和实板联调。
 
 串口探针需安装 Python `pyserial`，在本目录运行：
 

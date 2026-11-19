@@ -3,10 +3,10 @@
 | 项目 | 约定 |
 | --- | --- |
 | 规范 | BFLT-2.0；文档 1.0，2026-11-19；共同基线 GW32-E2E-1.1 |
-| 交付状态 | **开发设计已冻结，尚未实现/上线**；本轮只更新 Markdown，不改变当前 JSON Schema 或固件 |
+| 交付状态 | **三端源码、Schema和预览已实现**；ESP/nRF 0.3.0；软件验证与实板放行见[交付记录](gateway-alignment-implementation.md) |
 | 对象 | 平台配置与预览、ESP32-S3 本机过滤及 UART 适配、nRF54L15 过滤引擎 |
 | 保留项 | 原 `filters`、`beaconRules`、原始 AD 上报、独立 radio、双路去重、广播/GATT/配网/OTA 功能及原需求编号 |
-| 权威映射 | [统一标准](gateway-end-to-end-standard.md)、[开发闭合方案](gateway-alignment-development-plan.md)、[UART 规划扩展](../server/docs/gateway-uart-protocol.md)、[平台协议](../server/docs/gateway-protocol.md) |
+| 权威映射 | [统一标准](gateway-end-to-end-standard.md)、[开发闭合方案](gateway-alignment-development-plan.md)、[UART扩展](../server/docs/gateway-uart-protocol.md)、[平台协议](../server/docs/gateway-protocol.md) |
 
 ## 1. 当前能力和为什么需要 V2
 
@@ -43,7 +43,7 @@
 
 ## 3. 平台配置合同
 
-以下字段是待同步 Schema/OpenAPI/源码的**规划扩展**。当前平台会拒绝未知 `beaconFilterV2`，不能直接向现网发送示例。任务信封仍沿用既有 CONFIGURE 和 revision，不把所有消息的 schemaVersion 改成 2。
+以下字段已同步 Schema/OpenAPI/源码；必须先部署兼容服务器及0.3.0固件，并通过目标能力门控，旧部署继续拒绝未知 `beaconFilterV2`。任务信封仍沿用既有 CONFIGURE 和 revision，不把所有消息的 schemaVersion 改成 2。
 
 新增 `radios.nrf54.beaconFilterV2` 与 `radios.esp32.beaconFilterV2`，值为 `null` 或完整对象。对象/规则数组整体替换，不对子规则做不明确的合并。
 
@@ -75,7 +75,7 @@
 - 旧 → V2：若旧规则非空，同一补丁显式包含 `beaconRules:[]` 和新 V2 对象。
 - V2 → 旧：同一补丁显式包含 `beaconFilterV2:null` 和目标 `beaconRules`；两项同属一个 radio 的扫描组。
 - 合并后的配置不得同时有非空旧规则和非null V2。平台、ESP 都检查最终对象，不能先停用后另发任务启用。
-- 平台规划新能力字符串 `BLE_FILTER_V2`，按目标 radio 授权；nRF HELLO 规划 bit13；ESP 本机驱动独立能力。cap13意味着完整实现本规范 REPORT/PAIR及读回/计数，不是仅支持一个字段。
+- 平台能力字符串为 `NRF54_BLE_FILTER_V2` / `ESP32_BLE_FILTER_V2`，按目标 radio 授权；nRF HELLO为 bit13；ESP 本机驱动独立能力。cap13意味着完整实现本规范 REPORT/PAIR及读回/计数，不是仅支持一个字段。
 - 无能力的设备继续使用旧配置；V2请求明确拒绝，不生成会改变语义的近似旧规则。新版平台仍接受旧协议，旧平台只能下发旧配置。
 
 ## 4. 字段解析与掩码
@@ -136,7 +136,7 @@ V2对AD边界严格校验；零长度终止后的填充只能为0。格式畸形
 
 ## 6. UART 与 ESP 内部表示
 
-规划使用能力bit13、`0x19 SET_SCAN_PROFILE_V2`、`0x1A GET_SCAN_PROFILE_V2`、`0x1B GET_SCAN_FILTER_STATUS`；线上frame仍1，COBS/CRC32C及3072字节payload上限不变。精确偏移和枚举以[UART规划扩展](../server/docs/gateway-uart-protocol.md)为准。
+使用能力bit13、`0x19 SET_SCAN_PROFILE_V2`、`0x1A GET_SCAN_PROFILE_V2`、`0x1B GET_SCAN_FILTER_STATUS`；线上frame仍1，COBS/CRC32C及3072字节payload上限不变。精确偏移和枚举以[UART扩展](../server/docs/gateway-uart-protocol.md)为准。
 
 完整body按顺序为：`format_version:u8=2, engine:u8, legacy_len:u16, legacy_profile[legacy_len], scope:u8, pair_window_ms:u16, rule_count_v2:u8, rules_v2[]`。旧ScanProfile完整嵌套，使新旧切换仍能原子设置基础过滤与旧规则。engine=0为LEGACY且scope/window/count为0；engine=1为V2且旧rule_count=0、新rule_count为1～8。
 
@@ -148,7 +148,7 @@ V2活动时旧SET_SCAN_CONFIG/SET_SCAN_PROFILE和GET_SCAN_PROFILE返回CONFLICT�
 
 Central/GATT、广播互斥、网络维护及双组件OTA中的暂停/恢复路径也必须识别当前过滤引擎，保存并恢复完整wrapper；不能为临时停扫调用旧SET而清掉V2。Central/DFU已有控制器内部暂停及ESP本机暂停路径须保留目标revision和完整引擎；其他确需变更目标的停扫走正式CONFIGURE事务及完整V2编码，不假设已有通用UART暂停命令，也不得凭空给无云任务的暂停分配平台revision。恢复后清旧PAIR上下文，重新采样，不复用维护前名称。固件降级到不支持V2的版本前须完成受授权的旧目标迁移；无法无损转换时明确阻止，不自动弱化条件。
 
-0x1B规划96字节状态：当前revision/u64、engine/u8、scope/u8、pending_count/u16、pending_bytes/u32；随后10个u64依序为 records_seen、records_passed、rule_dropped、pair_timeout、pair_ambiguous、pair_overflow、malformed_ad、unknown_rssi、unsupported_context、config_discarded。
+0x1B提供96字节状态：当前revision/u64、engine/u8、scope/u8、pending_count/u16、pending_bytes/u32；随后10个u64依序为 records_seen、records_passed、rule_dropped、pair_timeout、pair_ambiguous、pair_overflow、malformed_ad、unknown_rssi、unsupported_context、config_discarded。
 
 pending_bytes仅累计待判原始AD字节，不含头、索引与实现元数据；4096B是另一个实际总内存预算，不能拿pending_bytes代替内存占用。engine=0沿用旧匹配行为，不启用V2的严格畸形AD/未知值处理；新状态查询不能改变旧过滤语义。
 
@@ -195,7 +195,7 @@ pending_bytes仅累计待判原始AD字节，不含头、索引与实现元数�
 
 ## 8. 跨端一致性向量与验收
 
-以下向量由平台预览器、ESP本机引擎和nRF共享C过滤器使用同一输入。此次只校核设计示例，不能记为尚未实现的V2运行测试通过。
+以下向量由平台预览器、ESP本机引擎和nRF共享C过滤器使用同一输入。0.3.0已增加生产C引擎、配置编译器和平台预览测试；空口行为仍需实板验收。
 
 | 用例 | 输入/变化 | 必须结果 |
 | --- | --- | --- |

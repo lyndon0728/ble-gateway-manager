@@ -26,6 +26,9 @@ static const char *success =
     "HTTP/1.1 200 OK\r\nContent-Length: 7\r\n\r\n{\"x\":1}";
 uint64_t gw_core_mono_ms(void) { return now; }
 bool gw_core_time_trusted(void) { return true; }
+esp_err_t gw_http_tls_prepare(void) { return ESP_OK; }
+esp_err_t gw_http_tls_attach(void *configuration) { (void)configuration; return ESP_OK; }
+esp_err_t gw_http_tls_interval(esp_tls_t *tls) { (void)tls; return ESP_OK; }
 void vTaskDelay(TickType_t ticks) { now += ticks; }
 uint32_t esp_random(void) { return 123; }
 esp_netif_t *gw_core_uplink_netif(const char *name) {

@@ -50,6 +50,29 @@ int xTaskCreate(void (*f)(void *), const char *n, unsigned s, void *p,
 }
 void vTaskDelay(TickType_t t) { (void)t; }
 bool gw_core_time_trusted(void) { return true; }
+bool gw_core_time_bounds(uint64_t *lower,uint64_t *upper) {
+  if(lower)*lower=(uint64_t)time(NULL)*1000;
+  if(upper)*upper=(uint64_t)time(NULL)*1000;
+  return true;
+}
+uint64_t gw_core_time_deadline(uint64_t expires) {
+  uint64_t now=(uint64_t)time(NULL)*1000;
+  return 1000+(expires>now?expires-now:0);
+}
+esp_err_t gw_signed_time_refresh(const char *boot) { (void)boot; return ESP_OK; }
+esp_err_t gw_transport_init(const char *ns,const char *gw) { (void)ns;(void)gw;return ESP_OK; }
+void gw_transport_service(void) {}
+void gw_capture_esp_boot(uint8_t boot[16]) {memset(boot,1,16);}
+void gw_cloud_sync(const char *ns,const char *gw,const char *boot){(void)ns;(void)gw;(void)boot;}
+esp_err_t gw_cloud_recovery_check(const cJSON *c,const char *ns,const char *gw,uint64_t d){(void)c;(void)ns;(void)gw;(void)d;return ESP_OK;}
+esp_err_t gw_peripheral_init(void){return ESP_OK;}
+esp_err_t gw_peripheral_service(const char *ns,const char *gw,const char *i,uint64_t d){(void)ns;(void)gw;(void)i;(void)d;return ESP_OK;}
+esp_err_t gw_peripheral_execute(const cJSON *c,uint64_t d,cJSON **out){(void)c;(void)d;*out=NULL;return ESP_ERR_NOT_SUPPORTED;}
+esp_err_t gw_peripheral_recover(const cJSON *c,uint64_t d,cJSON **out){(void)c;(void)d;*out=NULL;return ESP_ERR_TIMEOUT;}
+esp_err_t gw_transport_json(const char *path,const char *method,const cJSON *body,
+ const char *interface,uint64_t deadline,cJSON **out) {
+ return gw_http_json(path,method,body,interface,deadline,out);
+}
 uint64_t gw_core_mono_ms(void) { return 1000; }
 esp_err_t gw_store_put_json(const char *key, const cJSON *v) {
   if (fail_store)
