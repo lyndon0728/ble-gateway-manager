@@ -41,7 +41,7 @@ def main():
         flags = [f"-I{component / 'tests/mocks'}", f"-I{json_dir}", f"-I{mbedtls / 'include'}",
                  "-DCONFIG_GW_REQUIRE_FLASH_ENCRYPTION=1", '-DMBEDTLS_CONFIG_FILE="test_mbedtls_config.h"']
         crypto = [mbedtls / "library" / f"{name}.c" for name in ("sha256", "base64", "platform_util", "platform", "constant_time")]
-        subprocess.run([*cc, *common, *flags, str(component / "tests/test_capture.c"), *map(str, sources), str(json_dir / "cJSON.c"), *map(str, crypto), "-o", str(capture_exe)], check=True)
+        subprocess.run([*cc, *common, *flags, str(component / "tests/test_capture.c"), *map(str, sources), str(json_dir / "cJSON.c"), *map(str, crypto), "-lm", "-o", str(capture_exe)], check=True)
         generated = out / "events.json"
         subprocess.run([str(capture_exe), str(generated)], check=True, timeout=120)
         schema = json.loads((repo / "server/internal/platform/assets/message-contracts.schema.json").read_text(encoding="utf-8"))

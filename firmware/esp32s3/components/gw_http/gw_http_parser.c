@@ -261,7 +261,7 @@ int gw_http_read_response(gw_http_read_fn read, void *reader_context,
     return GW_HTTP_BAD_RESPONSE;
   reader_t *r = calloc(1, sizeof(*r));
   if (!r)
-    return GW_HTTP_TOO_LARGE;
+    return GW_HTTP_NO_MEMORY;
   r->read = read;
   r->context = reader_context;
   int result = parse(r, consume, consumer_context, limit);

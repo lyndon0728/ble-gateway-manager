@@ -9,7 +9,8 @@ enum {
   READ_WAIT,
   CONNECT_WAIT,
   WRITE_WAIT,
-  REDIRECT
+  REDIRECT,
+  TCP_WAIT
 };
 static unsigned mode, read_calls, write_calls, connect_calls, destroy_calls,
     sink_calls;
@@ -130,10 +131,19 @@ int esp_tls_conn_new_async(const char *host, int length, int port,
          !strcmp((const char *)cfg->cacert_buf, "TEST_TRUSTED_CA") &&
          cfg->cacert_bytes == 16);
   assert(cfg->if_name && !strcmp(cfg->if_name->ifr_name, interface_name) &&
-         cfg->timeout_ms > 0 && cfg->timeout_ms <= 10);
+         cfg->timeout_ms > 0 && cfg->timeout_ms <= 10000);
   connect_calls++;
+  if (mode == TCP_WAIT) {
+    now += (unsigned)cfg->timeout_ms;
+    return 0;
+  }
   now++;
   return mode == CONNECT_WAIT ? 0 : 1;
+}
+int esp_tls_get_conn_state(esp_tls_t *tls, esp_tls_conn_state_t *state) {
+  assert(tls->alive);
+  *state = mode == TCP_WAIT ? ESP_TLS_CONNECTING : ESP_TLS_HANDSHAKE;
+  return ESP_OK;
 }
 ssize_t esp_tls_conn_write(esp_tls_t *tls, const void *bytes, size_t n) {
   assert(tls->alive);
@@ -249,6 +259,11 @@ int main(void) {
   assert(gw_http_stream("/api/v1/file", 200, 100, receive, NULL, &received) ==
              ESP_FAIL &&
          destroy_calls == 1 && connect_calls == 1 && sink_calls == 0);
+  reset(TCP_WAIT);
+  assert(gw_http_stream("/api/v1/file", 20000, 100, receive, NULL, &received) ==
+         ESP_ERR_TIMEOUT);
+  assert(now == 10000 && connect_calls == 1 && destroy_calls == 1 &&
+         read_calls == 0);
   puts("http adapter: same-owner TLS lifetime, SNI/Host/CA/netif, continuous "
        "chunk deadline, length/sink abort, read/write/connect deadline, "
        "redirect rejection passed");

@@ -235,9 +235,9 @@ static esp_err_t tls_write(connection_t *c, const void *buffer, size_t n) {
 static esp_err_t perform(const char *path, const char *method,
                          const cJSON *body, const char *interface,
                          response_t *result) {
-  if (!path || path[0] != '/' || strstr(path, "..") || strchr(path, '\r') ||
-      strchr(path, '\n') || strlen(path) > 1024 || !budget(result->deadline) ||
-      !gw_core_time_trusted())
+  if (!method || !path || path[0] != '/' || strstr(path, "..") ||
+      strchr(path, '\r') || strchr(path, '\n') || strlen(path) > 1024 ||
+      !budget(result->deadline) || !gw_core_time_trusted())
     return ESP_ERR_INVALID_STATE;
   if (strcmp(method, "GET") && strcmp(method, "POST") && strcmp(method, "PUT"))
     return ESP_ERR_INVALID_ARG;
@@ -313,7 +313,7 @@ static esp_err_t perform(const char *path, const char *method,
                        .common_name = host,
                        .skip_common_name = false,
                        .non_block = true,
-                       .timeout_ms = 10,
+                       .timeout_ms = budget(result->deadline),
                        .if_name = &iface};
   connection_t connection = {.tls = esp_tls_init(),
                              .deadline = result->deadline};
@@ -327,7 +327,7 @@ static esp_err_t perform(const char *path, const char *method,
       e = ESP_ERR_TIMEOUT;
       break;
     }
-    cfg.timeout_ms = left < 10 ? left : 10;
+    cfg.timeout_ms = left;
     int connected = esp_tls_conn_new_async(ip, (int)strlen(ip), atoi(port),
                                            &cfg, connection.tls);
     if (!budget(result->deadline)) {
@@ -340,6 +340,18 @@ static esp_err_t perform(const char *path, const char *method,
     }
     if (connected < 0) {
       e = ESP_FAIL;
+      break;
+    }
+    /* SDK 5.5.6 retains select's emptied fd_set after a TCP timeout.
+     * CONNECTING + 0 is an exhausted TCP wait, not a resumable handshake.
+     * budget() bounds this wait by the deadline and by 10 seconds. */
+    esp_tls_conn_state_t state;
+    if (esp_tls_get_conn_state(connection.tls, &state) != ESP_OK) {
+      e = ESP_FAIL;
+      break;
+    }
+    if (state == ESP_TLS_CONNECTING) {
+      e = ESP_ERR_TIMEOUT;
       break;
     }
     vTaskDelay(1);
@@ -370,6 +382,7 @@ static esp_err_t perform(const char *path, const char *method,
       e = parsed == GW_HTTP_BAD_RESPONSE ? ESP_ERR_INVALID_RESPONSE
           : parsed == GW_HTTP_TOO_LARGE  ? ESP_ERR_INVALID_SIZE
           : parsed == GW_HTTP_BAD_STATUS ? ESP_FAIL
+          : parsed == GW_HTTP_NO_MEMORY  ? ESP_ERR_NO_MEM
                                          : parsed;
     }
   }

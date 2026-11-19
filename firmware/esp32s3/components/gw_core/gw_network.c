@@ -486,10 +486,13 @@ esp_err_t gw_network_scan(bool active, uint64_t deadline, cJSON **result) {
   }
   uint16_t count = 32;
   wifi_ap_record_t *records = calloc(count, sizeof(*records));
-  if (!records)
+  if (!records) {
+    (void)esp_wifi_clear_ap_list();
     return ESP_ERR_NO_MEM;
+  }
   e = esp_wifi_scan_get_ap_records(&count, records);
   if (e != ESP_OK) {
+    (void)esp_wifi_clear_ap_list();
     free(records);
     return e;
   }

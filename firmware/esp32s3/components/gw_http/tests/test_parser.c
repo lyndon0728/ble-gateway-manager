@@ -53,8 +53,8 @@ int main(void) {
     assert(f.used == 5 && !memcmp(f.output, "hello", 5));
   }
   const char *bad[] = {
-      "HTTP/1.1 200 OK\r\nContent-Length: 4\r\nTransfer-Encoding: "
-      "chunked\r\n\r\n",
+      ("HTTP/1.1 200 OK\r\nContent-Length: 4\r\nTransfer-Encoding: "
+       "chunked\r\n\r\n"),
       "HTTP/1.1 200 OK\r\nContent-Length: 4\r\nContent-Length: 4\r\n\r\n",
       "HTTP/1.1 200 OK\r\nContent-Length: -1\r\n\r\n",
       "HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip, chunked\r\n\r\n",
@@ -85,12 +85,24 @@ int main(void) {
          f.read_calls == 8 && f.sink_calls == 0);
   f = (fixture_t){.fragment = 3};
   assert(run(&f, "HTTP/1.0 200 OK\r\n\r\nhello", 10) == 0 && f.used == 5);
-  char *large = malloc(10000);
+  char *large = calloc(1, 10000);
   strcpy(large, "HTTP/1.1 200 OK\r\nLong: ");
   memset(large + strlen(large), 'x', 2000);
   large[2023] = 0;
   f = (fixture_t){.fragment = 32};
   assert(run(&f, large, 10) == GW_HTTP_TOO_LARGE);
+  strcpy(large, "HTTP/1.1 200 OK\r\n");
+  for (unsigned i = 0; i < 700; i++)
+    strcat(large, "X: 123456789\r\n");
+  strcat(large, "\r\n");
+  f = (fixture_t){.fragment = 32};
+  assert(run(&f, large, 10) == GW_HTTP_TOO_LARGE && f.sink_calls == 0);
+  f = (fixture_t){.fragment = 256};
+  assert(run(&f,
+             "HTTP/1.1 200 OK\r\nTransfer-Encoding: "
+             "chunked\r\n\r\n3\r\nabc\r\n3\r\ndef\r\n0\r\n\r\n",
+             5) == GW_HTTP_TOO_LARGE &&
+         f.used == 3 && f.sink_calls == 1);
   free(large);
   puts("http parser: fragmented framing, strict lengths, chunked trailers, "
        "bounded headers, early EOF, redirects, sink/read stop passed");

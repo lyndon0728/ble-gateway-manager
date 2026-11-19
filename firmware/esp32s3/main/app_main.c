@@ -13,28 +13,37 @@
 
 static const char *TAG = "gw_boot";
 
+static void rollback_unconfirmed_image(void) {
+  esp_ota_img_states_t image_state;
+  if (esp_ota_get_state_partition(esp_ota_get_running_partition(),
+                                  &image_state) == ESP_OK &&
+      image_state == ESP_OTA_IMG_PENDING_VERIFY)
+    (void)esp_ota_mark_app_invalid_rollback_and_reboot();
+}
+
 void app_main(void) {
   esp_err_t err = gw_core_init();
   if (err != ESP_OK) {
     ESP_LOGE(TAG,
              "Core/storage provisioning unavailable (%s); no automatic erase",
              esp_err_to_name(err));
-    esp_ota_img_states_t image_state;
-    if (esp_ota_get_state_partition(esp_ota_get_running_partition(),
-                                    &image_state) == ESP_OK &&
-        image_state == ESP_OTA_IMG_PENDING_VERIFY)
-      (void)esp_ota_mark_app_invalid_rollback_and_reboot();
+    rollback_unconfirmed_image();
     return;
   }
   err = gw_capture_init();
   if (err == ESP_OK)
     err = gw_nrf_init(gw_capture_nrf, NULL);
-  if (err != ESP_OK)
+  if (err != ESP_OK) {
     ESP_LOGE(TAG, "BLE custody unavailable (%s)", esp_err_to_name(err));
-  err = gw_actions_init();
-  if (err != ESP_OK)
-    ESP_LOGE(TAG, "Radio/action recovery unavailable (%s)",
-             esp_err_to_name(err));
+    rollback_unconfirmed_image();
+  } else {
+    err = gw_actions_init();
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "Radio/action recovery unavailable (%s)",
+               esp_err_to_name(err));
+      rollback_unconfirmed_image();
+    }
+  }
   err = gw_provision_init();
   if (err != ESP_OK)
     ESP_LOGE(TAG, "Local provisioning unavailable (%s)", esp_err_to_name(err));

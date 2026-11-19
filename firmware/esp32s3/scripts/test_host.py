@@ -29,6 +29,9 @@ with tempfile.TemporaryDirectory(prefix="gw-host-") as temp:
 
     core = components / "gw_core"
     build_run("rules", [core / "tests/test_rules.c", core / "gw_rules.c"], [core])
+    build_run("core-state", [core / "tests/test_state.c", core / "gw_rules.c", cjson / "cJSON.c"],
+              [core / "include", core / "tests/state_stubs",
+               components / "gw_actions/tests/gatt_stubs", cjson])
     provision = components / "gw_provision"
     build_run("guard", [provision / "tests/guard_test.c", provision / "gw_provision_guard.c"], [provision])
     cloud = components / "gw_cloud"

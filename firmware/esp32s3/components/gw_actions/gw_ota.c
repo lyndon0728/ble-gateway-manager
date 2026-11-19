@@ -185,13 +185,19 @@ static esp_err_t manifest(const cJSON *command, uint64_t deadline, cJSON **out) 
         e = ESP_ERR_INVALID_RESPONSE;
         goto done;
     }
-    char keys[8192];
-    if (gw_factory_get_string("artifact_keys", keys, sizeof(keys)) != ESP_OK) {
+    char *keys = malloc(8192);
+    if (!keys) {
+        e = ESP_ERR_NO_MEM;
+        goto done;
+    }
+    if (gw_factory_get_string("artifact_keys", keys, 8192) != ESP_OK) {
+        free(keys);
         e = ESP_ERR_INVALID_STATE;
         goto done;
     }
     cJSON *trusted = cJSON_Parse(keys);
-    memset(keys, 0, sizeof(keys));
+    memset(keys, 0, 8192);
+    free(keys);
     const char *encoded = gw_action_string(trusted, gw_action_string(m, "keyId"));
     uint8_t public_key[32], sig[64];
     size_t pn = 0, sn = 0;
@@ -783,7 +789,7 @@ esp_err_t gw_ota_recover(const cJSON *command_json, uint64_t deadline, cJSON **d
             !gw_action_hex(gw_action_string(j, "confirmedBoot"), boot, 16))
             goto done;
         *details = result(j, !strcmp(gw_action_string(j, "component"), "NRF54") ? boot : NULL);
-        e = ESP_OK;
+        e = *details ? ESP_OK : ESP_ERR_NO_MEM;
         goto done;
     }
     if (!strcmp(gw_action_string(j, "phase"), "FAILED") ||

@@ -613,7 +613,9 @@ static void worker(void *unused) {
     const cJSON *network = cJSON_GetObjectItemCaseSensitive(job, "network");
     uint64_t deadline = 0;
     field_u64(job, "deadlineMonoMs", &deadline);
-    esp_err_t err = gw_network_apply(network);
+    esp_err_t err = gw_core_mono_ms() >= deadline || cancel_requested
+                        ? ESP_ERR_TIMEOUT
+                        : gw_network_apply(network);
     const cJSON *order =
         cJSON_GetObjectItemCaseSensitive(network, "uplinkOrder");
     for (const cJSON *iface = order ? order->child : NULL;
@@ -647,7 +649,9 @@ static void worker(void *unused) {
       err = cb ? cb(&p, ctx) : ESP_ERR_NOT_SUPPORTED;
     }
     xSemaphoreTake(core_lock, portMAX_DELAY);
-    if (err == ESP_OK && !cancel_requested && gw_core_mono_ms() < deadline)
+    if (err == ESP_OK && (cancel_requested || gw_core_mono_ms() >= deadline))
+      err = ESP_ERR_TIMEOUT;
+    if (err == ESP_OK)
       err = commit(false);
     if (err != ESP_OK || cancel_requested) {
       finish_failed(!gw_core_time_trusted() ? "TIME_UNTRUSTED"

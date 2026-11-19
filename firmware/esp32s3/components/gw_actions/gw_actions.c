@@ -12,6 +12,7 @@
 #include <string.h>
 
 static SemaphoreHandle_t action_lock;
+static bool actions_ready, ota_ready, gatt_ready;
 const char *gw_action_string(const cJSON *o, const char *key) {
     const cJSON *v = cJSON_GetObjectItemCaseSensitive(o, key);
     return cJSON_IsString(v) ? v->valuestring : "";
@@ -272,7 +273,7 @@ static esp_err_t journal_finish(const char *key, cJSON *j, esp_err_t result, con
 }
 esp_err_t gw_actions_configure(const cJSON *patch, const cJSON *complete, uint64_t revision,
                                uint64_t deadline, cJSON **details) {
-    if (!action_lock || !details || !revision || deadline <= gw_core_mono_ms())
+    if (!actions_ready || !details || !revision || deadline <= gw_core_mono_ms())
         return ESP_ERR_INVALID_ARG;
     *details = NULL;
     if (xSemaphoreTake(action_lock, 0) != pdTRUE)
@@ -472,7 +473,7 @@ done:
     return e;
 }
 esp_err_t gw_actions_execute(const cJSON *command, uint64_t deadline, cJSON **details) {
-    if (!action_lock || !details || !cJSON_IsObject(command) || deadline <= gw_core_mono_ms())
+    if (!actions_ready || !details || !cJSON_IsObject(command) || deadline <= gw_core_mono_ms())
         return ESP_ERR_INVALID_ARG;
     *details = NULL;
     if (xSemaphoreTake(action_lock, 0) != pdTRUE)
@@ -573,6 +574,10 @@ esp_err_t gw_actions_recover(const cJSON *command, uint64_t deadline, cJSON **de
         e = cJSON_IsNumber(r) ? r->valueint : ESP_ERR_TIMEOUT;
         *details = cJSON_Duplicate(cJSON_GetObjectItemCaseSensitive(j, "details"), true);
     } else if (!strcmp(gw_action_string(command, "type"), "FIRMWARE_UPGRADE")) {
+        if (!ota_ready) {
+            e = ESP_ERR_NOT_FINISHED;
+            goto done;
+        }
         e = gw_ota_recover(command, deadline, details);
         if (e != ESP_ERR_NOT_FINISHED) {
             e = journal_finish("actions/current", j, e, *details, NULL);
@@ -582,6 +587,8 @@ esp_err_t gw_actions_recover(const cJSON *command, uint64_t deadline, cJSON **de
                strcmp(gw_action_string(cJSON_GetObjectItemCaseSensitive(command, "parameters"),
                                        "radio"),
                       "ESP32")) {
+        if (!gatt_ready)
+            goto done;
         e = gw_gatt_nrf_recover(command, deadline, details);
         if (e != ESP_ERR_TIMEOUT && e != ESP_ERR_NOT_FINISHED) {
             gw_core_maintenance_release(gw_action_string(command, "taskId"));
@@ -671,9 +678,11 @@ esp_err_t gw_actions_init(void) {
     esp_err_t e = gw_ota_init();
     if (e != ESP_OK)
         return e;
+    ota_ready = true;
     e = gw_gatt_nrf_init();
     if (e != ESP_OK)
         return e;
+    gatt_ready = true;
     e = gw_ble_init();
     if (e != ESP_OK)
         return e;
@@ -691,7 +700,6 @@ esp_err_t gw_actions_init(void) {
                 gw_core_maintenance_acquire(key);
             cJSON_Delete(current);
         }
-    return xTaskCreate(restore_radios, "radio_restore", 8192, NULL, 3, NULL) == pdPASS
-               ? ESP_OK
-               : ESP_ERR_NO_MEM;
+    actions_ready = xTaskCreate(restore_radios, "radio_restore", 8192, NULL, 3, NULL) == pdPASS;
+    return actions_ready ? ESP_OK : ESP_ERR_NO_MEM;
 }

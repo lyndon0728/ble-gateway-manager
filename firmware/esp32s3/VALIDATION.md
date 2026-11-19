@@ -12,11 +12,13 @@
 | 浏览器流程 | 最终离线bundle、独立Node模拟设备、Chrome手机/桌面视口 | 通过；不是Android/iOS实机或Safari验证 |
 | 配网C输入守卫 | 实际生产C函数的UTF-8、长度、深度和NUL边界 | 主机测试通过 |
 | 核心规则与记录 | `Test-Core.ps1`、Zig 0.14.1 | 无损整数、UTF-8、IPv4、快照/指针截断、损坏及世代绑定通过 |
+| 本地/远程网络状态机 | `Test-Core-State.ps1`，生产core/validate/rules与网络/存储替身 | LOCAL_ONLY重启不延长试用、迟到时间证据、原事务快照绑定、probe回调不持锁、最终平台ACK重启及幂等通过 |
 | 云任务状态机 | `Test-Cloud.ps1`、Zig 0.14.1、cJSON 1.7.19 | 持久受理、ACK丢失后推进、命令重放/摘要冲突、写入失败、到期、模糊执行UNKNOWN、回退probe隔离通过 |
 | nRF GATT执行器 | 生产`gw_gatt_nrf.c`配合UART/Flash/时钟替身 | 意图先持久、op_seq、防模糊重写、UUID/MAC校验、READBACK同连接、临时断开、旧观测拒绝及结果原子发布通过 |
 | 采集与Flash spool | 生产持久层/适配器、真实cJSON/MbedTLS、分区与HTTP替身 | 69个断电注入点、重放/水位、满盘/损坏、双源配对、逐项ACK/隔离、inbox与稳定事件通过；动态upload批量/刷新、200条拆包及7份生产JSON通过平台Schema |
 | OTA签名验证 | 未修改Monocypher 4.0.3生产代码；独立Python/OpenSSL与RFC8032 | 145项互通、改字节、错误签名/公钥、非规范签名拒绝通过；不是实板bootloader验签 |
 | 动作与OTA状态机 | 生产actions/OTA模块，设备I/O和时钟替身 | 意图写入屏障、配置原子成功/只读恢复、冲突/UNKNOWN、ESP试启动与到期回退、nRF分块与确认应答丢失恢复通过 |
+| HTTPS期限与响应解析 | 生产TLS适配器及HTTP解析器，非阻塞TLS/时钟替身 | 连续chunk流、连接/写/读WANT期限、超长/冲突响应、sink失败与连接释放通过；真实TLS证书、DNS绑定仍需实网验证 |
 
 跨模块入口：`python scripts/test_host.py --cc <C11编译器或zig> --idf <ESP-IDF v5.5.6源码>`，从固件目录执行，Python需cryptography和jsonschema。GitHub工作流另执行Linux GCC主机测试及Node Security2向量。主机测试直接编译相应生产逻辑，替换设备I/O；不能替代目标运行。
 

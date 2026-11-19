@@ -6,7 +6,8 @@
 enum {
   GW_HTTP_BAD_RESPONSE = -10001,
   GW_HTTP_TOO_LARGE = -10002,
-  GW_HTTP_BAD_STATUS = -10003
+  GW_HTTP_BAD_STATUS = -10003,
+  GW_HTTP_NO_MEMORY = -10004
 };
 typedef int (*gw_http_read_fn)(void *, uint8_t *, size_t, size_t *);
 typedef int (*gw_http_consume_fn)(void *, const uint8_t *, size_t);

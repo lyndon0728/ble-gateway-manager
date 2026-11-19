@@ -9,6 +9,14 @@
 typedef struct {
   bool alive;
 } esp_tls_t;
+typedef enum {
+  ESP_TLS_INIT,
+  ESP_TLS_CONNECTING,
+  ESP_TLS_HANDSHAKE,
+  ESP_TLS_FAIL,
+  ESP_TLS_DONE
+} esp_tls_conn_state_t;
+int esp_tls_get_conn_state(esp_tls_t *, esp_tls_conn_state_t *);
 typedef struct {
   const unsigned char *cacert_buf;
   unsigned cacert_bytes;
