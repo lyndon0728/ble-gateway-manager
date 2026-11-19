@@ -61,7 +61,10 @@ int xSemaphoreTake(SemaphoreHandle_t h, uint64_t ticks) {
     now = advance_on_request;
     advance_on_request = 0;
   }
-  if(h==request_lock&&drop_optional_on_request){subscribed=7;drop_optional_on_request=false;}
+  if (h == request_lock && drop_optional_on_request) {
+    subscribed = 7;
+    drop_optional_on_request = false;
+  }
   return 1;
 }
 void xSemaphoreGive(SemaphoreHandle_t h) {
@@ -187,7 +190,7 @@ static void reset(const char *choice) {
   trusted = true;
   http_calls = publishes = stops = starts = reconnects = subscription_calls = 0;
   advance_on_request = 0;
-  drop_optional_on_request=false;
+  drop_optional_on_request = false;
   fail_enqueue = false;
   fail_malloc = -1;
   memset(scheduled, 0, sizeof(scheduled));
@@ -370,15 +373,34 @@ static void test_subscription_and_json_rejection(void) {
   assert(cJSON_GetArraySize(commands) == 1 && !out);
 }
 static void test_optional_channel(void) {
-  reset("MQTT");gw_transport_service();dispatch(MQTT_EVENT_CONNECTED,0);
-  for(unsigned i=0;i<3;i++)dispatch(MQTT_EVENT_SUBSCRIBED,subscriptions[i]);assert(ready);
-  cJSON *b=batch(),*out=NULL;
-  assert(gw_transport_json("/api/v1/gateway-peripheral/batches","POST",b,NULL,now+100,&out)==ESP_ERR_INVALID_STATE&&!publishes);
-  dispatch(MQTT_EVENT_SUBSCRIBED,subscriptions[3]);drop_optional_on_request=true;
-  assert(gw_transport_json("/api/v1/gateway-peripheral/batches","POST",b,NULL,now+100,&out)!=ESP_OK&&!publishes);
-  cJSON_Delete(b);reset("AUTO");gw_transport_service();dispatch(MQTT_EVENT_CONNECTED,0);
-  for(unsigned i=0;i<3;i++)dispatch(MQTT_EVENT_SUBSCRIBED,subscriptions[i]);assert(ready);b=batch();
-  assert(gw_transport_json("/api/v1/gateway-peripheral/batches","POST",b,NULL,now+100,&out)==ESP_OK&&http_calls==1&&!publishes);cJSON_Delete(out);cJSON_Delete(b);
+  reset("MQTT");
+  gw_transport_service();
+  dispatch(MQTT_EVENT_CONNECTED, 0);
+  for (unsigned i = 0; i < 3; i++)
+    dispatch(MQTT_EVENT_SUBSCRIBED, subscriptions[i]);
+  assert(ready);
+  cJSON *b = batch(), *out = NULL;
+  assert(gw_transport_json("/api/v1/gateway-peripheral/batches", "POST", b,
+                           NULL, now + 100, &out) == ESP_ERR_INVALID_STATE &&
+         !publishes);
+  dispatch(MQTT_EVENT_SUBSCRIBED, subscriptions[3]);
+  drop_optional_on_request = true;
+  assert(gw_transport_json("/api/v1/gateway-peripheral/batches", "POST", b,
+                           NULL, now + 100, &out) != ESP_OK &&
+         !publishes);
+  cJSON_Delete(b);
+  reset("AUTO");
+  gw_transport_service();
+  dispatch(MQTT_EVENT_CONNECTED, 0);
+  for (unsigned i = 0; i < 3; i++)
+    dispatch(MQTT_EVENT_SUBSCRIBED, subscriptions[i]);
+  assert(ready);
+  b = batch();
+  assert(gw_transport_json("/api/v1/gateway-peripheral/batches", "POST", b,
+                           NULL, now + 100, &out) == ESP_OK &&
+         http_calls == 1 && !publishes);
+  cJSON_Delete(out);
+  cJSON_Delete(b);
 }
 int main(void) {
   test_application_ack();
