@@ -386,6 +386,10 @@ static esp_err_t perform(const char *path, const char *method,
                                          : parsed;
     }
   }
+  /* A final sink (for example a Flash write) can cross the deadline after the
+   * last TLS read; completion must also pass the absolute deadline check. */
+  if (e == ESP_OK && !budget(result->deadline))
+    e = ESP_ERR_TIMEOUT;
   if (raw) {
     wipe(raw, strlen(raw));
     free(raw);

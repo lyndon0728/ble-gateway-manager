@@ -22,11 +22,30 @@
 
 跨模块入口：`python scripts/test_host.py --cc <C11编译器或zig> --idf <ESP-IDF v5.5.6源码>`，从固件目录执行，Python需cryptography和jsonschema。GitHub工作流另执行Linux GCC主机测试及Node Security2向量。主机测试直接编译相应生产逻辑，替换设备I/O；不能替代目标运行。
 
-## 目标构建与待完成记录
+## 目标构建与CI证据
 
-ESP-IDF已选择v5.5.6，SDK实际源码提交为`880a203ae603d08a94d06aa01e0d6761958e5e9e`。首次获取SDK遇到Git默认TLS连接空响应；切换Git OpenSSL/HTTP1.1或原生Python的正常证书验证后可下载。没有通过跳过证书验证解决网络问题。
+实际执行了ESP32-S3目标编译、完整链接、镜像生成和分区容量检查。SDK为ESP-IDF v5.5.6，源码提交`880a203ae603d08a94d06aa01e0d6761958e5e9e`，Xtensa工具链为`esp-14.2.0_20260121`；CH390 0.4.1依赖锁已提交。
 
-目标编译、捕获/动作最终测试及本次GitHub CI结果将在实际完成后更新本节。在结果更新前，不能仅凭CI配置或源码存在宣布目标构建通过。
+| 证据 | 结果 |
+| --- | --- |
+| [Linux固件CI，868a932](https://github.com/lyndon0728/ble-gateway-manager/actions/runs/44463523783) | 目标构建和主机job全部通过；生成bin/elf/map/sdkconfig/分区表及日志，包含生产核心状态、云任务、动作/OTA、GATT、捕获、HTTP和Security2测试 |
+| [平台Server CI，5300b79](https://github.com/lyndon0728/ble-gateway-manager/actions/runs/44462214515) | Ubuntu、Windows和容器job全部通过，包含Go全套测试、构建、协议模拟联调及浏览器实API测试 |
+
+目标CI使用官方`espressif/idf:v5.5.6`镜像，固定manifest摘要`sha256:bf72fe7a15c22849a9a94147301165a545fb8905d97c176cf748e3e4614cac84`。完整日志和编译产物在对应GitHub运行的Artifacts中保留14天；源码、依赖锁、分区和构建脚本长期保存在仓库。持续运行状态可查[固件工作流](https://github.com/lyndon0728/ble-gateway-manager/actions/workflows/esp32s3-firmware.yml)。
+
+Windows本地也完成实际目标构建。因Xtensa工具的非ASCII对象路径限制，构建使用独立ASCII源码副本，逐文件核对源文件后编译；`Build.ps1`已包含该流程。NVS使用显式制造密钥与加密分区初始化，工程排除默认自动密钥生成provider，未通过设置任意eFuse块或关闭加密绕过构建错误。
+
+最后一次本地构建还包含“最后一块sink写入结束后再检查截止时间”的修复，相关主机测试和完整目标链接均通过。核对144个源文件/头/资源/构建配置与仓库逐字节相同后，结果如下；此摘要专属于该次Windows产物，不能拿它替代其他构建的摘要。
+
+| 本地最终产物指标 | 实测结果 |
+| --- | --- |
+| 应用镜像 | 1,283,728字节，`0x139690` |
+| 最小OTA应用分区 | `0x280000`，剩余`0x146970`，约51% |
+| 静态D/IRAM | 180,447 / 341,760字节，52.8%；不是运行期堆峰值 |
+| Bootloader镜像 | 20,544字节 |
+| 应用bin SHA-256 | `1e1e0dd79c8788e3cfbf130979879231daee2fc50f20c10962bfbce5ad7aa137` |
+
+验证日志未包含烧录操作。上述镜像不携带设备生产凭据，也未据此宣告可直接替代制造签名/安全配置流程。
 
 ## 实板边界
 

@@ -10,7 +10,8 @@ enum {
   CONNECT_WAIT,
   WRITE_WAIT,
   REDIRECT,
-  TCP_WAIT
+  TCP_WAIT,
+  SLOW_SINK
 };
 static unsigned mode, read_calls, write_calls, connect_calls, destroy_calls,
     sink_calls;
@@ -204,6 +205,8 @@ static esp_err_t receive(const uint8_t *data, size_t n, void *ctx) {
   (void)n;
   (void)ctx;
   sink_calls++;
+  if (mode == SLOW_SINK)
+    now += 300;
   return mode == SINK_FAIL ? ESP_FAIL : ESP_OK;
 }
 static void reset(unsigned next) {
@@ -264,6 +267,10 @@ int main(void) {
          ESP_ERR_TIMEOUT);
   assert(now == 10000 && connect_calls == 1 && destroy_calls == 1 &&
          read_calls == 0);
+  reset(SLOW_SINK);
+  assert(gw_http_stream("/api/v1/file", 200, 100, receive, NULL, &received) ==
+         ESP_ERR_TIMEOUT);
+  assert(sink_calls == 1 && destroy_calls == 1);
   puts("http adapter: same-owner TLS lifetime, SNI/Host/CA/netif, continuous "
        "chunk deadline, length/sink abort, read/write/connect deadline, "
        "redirect rejection passed");
