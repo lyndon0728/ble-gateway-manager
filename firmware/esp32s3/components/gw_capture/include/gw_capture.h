@@ -13,6 +13,12 @@ uint8_t gw_capture_nrf(const uint8_t boot[16], const struct gw_frame *,
 size_t gw_capture_used_bytes(void);
 esp_err_t gw_capture_upload(const char *namespace_id, const char *gateway_id,
                             uint64_t deadline_ms);
+/* Complete object: batchMaxRecords 1..1000, flushIntervalMs 100..60000.
+ * Validation has no side effects; configure persists before changing runtime.
+ */
+bool gw_capture_upload_valid(const cJSON *complete_upload);
+esp_err_t gw_capture_configure_upload(const cJSON *complete_upload);
+cJSON *gw_capture_upload_configuration(void); /* caller owns result */
 /* Same complete 24-byte BLE record header as UART, capture_ms in ESP monotonic
  * milliseconds. Call on a worker, never the controller callback. */
 esp_err_t gw_capture_esp(const uint8_t *record, size_t length);

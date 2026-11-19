@@ -24,11 +24,12 @@ include_dirs = [tests / "action_stubs", component.parent / "gw_nrf" / "include",
                 component / "include", component.parent / "gw_wire" / "include", vendor, cjson]
 base = [args.compiler, *args.compiler_arg, "-std=c11", "-Wall", "-Wextra", "-Werror"]
 base += ["-I" + str(path) for path in include_dirs]
+libraries = ["-lm"] if sys.platform != "win32" else []
 for name in ("actions", "ota"):
     binary = out / (name + (".exe" if sys.platform == "win32" else ""))
     source = [tests / f"test_{name}.c", repo / "firmware" / "nrf54l15" / "src" / "gw_core.c", cjson / "cJSON.c", *crypto]
-    subprocess.run([*base, *map(str, source), "-o", str(binary)], check=True)
+    subprocess.run([*base, *map(str, source), *libraries, "-o", str(binary)], check=True)
     subprocess.run([str(binary)], check=True)
 binary = out / ("verify-ed25519.exe" if sys.platform == "win32" else "verify-ed25519")
-subprocess.run([*base, str(tests / "verify_ed25519.c"), *map(str, crypto), "-o", str(binary)], check=True)
+subprocess.run([*base, str(tests / "verify_ed25519.c"), *map(str, crypto), *libraries, "-o", str(binary)], check=True)
 subprocess.run([sys.executable, str(tests / "test_ed25519.py"), str(binary)], check=True)

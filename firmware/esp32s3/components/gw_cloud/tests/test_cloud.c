@@ -8,7 +8,7 @@ static struct tm *gmtime_r(const time_t *t, struct tm *out) {
 #include "../gw_cloud.c"
 #include <assert.h>
 
-static cJSON *disk;
+static cJSON *disk, *config_disk, *configured_target;
 static bool fail_http, fail_store;
 static unsigned actions, requests, resets;
 static esp_err_t action_result = ESP_OK, recovery_result = ESP_ERR_TIMEOUT;
@@ -53,10 +53,17 @@ esp_err_t gw_store_put_json(const char *key, const cJSON *v) {
     cJSON_Delete(disk);
     disk = cJSON_Duplicate(v, true);
   }
+  if (!strcmp(key, "cloud/configuration")) {
+    cJSON_Delete(config_disk);
+    config_disk = cJSON_Duplicate(v, true);
+  }
   return ESP_OK;
 }
 cJSON *gw_store_get_json(const char *key) {
-  return !strcmp(key, JOURNAL_KEY) ? cJSON_Duplicate(disk, true) : NULL;
+  return !strcmp(key, JOURNAL_KEY) ? cJSON_Duplicate(disk, true)
+         : !strcmp(key, "cloud/configuration")
+             ? cJSON_Duplicate(config_disk, true)
+             : NULL;
 }
 esp_err_t gw_factory_get_string(const char *key, char *out, size_t n) {
   snprintf(out, n, "%s", !strcmp(key, "namespace") ? "ns_test" : "gw_test");
@@ -124,11 +131,20 @@ esp_err_t gw_actions_execute(const cJSON *c, uint64_t d, cJSON **o) {
 esp_err_t gw_actions_configure(const cJSON *p, const cJSON *c, uint64_t r,
                                uint64_t d, cJSON **o) {
   (void)p;
-  (void)c;
+  cJSON_Delete(configured_target);
+  configured_target = cJSON_Duplicate(c, true);
   (void)r;
   (void)d;
   *o = NULL;
-  return ESP_OK;
+  return gw_store_put_json("cloud/configuration", c);
+}
+esp_err_t gw_actions_recover_config(const cJSON *p, const cJSON *c, uint64_t r,
+                                    cJSON **o) {
+  (void)p;
+  (void)c;
+  (void)r;
+  *o = NULL;
+  return recovery_result;
 }
 esp_err_t gw_actions_recover(const cJSON *c, uint64_t d, cJSON **o) {
   (void)c;
@@ -259,6 +275,26 @@ int main(void) {
   service_journal();
   assert(!strcmp(str(find_record("ota-trial"), "state"), "SUCCEEDED"));
   cJSON_Delete(c);
+  c = new_command("legacy-config");
+  text(c, "type", "CONFIGURE");
+  put(c, "parameters",
+      cJSON_Parse("{\"desiredRevision\":1,\"configuration\":{\"scan\":{"
+                  "\"enabled\":true},\"upload\":{\"flushIntervalMs\":500}}}"));
+  command(c);
+  service_journal();
+  assert(!strcmp(str(find_record("legacy-config"), "state"), "SUCCEEDED"));
+  cJSON *radio = cJSON_GetObjectItemCaseSensitive(
+      cJSON_GetObjectItemCaseSensitive(configured_target, "radios"), "nrf54");
+  assert(cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(
+      cJSON_GetObjectItemCaseSensitive(radio, "scan"), "enabled")));
+  assert(num(cJSON_GetObjectItemCaseSensitive(radio, "scan"), "intervalMs") ==
+         100);
+  assert(!cJSON_GetObjectItemCaseSensitive(configured_target, "scan"));
+  assert(num(cJSON_GetObjectItemCaseSensitive(configured_target, "upload"),
+             "batchMaxRecords") == 64);
+  assert(num(cJSON_GetObjectItemCaseSensitive(configured_target, "upload"),
+             "flushIntervalMs") == 500);
+  cJSON_Delete(c);
   assert(parse_utc("2024-02-29T00:00:00Z") > 0 &&
          parse_utc("2025-02-29T00:00:00Z") == -1 &&
          parse_utc("2026-11-19T01:00:00+01:00") ==
@@ -266,6 +302,8 @@ int main(void) {
   cJSON_Delete(journal);
   journal = NULL;
   cJSON_Delete(disk);
+  cJSON_Delete(config_disk);
+  cJSON_Delete(configured_target);
   puts("cloud: admission, ACK retry, exactly-once intent, expiry, conflict, "
        "probe quarantine passed");
   return 0;

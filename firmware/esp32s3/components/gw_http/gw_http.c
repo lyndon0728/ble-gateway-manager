@@ -1,16 +1,24 @@
 #include "gw_http.h"
-#include "esp_http_client.h"
 #include "esp_netif.h"
 #include "esp_random.h"
+#include "esp_tls.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "gw_core.h"
+#include "gw_http_parser.h"
 #include "lwip/inet.h"
 #include "lwip/netdb.h"
 #include "lwip/sockets.h"
+#include "sdkconfig.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
+
+#if !CONFIG_ESP_NETIF_SET_DNS_PER_DEFAULT_NETIF
+#error "Gateway candidate probes require per-interface DNS configuration"
+#endif
 
 #define JSON_LIMIT (128U * 1024U)
 typedef struct {
@@ -21,6 +29,15 @@ typedef struct {
   void *context;
   esp_err_t failure;
 } response_t;
+typedef struct {
+  esp_tls_t *tls;
+  uint64_t deadline;
+} connection_t;
+static void wipe(void *buffer, size_t n) {
+  volatile unsigned char *p = buffer;
+  while (n--)
+    *p++ = 0;
+}
 static int budget(uint64_t deadline) {
   uint64_t now = gw_core_mono_ms();
   if (deadline <= now)
@@ -134,49 +151,85 @@ done:
   close(fd);
   return e;
 }
-static esp_err_t http_event(esp_http_client_event_t *ev) {
-  response_t *r = ev->user_data;
-  if (!r)
-    return ESP_OK;
+static int consume(void *context, const uint8_t *bytes, size_t length) {
+  response_t *r = context;
   if (r->failure != ESP_OK)
     return r->failure;
   if (!budget(r->deadline)) {
     r->failure = ESP_ERR_TIMEOUT;
     return r->failure;
   }
-  if (ev->event_id != HTTP_EVENT_ON_DATA || ev->data_len <= 0)
-    return ESP_OK;
-  int status = esp_http_client_get_status_code(ev->client);
-  if (status < 200 || status >= 300) {
-    r->failure = ESP_FAIL;
-    return ESP_FAIL;
-  }
-  if ((size_t)ev->data_len > r->limit - r->length) {
+  if (length > r->limit - r->length) {
     r->failure = ESP_ERR_INVALID_SIZE;
     return r->failure;
   }
   if (r->sink) {
-    r->failure = r->sink(ev->data, ev->data_len, r->context);
+    r->failure = r->sink(bytes, length, r->context);
     if (r->failure)
       return r->failure;
   } else {
-    size_t need = r->length + (size_t)ev->data_len + 1;
+    size_t need = r->length + length + 1;
     if (need > r->capacity) {
       size_t cap = need + 1024;
       if (cap > r->limit + 1)
         cap = r->limit + 1;
-      char *b = realloc(r->bytes, cap);
+      /* Avoid realloc leaving an old plaintext credential copy in the heap. */
+      char *b = malloc(cap);
       if (!b) {
         r->failure = ESP_ERR_NO_MEM;
         return r->failure;
       }
+      if (r->bytes) {
+        memcpy(b, r->bytes, r->length);
+        wipe(r->bytes, r->capacity);
+        free(r->bytes);
+      }
       r->bytes = b;
       r->capacity = cap;
     }
-    memcpy(r->bytes + r->length, ev->data, ev->data_len);
-    r->bytes[r->length + ev->data_len] = 0;
+    memcpy(r->bytes + r->length, bytes, length);
+    r->bytes[r->length + length] = 0;
   }
-  r->length += ev->data_len;
+  r->length += length;
+  return ESP_OK;
+}
+static int tls_read(void *context, uint8_t *bytes, size_t capacity,
+                    size_t *received) {
+  connection_t *c = context;
+  *received = 0;
+  while (budget(c->deadline)) {
+    ssize_t n = esp_tls_conn_read(c->tls, bytes, capacity);
+    if (!budget(c->deadline))
+      return ESP_ERR_TIMEOUT;
+    if (n >= 0) {
+      *received = (size_t)n;
+      return ESP_OK;
+    }
+    if (n != ESP_TLS_ERR_SSL_WANT_READ && n != ESP_TLS_ERR_SSL_WANT_WRITE)
+      return ESP_FAIL;
+    vTaskDelay(1);
+  }
+  return ESP_ERR_TIMEOUT;
+}
+static esp_err_t tls_write(connection_t *c, const void *buffer, size_t n) {
+  const uint8_t *bytes = buffer;
+  while (n) {
+    if (!budget(c->deadline))
+      return ESP_ERR_TIMEOUT;
+    size_t take = n > 2048 ? 2048 : n;
+    ssize_t written = esp_tls_conn_write(c->tls, bytes, take);
+    if (!budget(c->deadline))
+      return ESP_ERR_TIMEOUT;
+    if (written > 0) {
+      bytes += written;
+      n -= (size_t)written;
+      continue;
+    }
+    if (written != ESP_TLS_ERR_SSL_WANT_READ &&
+        written != ESP_TLS_ERR_SSL_WANT_WRITE)
+      return ESP_FAIL;
+    vTaskDelay(1);
+  }
   return ESP_OK;
 }
 static esp_err_t perform(const char *path, const char *method,
@@ -186,8 +239,12 @@ static esp_err_t perform(const char *path, const char *method,
       strchr(path, '\n') || strlen(path) > 1024 || !budget(result->deadline) ||
       !gw_core_time_trusted())
     return ESP_ERR_INVALID_STATE;
-  char base[512], host[256], port[8] = "443", token[512], url[1600],
-                             host_header[280];
+  if (strcmp(method, "GET") && strcmp(method, "POST") && strcmp(method, "PUT"))
+    return ESP_ERR_INVALID_ARG;
+  for (const char *p = path; *p; p++)
+    if ((unsigned char)*p <= 32 || (unsigned char)*p >= 127)
+      return ESP_ERR_INVALID_ARG;
+  char base[512], host[256], port[8] = "443", token[512] = {0};
   char *ca = calloc(1, 8192);
   if (!ca)
     return ESP_ERR_NO_MEM;
@@ -251,59 +308,84 @@ static esp_err_t perform(const char *path, const char *method,
     goto done;
   char ip[INET_ADDRSTRLEN];
   inet_ntop(AF_INET, &address, ip, sizeof(ip));
-  snprintf(url, sizeof(url), "https://%s:%s%s", ip, port, path);
-  snprintf(host_header, sizeof(host_header), "%s:%s", host, port);
-  esp_http_client_config_t cfg = {.url = url,
-                                  .cert_pem = ca,
-                                  .common_name = host,
-                                  .skip_cert_common_name_check = false,
-                                  .disable_auto_redirect = true,
-                                  .timeout_ms = budget(result->deadline),
-                                  .max_authorization_retries = -1,
-                                  .if_name = &iface,
-                                  .event_handler = http_event,
-                                  .user_data = result,
-                                  .buffer_size = 2048,
-                                  .buffer_size_tx = 2048};
-  esp_http_client_handle_t h = esp_http_client_init(&cfg);
-  if (!h) {
+  esp_tls_cfg_t cfg = {.cacert_buf = (const unsigned char *)ca,
+                       .cacert_bytes = strlen(ca) + 1,
+                       .common_name = host,
+                       .skip_common_name = false,
+                       .non_block = true,
+                       .timeout_ms = 10,
+                       .if_name = &iface};
+  connection_t connection = {.tls = esp_tls_init(),
+                             .deadline = result->deadline};
+  if (!connection.tls) {
     e = ESP_ERR_NO_MEM;
     goto done;
   }
-  char bearer[520];
-  snprintf(bearer, sizeof(bearer), "Bearer %s", token);
-  esp_http_client_set_header(h, "Authorization", bearer);
-  esp_http_client_set_header(h, "Host", host_header);
-  esp_http_client_set_header(h, "Accept", "application/json");
-  esp_http_client_set_header(h, "Cache-Control", "no-store");
-  esp_http_client_set_method(h, !strcmp(method, "POST")  ? HTTP_METHOD_POST
-                                : !strcmp(method, "PUT") ? HTTP_METHOD_PUT
-                                                         : HTTP_METHOD_GET);
+  for (;;) {
+    int left = budget(result->deadline);
+    if (!left) {
+      e = ESP_ERR_TIMEOUT;
+      break;
+    }
+    cfg.timeout_ms = left < 10 ? left : 10;
+    int connected = esp_tls_conn_new_async(ip, (int)strlen(ip), atoi(port),
+                                           &cfg, connection.tls);
+    if (!budget(result->deadline)) {
+      e = ESP_ERR_TIMEOUT;
+      break;
+    }
+    if (connected == 1) {
+      e = ESP_OK;
+      break;
+    }
+    if (connected < 0) {
+      e = ESP_FAIL;
+      break;
+    }
+    vTaskDelay(1);
+  }
   char *raw = body ? cJSON_PrintUnformatted(body) : NULL;
+  char *headers = malloc(4096);
   if (body && !raw) {
     e = ESP_ERR_NO_MEM;
-  } else {
-    if (raw) {
-      esp_http_client_set_header(h, "Content-Type", "application/json");
-      esp_http_client_set_post_field(h, raw, strlen(raw));
+  } else if (!headers)
+    e = ESP_ERR_NO_MEM;
+  else if (e == ESP_OK) {
+    int n = snprintf(
+        headers, 4096,
+        "%s %s HTTP/1.1\r\nHost: %s:%s\r\nAuthorization: Bearer %s\r\nAccept: "
+        "application/json\r\nAccept-Encoding: identity\r\nCache-Control: "
+        "no-store\r\nConnection: close\r\nContent-Type: "
+        "application/json\r\nContent-Length: %zu\r\n\r\n",
+        method, path, host, port, token, raw ? strlen(raw) : 0);
+    if (n < 0 || n >= 4096)
+      e = ESP_ERR_INVALID_SIZE;
+    else
+      e = tls_write(&connection, headers, (size_t)n);
+    if (e == ESP_OK && raw)
+      e = tls_write(&connection, raw, strlen(raw));
+    if (e == ESP_OK) {
+      int parsed = gw_http_read_response(tls_read, &connection, consume, result,
+                                         result->limit);
+      e = parsed == GW_HTTP_BAD_RESPONSE ? ESP_ERR_INVALID_RESPONSE
+          : parsed == GW_HTTP_TOO_LARGE  ? ESP_ERR_INVALID_SIZE
+          : parsed == GW_HTTP_BAD_STATUS ? ESP_FAIL
+                                         : parsed;
     }
-    e = esp_http_client_perform(h);
-    int status = esp_http_client_get_status_code(h);
-    if (e == ESP_OK && (status < 200 || status >= 300))
-      e = ESP_FAIL;
-    if (result->failure != ESP_OK)
-      e = result->failure;
-    if (!budget(result->deadline))
-      e = ESP_ERR_TIMEOUT;
   }
   if (raw) {
-    memset(raw, 0, strlen(raw));
+    wipe(raw, strlen(raw));
     free(raw);
   }
-  esp_http_client_cleanup(h);
-  memset(bearer, 0, sizeof(bearer));
+  if (headers) {
+    wipe(headers, 4096);
+    free(headers);
+  }
+  /* The same task owns connect/read/write/abort/destruction. No timer can
+   * race a client lifetime, and an error never resumes the transfer. */
+  esp_tls_conn_destroy(connection.tls);
 done:
-  memset(token, 0, sizeof(token));
+  wipe(token, sizeof(token));
   free(ca);
   return e;
 }
@@ -353,7 +435,7 @@ esp_err_t gw_http_json(const char *path, const char *method, const cJSON *body,
     }
   }
   if (r.bytes) {
-    memset(r.bytes, 0, r.capacity);
+    wipe(r.bytes, r.capacity);
     free(r.bytes);
   }
   return e;

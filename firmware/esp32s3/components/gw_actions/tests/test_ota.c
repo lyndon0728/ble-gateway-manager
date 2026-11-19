@@ -9,7 +9,7 @@ static uint64_t monotonic = 1000, dfu_session;
 static size_t written, dfu_offset, dfu_size;
 static uint8_t dfu_hash[32], dfu_state;
 static bool bad_stream, fail_store, untrusted, bad_signature, trial, trial_nrf, confirmed,
-    fail_confirm;
+    fail_confirm, busy_begin, lost_chunk_reply, fault_chunk;
 static unsigned restarts, boots, confirms, aborts, uart_chunks, begin_count;
 static char owner[129];
 static esp_partition_t slot0 = {.size = 4096, .label = "ota_0"},
@@ -210,6 +210,11 @@ esp_err_t gw_nrf_command(uint8_t opcode, const void *arg, size_t length, uint8_t
         *n = 71;
         return ESP_OK;
     case 0x30:
+        if (busy_begin) {
+            *result = GW_BUSY;
+            *n = 0;
+            return ESP_OK;
+        }
         assert(length == 44);
         dfu_session = gw_get_u64(a);
         dfu_size = gw_get_u32(a + 8);
@@ -221,6 +226,12 @@ esp_err_t gw_nrf_command(uint8_t opcode, const void *arg, size_t length, uint8_t
         assert(gw_get_u32(a + 8) == dfu_offset);
         dfu_offset += gw_get_u16(a + 12);
         uart_chunks++;
+        if (fault_chunk)
+            dfu_state = 3;
+        if (lost_chunk_reply) {
+            lost_chunk_reply = false;
+            return ESP_ERR_TIMEOUT;
+        }
         break;
     case 0x32:
         assert(dfu_offset == dfu_size);
@@ -358,7 +369,7 @@ static cJSON *setup(bool nrf) {
     memset(peer_boot, 1, 16);
     *owner = 0;
     bad_stream = fail_store = untrusted = bad_signature = trial = trial_nrf = confirmed =
-        fail_confirm = false;
+        fail_confirm = busy_begin = lost_chunk_reply = fault_chunk = false;
     restarts = boots = confirms = aborts = uart_chunks = begin_count = 0;
     dfu_state = 0;
     dfu_session = 0;
@@ -454,6 +465,22 @@ int main(void) {
     fail_confirm = false;
     assert(gw_ota_recover(c, 100000, &details) == ESP_OK && confirms == 1 && uart_chunks == before);
     cJSON_Delete(details);
+    cJSON_Delete(c);
+    c = setup(true);
+    busy_begin = true;
+    assert(gw_ota_execute(c, 100000, &details) == ESP_ERR_INVALID_STATE && uart_chunks == 0 &&
+           !*owner);
+    cJSON_Delete(c);
+    c = setup(true);
+    lost_chunk_reply = true;
+    assert(gw_ota_execute(c, 100000, &details) == ESP_OK && uart_chunks == 1 && confirms == 1);
+    cJSON_Delete(details);
+    cJSON_Delete(c);
+    c = setup(true);
+    fault_chunk = true;
+    assert(gw_ota_execute(c, 100000, &details) == ESP_ERR_NOT_FINISHED && uart_chunks == 1 &&
+           *owner);
+    assert(gw_ota_recover(c, 100000, &details) == ESP_FAIL && aborts == 1 && !*owner);
     cJSON_Delete(c);
     cJSON_Delete(database);
     cJSON_Delete(verification);

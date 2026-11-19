@@ -10,6 +10,7 @@
 #include "host/ble_hs.h"
 #include "host/ble_hs_id.h"
 #include "host/ble_uuid.h"
+#include "host/util/util.h"
 #include "mbedtls/base64.h"
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
@@ -77,7 +78,9 @@ static void complete(uint32_t token, int status) {
     if (signal)
         xSemaphoreGive(done);
 }
-static void *begin_operation(void) {
+static void *begin_operation(uint64_t deadline) {
+    if (gw_core_mono_ms() >= deadline)
+        return NULL;
     xSemaphoreTake(done, 0);
     portENTER_CRITICAL(&state_mux);
     if (operation == UINT32_MAX) {
@@ -134,6 +137,8 @@ static void adv_start_event(struct ble_npl_event *event) {
     complete(token, ble_gap_adv_start(own_type, NULL, BLE_HS_FOREVER, &p, gap, NULL));
 }
 static esp_err_t apply_advertising(uint64_t deadline) {
+    if (fault || gw_core_mono_ms() >= deadline)
+        return ESP_ERR_INVALID_STATE;
     int result = ble_gap_adv_stop();
     if (result && result != BLE_HS_EALREADY)
         return rc(result);
@@ -144,12 +149,14 @@ static esp_err_t apply_advertising(uint64_t deadline) {
     if ((result =
              ble_gap_adv_rsp_set_data(advertising.response, (int)advertising.response_length)) != 0)
         return rc(result);
-    void *token = begin_operation();
+    void *token = begin_operation(deadline);
     if (!token)
         return ESP_ERR_INVALID_STATE;
     ble_npl_event_init(&advertise_event, adv_start_event, token);
     ble_npl_eventq_put(nimble_port_get_dflt_eventq(), &advertise_event);
     esp_err_t e = wait_operation(0, deadline);
+    if (e == ESP_ERR_TIMEOUT)
+        fault = true;
     return e == ESP_OK && !ble_gap_adv_active() ? ESP_FAIL : e;
 }
 static esp_err_t apply_scan(void) {
@@ -308,7 +315,7 @@ static void report_worker(void *arg) {
 static esp_err_t await_ready(uint64_t deadline) {
     while (!ready && !fault && gw_core_mono_ms() < deadline)
         vTaskDelay(pdMS_TO_TICKS(10));
-    return ready && !fault ? ESP_OK : ESP_ERR_INVALID_STATE;
+    return ready && !fault && gw_core_mono_ms() < deadline ? ESP_OK : ESP_ERR_INVALID_STATE;
 }
 esp_err_t gw_ble_init(void) {
     gw_capture_esp_boot(boot);
@@ -353,7 +360,7 @@ esp_err_t gw_ble_configure(const cJSON *o, bool adv, uint64_t revision, uint64_t
     if (e != ESP_OK)
         return e;
     if (conn != BLE_HS_CONN_HANDLE_NONE || close_pending || paused)
-        return ESP_ERR_NOT_FINISHED;
+        return ESP_ERR_INVALID_STATE;
     if (adv) {
         const cJSON *a = cJSON_GetObjectItemCaseSensitive(o, "advertising");
         const char *mode = gw_action_string(a, "mode");
@@ -435,7 +442,7 @@ esp_err_t gw_ble_pause(uint64_t deadline) {
     if (!ready)
         return ESP_OK;
     if (conn != BLE_HS_CONN_HANDLE_NONE || close_pending)
-        return ESP_ERR_NOT_FINISHED;
+        return ESP_ERR_INVALID_STATE;
     paused = true;
     esp_err_t e = apply_scan();
     if (e == ESP_OK)
@@ -544,7 +551,7 @@ static int write_callback(uint16_t handle, const struct ble_gatt_error *error,
 static esp_err_t disconnect(uint64_t deadline) {
     if (conn == BLE_HS_CONN_HANDLE_NONE)
         return ESP_OK;
-    void *token = begin_operation();
+    void *token = begin_operation(deadline);
     if (!token)
         return ESP_ERR_INVALID_STATE;
     disconnect_wait = true;
@@ -566,7 +573,7 @@ static esp_err_t discover(const cJSON *params, uint64_t deadline, bool ccc) {
         !uuid128(gw_action_string(params, "characteristicUuid"), &target_uuid))
         return ESP_ERR_INVALID_ARG;
     matches = 0;
-    void *token = begin_operation();
+    void *token = begin_operation(deadline);
     if (!token)
         return ESP_ERR_INVALID_STATE;
     esp_err_t e =
@@ -576,7 +583,7 @@ static esp_err_t discover(const cJSON *params, uint64_t deadline, bool ccc) {
     matches = 0;
     value_handle = 0;
     char_end = service_end;
-    token = begin_operation();
+    token = begin_operation(deadline);
     if (!token)
         return ESP_ERR_INVALID_STATE;
     e = wait_operation(
@@ -587,7 +594,7 @@ static esp_err_t discover(const cJSON *params, uint64_t deadline, bool ccc) {
         return ESP_ERR_NOT_FOUND;
     matches = 0;
     ccc_handle = 0;
-    token = begin_operation();
+    token = begin_operation(deadline);
     if (!token)
         return ESP_ERR_INVALID_STATE;
     return wait_operation(
@@ -601,7 +608,8 @@ esp_err_t gw_ble_execute(const cJSON *command, uint64_t deadline, cJSON **detail
                 *timeout = cJSON_GetObjectItemCaseSensitive(params, "timeoutMs");
     const char *type = gw_action_string(command, "type"),
                *ref = gw_action_string(params, "connectionRef");
-    if (!cJSON_IsNumber(timeout) || timeout->valuedouble < 100 || timeout->valuedouble > 30000)
+    if (!cJSON_IsNumber(timeout) || timeout->valuedouble < 100 || timeout->valuedouble > 30000 ||
+        timeout->valuedouble != (uint32_t)timeout->valuedouble)
         return ESP_ERR_INVALID_ARG;
     uint64_t limit = gw_core_mono_ms() + (uint64_t)timeout->valuedouble;
     if (deadline > limit)
@@ -635,15 +643,15 @@ esp_err_t gw_ble_execute(const cJSON *command, uint64_t deadline, cJSON **detail
     } else {
         if (conn != BLE_HS_CONN_HANDLE_NONE || close_pending || paused ||
             next_conn_id == UINT32_MAX)
-            return ESP_ERR_NOT_FINISHED;
+            return ESP_ERR_INVALID_STATE;
         if (ble_gap_adv_active())
-            return ESP_ERR_NOT_FINISHED;
+            return ESP_ERR_INVALID_STATE;
         (void)ble_gap_disc_cancel();
         gw_capture_radio_enabled(1, false);
         ble_addr_t target = {.type = (uint8_t)!strcmp(address_type, "RANDOM")};
         for (unsigned i = 0; i < 6; i++)
             target.val[i] = address[5 - i];
-        void *token = begin_operation();
+        void *token = begin_operation(deadline);
         if (!token)
             return ESP_ERR_INVALID_STATE;
         e = wait_operation(ble_gap_connect(own_type, &target,
@@ -730,7 +738,7 @@ esp_err_t gw_ble_execute(const cJSON *command, uint64_t deadline, cJSON **detail
             goto cleanup;
         }
         read_length = 0;
-        void *token = begin_operation();
+        void *token = begin_operation(deadline);
         if (!token) {
             e = ESP_ERR_INVALID_STATE;
             goto cleanup;
@@ -754,7 +762,7 @@ esp_err_t gw_ble_execute(const cJSON *command, uint64_t deadline, cJSON **detail
             e = ESP_ERR_INVALID_ARG;
             goto cleanup;
         }
-        void *token = begin_operation();
+        void *token = begin_operation(deadline);
         if (!token) {
             e = ESP_ERR_INVALID_STATE;
             goto cleanup;
@@ -770,7 +778,7 @@ esp_err_t gw_ble_execute(const cJSON *command, uint64_t deadline, cJSON **detail
             cJSON_AddBoolToObject(*details, "attResponse", true);
             if (!strcmp(verify, "READBACK")) {
                 read_length = 0;
-                token = begin_operation();
+                token = begin_operation(deadline);
                 e = token ? wait_operation(
                                 ble_gattc_read_long(conn, value_handle, 0, read_callback, token),
                                 deadline)
@@ -794,7 +802,7 @@ esp_err_t gw_ble_execute(const cJSON *command, uint64_t deadline, cJSON **detail
         }
         uint8_t bytes[2];
         gw_put_u16(bytes, value);
-        void *token = begin_operation();
+        void *token = begin_operation(deadline);
         int started = token
                           ? ble_gattc_write_flat(conn, ccc_handle, bytes, 2, write_callback, token)
                           : BLE_HS_EINVAL;
@@ -830,5 +838,7 @@ cleanup:
             e = ESP_ERR_TIMEOUT;
     }
 done:
+    if (e == ESP_OK && gw_core_mono_ms() > deadline)
+        e = ESP_ERR_TIMEOUT;
     return e;
 }

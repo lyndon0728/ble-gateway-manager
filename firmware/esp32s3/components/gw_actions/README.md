@@ -14,12 +14,14 @@
 | --- | --- |
 | nRF 扫描/过滤 | 完整扫描配置经 `gw_nrf_scan()` 写入和读回；Beacon 规则在无线对象的 `beaconRules` 字段 |
 | nRF 广播 | 完整模式、开关、间隔、AD/ScanRsp 经 `gw_nrf_advertise()` 写入和读回 |
+| 上报聚合配置 | 1.0 upload-only 或 scan/filters/upload 组合；上传参数先校验，capture 原子持久保存后切换，upload-only 不触发无线操作 |
 | ESP 扫描 | NimBLE legacy 主动/被动扫描，禁用栈重复过滤，复用同一 ISO C UUID/厂商/Beacon 规则；ADV 与 SCAN_RSP 独立处理 |
 | ESP 广播 | `NONCONNECTABLE`、`SCANNABLE_NONCONNECTABLE`，完整 AD 边界检查，31 B 上限，100～10240 ms；异步事件启动规避 NimBLE 启停上下文限制 |
 | ESP GATT | 单 Central 连接；CONNECT/DISCONNECT、服务和特征发现、READ、WITH_RESPONSE WRITE、READBACK、SUBSCRIBE/UNSUBSCRIBE；临时读写在任务内关闭连接 |
 | nRF GATT | 独立 `gw_gatt_nrf.c`；持久 op_seq、异步结果查询、发现、连接身份、订阅和读回验证；按 capture 保存的原始证据复核自动连接 |
 | ESP OTA | 独立制品验签、非运行应用槽下载、文件摘要和 Flash 读回、目标版本核验、持久重启意图、IDF 试运行确认/回退 |
 | nRF OTA | 完整 Flash 缓存、UART BEGIN/CHUNK/FINISH、排空原始队列、REBOOT、新启动核验、运行镜像读回、CONFIRM 与 confirmed 状态回读 |
+| 网络诊断 | `NETWORK` 的 OFF/PASSIVE/ACTIVE，复用 core 的网络租约和有界异步扫描，返回最多 32 个标准 `accessPoints` |
 
 ESP 原生广播**不支持** `CONNECTABLE_SCANNABLE` / Peripheral 业务服务，返回不支持；这项能力不能登记为 ESP 已支持。nRF 可连接广播由其固件和能力位控制。
 
@@ -45,6 +47,8 @@ NimBLE 回调只复制数据到 32 项有界队列；独立工作任务调用 `g
 | `ota/active` | 制品身份、组件、版本、摘要、Flash 槽、传输 session、原/确认启动和阶段 |
 
 执行意图必须在第一次物理调用前成功落盘。相同任务和相同摘要回放原结果；内容冲突拒绝；未解决副作用不重放。`actions/current` 是执行日志，**不替代 cloud 的完整历史任务去重日志**；本 API 只能由 cloud 的历史任务闸门调用。不能绕过 cloud 直接重放更早已完成任务。
+
+配置成功时，当前配置 journal、最后成功无线目标与完整 `cloud/configuration` 在**同一个** `gw_store_transaction` 发布。云层不再另写完整配置。`gw_actions_recover_config(patch, complete, revision, &details)` 只读匹配修订、原 patch、完整目标及已提交 cloud 快照的 DONE 证据；它不会再次下发物理配置。这样可以恢复设备已完成配置、云端结果尚未发布的掉电窗口。没有 DONE 证据的配置仍返回 UNKNOWN，需要对账。
 
 正常启动恢复最后成功的无线目标；检测 nRF 新启动后重新应用其已提交扫描/广播目标。恢复使用原修订号，不生成虚假的新 revision。维护、旧动作 UNKNOWN 或配置 UNKNOWN 占用期间不恢复普通无线目标。未知结果需要对账，不能通过清理 journal 绕过。
 

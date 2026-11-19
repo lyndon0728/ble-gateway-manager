@@ -104,9 +104,40 @@ static bool member(const cJSON *j, const char *key, const char *value, bool requ
         return false;
     if (!cJSON_GetArraySize(list))
         return !required;
-    cJSON_ArrayForEach(v,
-                       list) if (cJSON_IsString(v) && !strcmp(v->valuestring, value)) return true;
-    return false;
+    bool found = false;
+    cJSON_ArrayForEach(v, list) {
+        if (!cJSON_IsString(v) || !v->valuestring[0] || strlen(v->valuestring) > 128)
+            return false;
+        if (!strcmp(v->valuestring, value))
+            found = true;
+    }
+    return found;
+}
+static bool manifest_shape(const char *raw) {
+    unsigned depth = 0;
+    bool quoted = false, escaped = false;
+    for (const unsigned char *p = (const unsigned char *)raw; *p; p++) {
+        if (quoted) {
+            if (escaped)
+                escaped = false;
+            else if (*p == '\\')
+                escaped = true;
+            else if (*p == '"')
+                quoted = false;
+            else if (*p < 0x20)
+                return false;
+        } else if (*p == '"')
+            quoted = true;
+        else if (*p == '{' || *p == '[') {
+            if (++depth > 8)
+                return false;
+        } else if (*p == '}' || *p == ']') {
+            if (!depth)
+                return false;
+            depth--;
+        }
+    }
+    return !quoted && !depth;
 }
 static bool unique_keys(const cJSON *j, unsigned depth) {
     if (depth > 8)
@@ -144,7 +175,7 @@ static esp_err_t manifest(const cJSON *command, uint64_t deadline, cJSON **out) 
     const char *raw = gw_action_string(response, "manifest"),
                *signature = gw_action_string(response, "signature");
     size_t length = strlen(raw);
-    if (!length || length > 65536 || strstr(raw, "\\u0000")) {
+    if (!length || length > 65536 || strstr(raw, "\\u0000") || !manifest_shape(raw)) {
         e = ESP_ERR_INVALID_RESPONSE;
         goto done;
     }
@@ -194,7 +225,8 @@ static esp_err_t manifest(const cJSON *command, uint64_t deadline, cJSON **out) 
         snprintf(current, sizeof(current), "%s", esp_app_get_description()->version);
     if (strcmp(gw_action_string(m, "kind"), "FIRMWARE") || strcmp(component, signed_component) ||
         !gw_action_hex(gw_action_string(m, "sha256"), hash, 32) || !*gw_action_string(m, "name") ||
-        !*gw_action_string(m, "version") || strlen(gw_action_string(m, "version")) > 64 ||
+        strlen(gw_action_string(m, "name")) > 128 || !*gw_action_string(m, "version") ||
+        strlen(gw_action_string(m, "version")) > 64 ||
         strcmp(gw_action_string(m, "version"), gw_action_string(p, "expectedFirmwareVersion")) ||
         !member(m, "compatibleModels", model, true) ||
         !member(m, "hardwareVersions", hardware, false) ||
@@ -273,6 +305,8 @@ static esp_err_t partition_hash(const esp_partition_t *p, size_t length, uint8_t
     return e;
 }
 static esp_err_t download(cJSON *j, uint64_t deadline) {
+    if (!task_budget(j, j, &deadline))
+        return ESP_ERR_TIMEOUT;
     bool gateway = !strcmp(gw_action_string(j, "component"), "GATEWAY");
     const esp_partition_t *p =
         gateway ? esp_ota_get_next_update_partition(NULL)
@@ -426,6 +460,8 @@ static esp_err_t nrf_trial(cJSON *j, uint64_t deadline, cJSON **details) {
     if ((e = phase(j, "CONFIRMING")) != ESP_OK)
         return e;
     if (!status[9]) {
+        if (!task_budget(j, j, &deadline))
+            return ESP_ERR_NOT_FINISHED;
         n = 0;
         if ((e = command(0x36, NULL, 0, NULL, &n, deadline)) != ESP_OK)
             return e;
@@ -491,6 +527,10 @@ static esp_err_t nrf_transfer(cJSON *j, uint64_t deadline, cJSON **details) {
             return e;
         size_t n = 62;
         e = command(0x30, begin, sizeof(begin), status, &n, deadline);
+        if (e == ESP_ERR_NOT_FINISHED) {
+            phase(j, "FAILED");
+            return ESP_ERR_INVALID_STATE;
+        }
         if (e != ESP_OK)
             return e;
         if (n != 62)
@@ -498,8 +538,21 @@ static esp_err_t nrf_transfer(cJSON *j, uint64_t deadline, cJSON **details) {
     }
     if (!session_matches(status, j))
         return ESP_ERR_INVALID_STATE;
-    if (status[8] == 3 || status[8] == 4)
+    if (status[8] == 3 || status[8] == 4) {
+        if (status[8] == 3) {
+            uint8_t session[8];
+            gw_put_u64(session, gw_get_u64(status));
+            if ((e = phase(j, "ABORT_INTENT")) != ESP_OK)
+                return e;
+            size_t n = 62;
+            if (command(0x34, session, sizeof(session), status, &n, deadline) != ESP_OK ||
+                n != 62 || status[8] != 4)
+                return ESP_ERR_NOT_FINISHED;
+        }
+        if (phase(j, "FAILED") != ESP_OK)
+            return ESP_ERR_TIMEOUT;
         return ESP_FAIL;
+    }
     const esp_partition_t *cache =
         esp_partition_find_first(ESP_PARTITION_TYPE_DATA, 0x41, "nrf_image");
     size_t size = (size_t)cJSON_GetObjectItemCaseSensitive(j, "size")->valuedouble;
@@ -569,6 +622,8 @@ static esp_err_t nrf_transfer(cJSON *j, uint64_t deadline, cJSON **details) {
         }
         if ((e = phase(j, "REBOOT_INTENT")) != ESP_OK)
             return e;
+        if (!task_budget(j, j, &deadline))
+            return ESP_ERR_NOT_FINISHED;
         uint8_t session[8];
         gw_put_u64(session, strtoull(gw_action_string(j, "session"), NULL, 10));
         size_t n = 0;
@@ -647,6 +702,7 @@ esp_err_t gw_ota_execute(const cJSON *command_json, uint64_t deadline, cJSON **d
     cJSON_AddStringToObject(j, "artifactId", gw_action_string(p, "artifactId"));
     cJSON_AddStringToObject(j, "version", gw_action_string(m, "version"));
     cJSON_AddStringToObject(j, "sha256", gw_action_string(m, "sha256"));
+    cJSON_AddStringToObject(j, "expiresAt", gw_action_string(command_json, "expiresAt"));
     uint8_t esp_boot[16];
     char esp_hex[33], mono[24];
     gw_capture_esp_boot(esp_boot);
@@ -679,6 +735,10 @@ esp_err_t gw_ota_execute(const cJSON *command_json, uint64_t deadline, cJSON **d
     }
     if ((e = phase(j, "REBOOT_INTENT")) != ESP_OK)
         goto done;
+    if (!task_budget(j, j, &deadline)) {
+        e = ESP_ERR_TIMEOUT;
+        goto done;
+    }
     if ((e = esp_ota_set_boot_partition(candidate)) != ESP_OK)
         goto done;
     esp_restart();
@@ -690,6 +750,7 @@ done:
         (j &&
          (!*gw_action_string(j, "phase") || !strcmp(gw_action_string(j, "phase"), "DOWNLOADING") ||
           !strcmp(gw_action_string(j, "phase"), "VERIFIED_ARTIFACT") ||
+          !strcmp(gw_action_string(j, "phase"), "FAILED") ||
           !strcmp(gw_action_string(j, "phase"), "ROLLED_BACK"))) ||
         !j) {
         if (j && e != ESP_OK)
@@ -782,6 +843,10 @@ esp_err_t gw_ota_recover(const cJSON *command_json, uint64_t deadline, cJSON **d
     }
     if ((e = phase(j, "CONFIRMING")) != ESP_OK)
         goto done;
+    if (running_state == ESP_OTA_IMG_PENDING_VERIFY && !task_budget(command_json, j, &deadline)) {
+        e = ESP_ERR_NOT_FINISHED;
+        goto done;
+    }
     e = esp_ota_mark_app_valid_cancel_rollback();
     if (e != ESP_OK)
         goto done;

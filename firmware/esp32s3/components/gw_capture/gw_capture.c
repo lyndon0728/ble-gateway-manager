@@ -14,6 +14,7 @@
 #include "mbedtls/base64.h"
 #include "mbedtls/sha256.h"
 #include <inttypes.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -49,9 +50,85 @@ static struct {
 static uint64_t utc_anchor_mono, utc_anchor_wall, next_upload;
 static bool utc_anchor_valid;
 static unsigned upload_failures;
+static unsigned upload_batch_max = 64, upload_flush_ms = 250;
 static uint64_t accepted_nrf, accepted_esp, merged_count, unmapped_count,
     recovered_count;
 static const char *reasons[] = {"DISCONNECTED", "NRF_RESTART", "ESP_RESTART"};
+bool gw_capture_upload_valid(const cJSON *complete) {
+  if (!cJSON_IsObject(complete))
+    return false;
+  unsigned seen = 0;
+  for (const cJSON *v = complete->child; v; v = v->next) {
+    unsigned field = v->string && !strcmp(v->string, "batchMaxRecords")   ? 1
+                     : v->string && !strcmp(v->string, "flushIntervalMs") ? 2
+                                                                          : 0;
+    if (!field || (seen & field) || !cJSON_IsNumber(v) ||
+        !isfinite(v->valuedouble) || floor(v->valuedouble) != v->valuedouble ||
+        v->valuedouble < (field == 1 ? 1 : 100) ||
+        v->valuedouble > (field == 1 ? 1000 : 60000))
+      return false;
+    seen |= field;
+  }
+  return seen == 3;
+}
+static void install_upload(const cJSON *complete) {
+  upload_batch_max =
+      (unsigned)cJSON_GetObjectItemCaseSensitive(complete, "batchMaxRecords")
+          ->valuedouble;
+  upload_flush_ms =
+      (unsigned)cJSON_GetObjectItemCaseSensitive(complete, "flushIntervalMs")
+          ->valuedouble;
+}
+static esp_err_t restore_upload(void) {
+  cJSON *saved = gw_store_get_json("capture/upload");
+  if (!saved) {
+    size_t size = 0;
+    if (gw_store_get("capture/upload", NULL, &size) != ESP_ERR_NOT_FOUND)
+      return ESP_ERR_INVALID_STATE;
+    cJSON *configuration = gw_store_get_json("cloud/configuration");
+    const cJSON *upload =
+        cJSON_GetObjectItemCaseSensitive(configuration, "upload");
+    saved = upload ? cJSON_Duplicate(upload, true) : cJSON_CreateObject();
+    cJSON_Delete(configuration);
+    if (!saved)
+      return ESP_ERR_NO_MEM;
+    if (!cJSON_GetObjectItemCaseSensitive(saved, "batchMaxRecords"))
+      cJSON_AddNumberToObject(saved, "batchMaxRecords", 64);
+    if (!cJSON_GetObjectItemCaseSensitive(saved, "flushIntervalMs"))
+      cJSON_AddNumberToObject(saved, "flushIntervalMs", 250);
+  }
+  if (!gw_capture_upload_valid(saved)) {
+    cJSON_Delete(saved);
+    return ESP_ERR_INVALID_STATE;
+  }
+  install_upload(saved);
+  cJSON_Delete(saved);
+  return ESP_OK;
+}
+esp_err_t gw_capture_configure_upload(const cJSON *complete) {
+  if (!initialized)
+    return ESP_ERR_INVALID_STATE;
+  if (!gw_capture_upload_valid(complete))
+    return ESP_ERR_INVALID_ARG;
+  xSemaphoreTake(lock, portMAX_DELAY);
+  esp_err_t e = gw_store_put_json("capture/upload", complete);
+  if (e == ESP_OK)
+    install_upload(complete);
+  xSemaphoreGive(lock);
+  return e;
+}
+cJSON *gw_capture_upload_configuration(void) {
+  if (!initialized)
+    return NULL;
+  xSemaphoreTake(lock, portMAX_DELAY);
+  cJSON *o = cJSON_CreateObject();
+  if (o) {
+    cJSON_AddNumberToObject(o, "batchMaxRecords", upload_batch_max);
+    cJSON_AddNumberToObject(o, "flushIntervalMs", upload_flush_ms);
+  }
+  xSemaphoreGive(lock);
+  return o;
+}
 static const char *str(const cJSON *o, const char *key) {
   const cJSON *v = cJSON_GetObjectItemCaseSensitive(o, key);
   return cJSON_IsString(v) ? v->valuestring : "";
@@ -430,6 +507,9 @@ esp_err_t gw_capture_init(void) {
   upload_lock = xSemaphoreCreateMutex();
   if (!lock || !upload_lock)
     return ESP_ERR_NO_MEM;
+  esp_err_t restored = restore_upload();
+  if (restored != ESP_OK)
+    return restored;
   esp_fill_random(esp_boot, sizeof(esp_boot));
   gw_spool_io_t io = {.ctx = (void *)partition,
                       .read = io_read,
@@ -690,16 +770,36 @@ esp_err_t gw_capture_upload(const char *namespace_id, const char *gateway_id,
     xSemaphoreGive(upload_lock);
     return result(rc);
   }
-  uint16_t slots[64];
-  char ids[64][80];
+  unsigned ready_count = 0;
+  uint64_t oldest_arrival = UINT64_MAX;
+  for (unsigned i = 0; i < GW_SPOOL_SLOTS; i++)
+    if (gw_spool_state(&spool, i) == GW_SP_READY) {
+      ready_count++;
+      if (pending[i].arrived < oldest_arrival)
+        oldest_arrival = pending[i].arrived;
+    }
+  if (!ready_count ||
+      (ready_count < upload_batch_max && now >= oldest_arrival &&
+       now - oldest_arrival < upload_flush_ms)) {
+    xSemaphoreGive(lock);
+    xSemaphoreGive(upload_lock);
+    return ESP_OK;
+  }
+  unsigned batch_limit = upload_batch_max > 200 ? 200 : upload_batch_max;
+  typedef struct {
+    uint16_t slot;
+    char id[80];
+  } upload_item_t;
+  upload_item_t *sent = calloc(batch_limit, sizeof(*sent));
   size_t count = 0;
   uint64_t oldest = UINT64_MAX;
   cJSON *body = cJSON_CreateObject(), *events = cJSON_CreateArray();
   gw_spool_record_t *record = malloc(sizeof(*record));
-  if (!body || !events || !record) {
+  if (!body || !events || !record || !sent) {
     cJSON_Delete(body);
     cJSON_Delete(events);
     free(record);
+    free(sent);
     xSemaphoreGive(lock);
     xSemaphoreGive(upload_lock);
     return ESP_ERR_NO_MEM;
@@ -709,14 +809,14 @@ esp_err_t gw_capture_upload(const char *namespace_id, const char *gateway_id,
   cJSON_AddStringToObject(body, "namespaceId", namespace_id);
   cJSON_AddStringToObject(body, "gatewayId", gateway_id);
   /* Oldest events first, independent of physical slot wrap. */
-  for (size_t k = 0; k < 64; k++) {
+  for (size_t k = 0; k < batch_limit; k++) {
     unsigned chosen = GW_SPOOL_NONE;
     oldest = UINT64_MAX;
     for (unsigned i = 0; i < GW_SPOOL_SLOTS; i++)
       if (gw_spool_state(&spool, i) == GW_SP_READY) {
         bool seen = false;
         for (size_t j = 0; j < count; j++)
-          if (slots[j] == i)
+          if (sent[j].slot == i)
             seen = true;
         uint64_t sequence = gw_spool_sequence(&spool, i);
         if (!seen && sequence < oldest) {
@@ -734,8 +834,8 @@ esp_err_t gw_capture_upload(const char *namespace_id, const char *gateway_id,
       rc = GW_SP_FULL;
       break;
     }
-    event_id(chosen, record, ids[count]);
-    slots[count++] = (uint16_t)chosen;
+    event_id(chosen, record, sent[count].id);
+    sent[count++].slot = (uint16_t)chosen;
     cJSON_AddItemToArray(events, event);
   }
   char batch_id[49];
@@ -748,6 +848,7 @@ esp_err_t gw_capture_upload(const char *namespace_id, const char *gateway_id,
   xSemaphoreGive(lock);
   if (rc || !count) {
     cJSON_Delete(body);
+    free(sent);
     xSemaphoreGive(upload_lock);
     return rc ? result(rc) : ESP_OK;
   }
@@ -762,8 +863,8 @@ esp_err_t gw_capture_upload(const char *namespace_id, const char *gateway_id,
                !strcmp(str(ack, "durability"), "RAW_PERSISTED");
   const cJSON *items = cJSON_GetObjectItemCaseSensitive(ack, "items");
   valid = valid && cJSON_IsArray(items);
-  uint16_t changed[64];
-  uint8_t states[64];
+  uint16_t changed[200];
+  uint8_t states[200];
   size_t changes = 0;
   uint64_t delay = 250;
   if (valid) {
@@ -771,7 +872,7 @@ esp_err_t gw_capture_upload(const char *namespace_id, const char *gateway_id,
       const cJSON *matched = NULL;
       unsigned matches = 0;
       for (const cJSON *item = items->child; item; item = item->next)
-        if (!strcmp(str(item, "eventId"), ids[i])) {
+        if (!strcmp(str(item, "eventId"), sent[i].id)) {
           matched = item;
           matches++;
         }
@@ -779,10 +880,10 @@ esp_err_t gw_capture_upload(const char *namespace_id, const char *gateway_id,
         continue;
       const char *status = str(matched, "status");
       if (!strcmp(status, "ACCEPTED") || !strcmp(status, "DUPLICATE")) {
-        changed[changes] = slots[i];
+        changed[changes] = sent[i].slot;
         states[changes++] = GW_SP_FREE;
       } else if (!strcmp(status, "REJECTED_PERMANENT")) {
-        changed[changes] = slots[i];
+        changed[changes] = sent[i].slot;
         states[changes++] = GW_SP_QUARANTINE;
       } else if (!strcmp(status, "REJECTED_RETRYABLE")) {
         const cJSON *retry =
@@ -801,6 +902,8 @@ esp_err_t gw_capture_upload(const char *namespace_id, const char *gateway_id,
     if (!rc)
       refresh();
     upload_failures = 0;
+    if (changes == count)
+      delay = 0;
   } else {
     if (upload_failures < 7)
       upload_failures++;
@@ -809,9 +912,10 @@ esp_err_t gw_capture_upload(const char *namespace_id, const char *gateway_id,
       delay = 30000;
     e = e == ESP_OK ? ESP_ERR_INVALID_RESPONSE : e;
   }
-  next_upload = mono() + delay + (esp_random() % 101u);
+  next_upload = mono() + delay + (delay ? esp_random() % 101u : 0);
   xSemaphoreGive(lock);
   cJSON_Delete(ack);
+  free(sent);
   xSemaphoreGive(upload_lock);
   return rc ? result(rc) : e;
 }

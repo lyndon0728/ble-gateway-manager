@@ -49,7 +49,9 @@
 
 ## 上报与逐项接管
 
-上传固定使用 IngressBatch 1.1，HTTP 路径为 `POST /api/v1/gateway-ingress/batches`。TLS、设备认证和响应上限由 gw_http 负责。单次最多 64 个事件，先上传较早事件，保留原始 AD 或 GATT value 的 Base64；没有可信时间时使用 UNSYNCED 并省略 capturedAt。
+上传固定使用 IngressBatch 1.1，HTTP 路径为 `POST /api/v1/gateway-ingress/batches`。TLS、设备认证和响应上限由 gw_http 负责。`upload.batchMaxRecords` 支持 1–1000，`upload.flushIntervalMs` 支持 100–60000 ms，默认 64 条或 250 ms。达到配置条数或最老已定稿观测达到刷新期限时开始上传；单个 HTTP 请求始终不超过 200 条，较大的逻辑批次拆包发送。受本分区 224 条容量限制，1000 条配置通常由刷新期限触发。成功持久 ACK 后没有额外重试退避，剩余过期事件可在下一次上传 worker 调用继续发送。先上传较早事件，保留原始 AD 或 GATT value 的 Base64；没有可信时间时使用 UNSYNCED 并省略 capturedAt。
+
+动作层先用 `gw_capture_upload_configuration()` 取得完整当前目标并合并补丁，再用纯校验函数 `gw_capture_upload_valid()` 验证两个字段及范围。`gw_capture_configure_upload()` 先原子保存 `capture/upload`，成功后再改变运行参数；存储失败不更改 RAM 参数。重启优先恢复该键；首次迁移时回退读取 `cloud/configuration.upload` 并补齐默认字段。损坏的已存参数不静默恢复默认值。
 
 同时匹配 schemaVersion、namespaceId、gatewayId、batchId 和 `durability=RAW_PERSISTED`，才考虑 ACK 的 items。每个发送 eventId 必须恰好出现一次：
 
@@ -86,6 +88,6 @@ python firmware/esp32s3/components/gw_capture/tests/run_host_tests.py `
   --cc '<C11 compiler or zig executable>' --idf '<ESP-IDF v5.5.6 directory>'
 ```
 
-已覆盖批次重放/过期/冲突、水位回收后保持、满环不覆盖、槽复用、69 个 I/O 断电点、根/数据损坏、隔离/inbox、双路一对一判定、时间误差与锚有效期、稳定 JSON 重试、混合逐项 ACK、缺失/重复/错误身份 ACK、退避、Peripheral 不误报及幂等 link-down。五份生产路径生成的 ADV、SCAN_RSP、GATT、link-down 与混合批次通过 IngressBatch 1.1 schema。
+已覆盖批次重放/过期/冲突、水位回收后保持、满环不覆盖、槽复用、69 个 I/O 断电点、根/数据损坏、隔离/inbox、双路一对一判定、时间误差与锚有效期、稳定 JSON 重试、混合逐项 ACK、缺失/重复/错误身份 ACK、退避、Peripheral 不误报及幂等 link-down。上传参数另覆盖范围/重复字段、存储失败、重启恢复、条数立即触发、100 ms 期限边界、200+10 条拆包。七份生产路径生成的 ADV、SCAN_RSP、GATT、link-down 与混合/拆分批次通过 IngressBatch 1.1 schema。
 
 目标芯片编译与实板状态以 [总验证记录](../../VALIDATION.md) 为准。以上测试不证明真实 Flash 加密熔丝状态、UART 高负载、射频时间误差、实际掉电波形或设备到服务器的实网闭环已经验收。

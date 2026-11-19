@@ -356,16 +356,7 @@ static cJSON *configuration(void) {
   cJSON_Delete(state);
   return cfg;
 }
-static esp_err_t execute_config(const cJSON *command, uint64_t deadline,
-                                cJSON **details, bool *async) {
-  const cJSON *params = cJSON_GetObjectItemCaseSensitive(command, "parameters"),
-              *patch =
-                  cJSON_GetObjectItemCaseSensitive(params, "configuration");
-  cJSON *cfg = configuration();
-  if (!cfg || !cJSON_IsObject(patch)) {
-    cJSON_Delete(cfg);
-    return ESP_ERR_INVALID_ARG;
-  }
+static void merge_configuration(cJSON *cfg, const cJSON *patch) {
   merge(cfg, patch);
   /* Legacy scan/filters and the explicit NRF54 group share one effective
    * snapshot; switching API versions must not restore stale radio settings. */
@@ -383,6 +374,18 @@ static esp_err_t execute_config(const cJSON *command, uint64_t deadline,
       cJSON_DeleteItemFromObjectCaseSensitive(cfg, legacy[i]);
     }
   }
+}
+static esp_err_t execute_config(const cJSON *command, uint64_t deadline,
+                                cJSON **details, bool *async) {
+  const cJSON *params = cJSON_GetObjectItemCaseSensitive(command, "parameters"),
+              *patch =
+                  cJSON_GetObjectItemCaseSensitive(params, "configuration");
+  cJSON *cfg = configuration();
+  if (!cfg || !cJSON_IsObject(patch)) {
+    cJSON_Delete(cfg);
+    return ESP_ERR_INVALID_ARG;
+  }
+  merge_configuration(cfg, patch);
   double revision = num(params, "desiredRevision");
   if (revision < 1 || revision > 9007199254740991.0 ||
       floor(revision) != revision) {
@@ -422,8 +425,8 @@ static esp_err_t execute_config(const cJSON *command, uint64_t deadline,
     cJSON_Delete(response);
   } else {
     e = gw_actions_configure(patch, cfg, (uint64_t)revision, deadline, details);
-    if (e == ESP_OK)
-      e = gw_store_put_json("cloud/configuration", cfg);
+    /* The action target, DONE evidence and complete cloud snapshot are
+     * published by one gw_store_transaction in gw_actions_configure. */
   }
   cJSON_Delete(cfg);
   return e;
@@ -684,6 +687,25 @@ static void service_journal(void) {
         result_for(id, "terminal", "FAILED", "NONE", txn, str(txn, "code"),
                    NULL, gw_core_mono_ms() + 5000);
       cJSON_Delete(txn);
+      continue;
+    }
+    if (!strcmp(str(c, "type"), "CONFIGURE")) {
+      const cJSON *params = cJSON_GetObjectItemCaseSensitive(c, "parameters");
+      const cJSON *patch =
+          cJSON_GetObjectItemCaseSensitive(params, "configuration");
+      cJSON *cfg = configuration(), *details = NULL;
+      merge_configuration(cfg, patch);
+      esp_err_t recovered = gw_actions_recover_config(
+          patch, cfg, (uint64_t)num(params, "desiredRevision"), &details);
+      if (recovered == ESP_OK)
+        finish_config(c, details, gw_core_mono_ms() + 5000);
+      else if (recovered != ESP_ERR_NOT_FINISHED)
+        result_for(id, "terminal",
+                   recovered == ESP_ERR_TIMEOUT ? "UNKNOWN" : "FAILED", "NONE",
+                   details, esp_err_to_name(recovered), NULL,
+                   gw_core_mono_ms() + 5000);
+      cJSON_Delete(cfg);
+      cJSON_Delete(details);
       continue;
     }
     if (!strcmp(str(c, "type"), "FIRMWARE_UPGRADE") ||

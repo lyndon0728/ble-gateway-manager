@@ -1,6 +1,7 @@
 #include "esp_flash.h"
 #include "esp_psram.h"
 #include "esp_random.h"
+#include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "gw_internal.h"
 #include "gw_rules.h"
@@ -438,6 +439,9 @@ static esp_err_t commit(bool local_only) {
   cJSON_AddBoolToObject(state, "localAttemptActive", local_only);
   if (local_only)
     gw_json_set_u64(state, "localAttemptDeadline", gw_core_mono_ms() + 120000);
+  if (!remote)
+    gw_json_set_string(state, "localVerificationTransactionId",
+                       gw_json_string(t, "transactionId"));
   if (remote) {
     uint64_t rev = 0;
     if (!field_u64(t, "desiredRevision", &rev) || rev > 9007199254740991ULL)
@@ -464,16 +468,16 @@ static void local_background(void) {
   xSemaphoreTake(core_lock, portMAX_DELAY);
   const char *verification = gw_json_string(state, "verificationState");
   if (core_fault || network_busy() || *maintenance || !verification ||
-      strcmp(verification, "LOCAL_ONLY") ||
-      !cJSON_IsTrue(
-          cJSON_GetObjectItemCaseSensitive(state, "localAttemptActive"))) {
+      strcmp(verification, "LOCAL_ONLY")) {
     xSemaphoreGive(core_lock);
     return;
   }
   uint64_t deadline = 0, generation = 0;
   field_u64(state, "localAttemptDeadline", &deadline);
   field_u64(state, "networkGeneration", &generation);
-  if (gw_core_mono_ms() >= deadline) {
+  bool attempting = cJSON_IsTrue(
+      cJSON_GetObjectItemCaseSensitive(state, "localAttemptActive"));
+  if (attempting && gw_core_mono_ms() >= deadline) {
     const cJSON *last = cJSON_GetObjectItemCaseSensitive(state, "lastVerified");
     cJSON *fallback = cJSON_IsObject(last) ? cJSON_Duplicate(last, true) : NULL;
     cJSON_DeleteItemFromObjectCaseSensitive(state, "localAttemptActive");
@@ -486,6 +490,19 @@ static void local_background(void) {
       gw_network_apply(fallback);
     cJSON_Delete(fallback);
     return;
+  }
+  if (!attempting) {
+    /* With no fallback, the explicitly saved network stays actual. It may
+     * obtain UTC/platform connectivity hours later; validate that actual
+     * network without restarting a route trial or extending its budget. */
+    if (!cJSON_Compare(
+            cJSON_GetObjectItemCaseSensitive(state, "actualNetwork"),
+            cJSON_GetObjectItemCaseSensitive(state, "desiredLocalNetwork"),
+            true)) {
+      xSemaphoreGive(core_lock);
+      return;
+    }
+    deadline = gw_core_mono_ms() + 10000;
   }
   if (!probe_handler || !gw_core_time_trusted() ||
       gw_core_mono_ms() < next_background_probe) {
@@ -500,11 +517,22 @@ static void local_background(void) {
       xSemaphoreGive(core_lock);
       return;
     }
-  cJSON *job = cJSON_Duplicate(transaction(), true);
+  const char *verification_id =
+      gw_json_string(state, "localVerificationTransactionId");
+  char snapshot[65];
+  if (!verification_id ||
+      gw_core_network_snapshot_id(network, snapshot) != ESP_OK) {
+    xSemaphoreGive(core_lock);
+    return;
+  }
+  cJSON *job = cJSON_CreateObject();
   if (!job) {
     xSemaphoreGive(core_lock);
     return;
   }
+  cJSON_AddStringToObject(job, "transactionId", verification_id);
+  cJSON_AddStringToObject(job, "snapshotId", snapshot);
+  replace(job, "network", network);
   gw_network_probe_fn cb = probe_handler;
   void *ctx = probe_ctx;
   background_probe = true;
@@ -698,7 +726,13 @@ esp_err_t gw_core_init(void) {
   }
   if (cJSON_IsTrue(
           cJSON_GetObjectItemCaseSensitive(state, "localAttemptActive"))) {
-    gw_json_set_u64(state, "localAttemptDeadline", gw_core_mono_ms() + 120000);
+    /* An old monotonic deadline cannot be safely rebased after reset. End
+     * that route trial, preserving the committed target and its versions. */
+    cJSON_DeleteItemFromObjectCaseSensitive(state, "localAttemptActive");
+    cJSON_AddBoolToObject(state, "localAttemptActive", false);
+    const cJSON *last = cJSON_GetObjectItemCaseSensitive(state, "lastVerified");
+    if (cJSON_IsObject(last))
+      replace(state, "actualNetwork", last);
     if (save() != ESP_OK)
       return ESP_FAIL;
   }

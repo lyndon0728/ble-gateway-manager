@@ -21,6 +21,27 @@ static int capture_gettimeofday(struct timeval *out, void *zone) {
 }
 static unsigned http_mode, http_calls;
 static cJSON *last_request, *examples;
+static cJSON *saved_upload, *saved_configuration;
+static bool fail_store;
+esp_err_t gw_store_put_json(const char *key, const cJSON *value) {
+  assert(!strcmp(key, "capture/upload"));
+  if (fail_store)
+    return ESP_FAIL;
+  cJSON_Delete(saved_upload);
+  saved_upload = cJSON_Duplicate(value, true);
+  return ESP_OK;
+}
+cJSON *gw_store_get_json(const char *key) {
+  return cJSON_Duplicate(!strcmp(key, "capture/upload") ? saved_upload
+                                                        : saved_configuration,
+                         true);
+}
+esp_err_t gw_store_get(const char *key, void *out, size_t *size) {
+  (void)key;
+  (void)out;
+  (void)size;
+  return saved_upload ? ESP_OK : ESP_ERR_NOT_FOUND;
+}
 static const esp_partition_t fake_partition = {GW_SPOOL_BYTES, true};
 bool esp_flash_encryption_enabled(void) { return true; }
 bool gw_core_time_trusted(void) { return true; }
@@ -177,6 +198,7 @@ static void save_example(void) {
 static void upload(unsigned mode) {
   http_mode = mode;
   next_upload = 0;
+  now_ms += upload_flush_ms;
   (void)gw_capture_upload("ns_test", "gw_test", now_ms + 10000);
 }
 int main(int argc, char **argv) {
@@ -307,6 +329,71 @@ int main(int argc, char **argv) {
   upload(8);
   assert(states(GW_SP_READY) == 1 && states(GW_SP_QUARANTINE) == 2);
   save_example();
+  upload(0); /* Release the missing ACK item from the preceding mixed batch. */
+  cJSON *cfg = cJSON_Parse("{\"batchMaxRecords\":0,\"flushIntervalMs\":250}");
+  assert(!gw_capture_upload_valid(cfg));
+  assert(gw_capture_configure_upload(cfg) == ESP_ERR_INVALID_ARG);
+  cJSON_Delete(cfg);
+  cfg = cJSON_Parse(
+      "{\"batchMaxRecords\":2,\"batchMaxRecords\":3,\"flushIntervalMs\":250}");
+  assert(!gw_capture_upload_valid(cfg));
+  cJSON_Delete(cfg);
+  cfg = cJSON_Parse("{\"batchMaxRecords\":2,\"flushIntervalMs\":60000}");
+  assert(gw_capture_upload_valid(cfg));
+  fail_store = true;
+  assert(gw_capture_configure_upload(cfg) == ESP_FAIL);
+  assert(upload_batch_max == 64 && upload_flush_ms == 250);
+  fail_store = false;
+  assert(gw_capture_configure_upload(cfg) == ESP_OK);
+  cJSON_Delete(cfg);
+  before = http_calls;
+  adv(local, now_ms);
+  assert(gw_capture_esp(local, 27) == ESP_OK);
+  assert(gw_capture_upload("ns_test", "gw_test", now_ms + 10000) == ESP_OK &&
+         http_calls == before);
+  assert(gw_capture_esp(local, 27) == ESP_OK);
+  assert(gw_capture_upload("ns_test", "gw_test", now_ms + 10000) == ESP_OK &&
+         http_calls == before + 1);
+  assert(cJSON_GetArraySize(
+             cJSON_GetObjectItemCaseSensitive(last_request, "events")) == 2);
+  cfg = cJSON_Parse("{\"batchMaxRecords\":1000,\"flushIntervalMs\":100}");
+  assert(gw_capture_configure_upload(cfg) == ESP_OK);
+  cJSON_Delete(cfg);
+  for (unsigned i = 0; i < 210; i++)
+    assert(gw_capture_esp(local, 27) == ESP_OK);
+  before = http_calls;
+  assert(gw_capture_upload("ns_test", "gw_test", now_ms + 10000) == ESP_OK &&
+         http_calls == before);
+  now_ms += 99;
+  assert(gw_capture_upload("ns_test", "gw_test", now_ms + 10000) == ESP_OK &&
+         http_calls == before);
+  now_ms++;
+  assert(gw_capture_upload("ns_test", "gw_test", now_ms + 10000) == ESP_OK &&
+         http_calls == before + 1);
+  assert(cJSON_GetArraySize(
+             cJSON_GetObjectItemCaseSensitive(last_request, "events")) == 200);
+  assert(states(GW_SP_READY) == 10);
+  save_example();
+  assert(gw_capture_upload("ns_test", "gw_test", now_ms + 10000) == ESP_OK &&
+         http_calls == before + 2);
+  assert(cJSON_GetArraySize(
+             cJSON_GetObjectItemCaseSensitive(last_request, "events")) == 10);
+  assert(states(GW_SP_READY) == 0);
+  save_example();
+  upload_batch_max = 64;
+  upload_flush_ms = 250;
+  assert(restore_upload() == ESP_OK && upload_batch_max == 1000 &&
+         upload_flush_ms == 100);
+  cJSON *readback = gw_capture_upload_configuration();
+  assert(gw_capture_upload_valid(readback));
+  cJSON_Delete(readback);
+  cJSON_Delete(saved_upload);
+  saved_upload = NULL;
+  saved_configuration = cJSON_Parse("{\"upload\":{\"flushIntervalMs\":3333}}");
+  assert(restore_upload() == ESP_OK && upload_batch_max == 64 &&
+         upload_flush_ms == 3333);
+  cJSON_Delete(saved_configuration);
+  saved_configuration = NULL;
   if (argc > 1) {
     FILE *out = fopen(argv[1], "wb");
     assert(out);

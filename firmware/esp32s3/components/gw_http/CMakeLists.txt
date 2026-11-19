@@ -1,2 +1,2 @@
-idf_component_register(SRCS "gw_http.c" INCLUDE_DIRS "include"
-    REQUIRES gw_core esp_http_client esp_netif lwip json esp_timer)
+idf_component_register(SRCS "gw_http.c" "gw_http_parser.c" INCLUDE_DIRS "include"
+    REQUIRES gw_core esp-tls esp_netif lwip json esp_timer freertos)

@@ -38,11 +38,14 @@ with tempfile.TemporaryDirectory(prefix="gw-host-") as temp:
     actions = components / "gw_actions"
     build_run("gatt", [actions / "tests/test_gatt_nrf.c", cjson / "cJSON.c"],
               [actions / "tests/gatt_stubs", cjson])
-    vendor = actions / "vendor/monocypher"
-    binary = build_run("ed25519", [actions / "tests/verify_ed25519.c",
-                                   vendor / "monocypher.c", vendor / "monocypher-ed25519.c"],
-                       [vendor], run=False)
-    subprocess.run([sys.executable, str(actions / "tests/test_ed25519.py"), str(binary)], check=True)
+    action_command = [sys.executable, str(actions / "tests/run_host.py"),
+                      "--cjson-dir", str(cjson), "--compiler", args.cc,
+                      "--out", str(pathlib.Path(temp) / "actions")]
+    if pathlib.Path(args.cc).stem == "zig":
+        action_command += ["--compiler-arg", "cc"]
+    subprocess.run(action_command, check=True)
     subprocess.run([sys.executable, str(components / "gw_capture/tests/run_host_tests.py"),
+                    "--cc", args.cc, "--idf", args.idf], check=True)
+    subprocess.run([sys.executable, str(components / "gw_http/tests/run_host_tests.py"),
                     "--cc", args.cc, "--idf", args.idf], check=True)
 print("PASS: production host contracts (device I/O is simulated)")

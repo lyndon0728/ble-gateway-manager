@@ -26,6 +26,8 @@ Wi-Fi密码实体存于同一加密分区的独立secrets命名空间，按需�
 
 默认运行时要求Flash加密已经由制造流程配置，并存在已生成的nvs_keys。固件只读取密钥配置，不自动生成可公开的生产密钥或烧eFuse。gwfactory和gwstore使用NVS加密；缺失/损坏的密钥、身份或分区需按诊断处理，禁止用自动擦除“修复”。
 
+项目明确排除SDK的`nvs_sec_provider`自动注册组件。该组件负责默认`nvs_flash_init()`的自动密钥生成，而本项目只调用带制造密钥的`nvs_flash_secure_init_partition()`。保留`CONFIG_NVS_ENCRYPTION=y`和SDK实际XTS加密实现，不为HMAC指定默认eFuse块，也不开启bootloader自动加密。不得新增默认`nvs_flash_init()`调用来绕过本项目的制造密钥检查。
+
 gwfactory的NVS namespace为`factory`。使用锁定SDK的NVS分区生成/加密工具，把以下条目放入加密制造镜像。秘密、生成的CSV、key和镜像放在源码仓库之外，交付给有权限的制造环境；这些不是运行时默认凭据。
 
 | NVS键 | 类型 / 用途 |
@@ -49,3 +51,7 @@ CH390默认关闭，GPIO默认-1；实际PCB核对后配置MOSI/MISO/SCLK/CS/INT
 `scripts/Test-Core.ps1`使用实际生产gw_rules.c，主机测试覆盖无损uint64、UTF-8/IPv4边界以及snapshot/active指针逐字节截断、位损坏和世代绑定。`Generate-Setup.py --self-test`对照10组独立Security2服务端公开值，包括前导零回归。它们不使用真实NVS，也不证明目标编译/掉电成立。
 
 已获取官方ESP-IDF v5.5.6源代码及全部锁定子模块，提交为`880a203ae603d08a94d06aa01e0d6761958e5e9e`；目标工具链安装与目标编译记录见工程VALIDATION。CI使用官方v5.5.6容器及固定镜像摘要。配置状态机、网络驱动及制造流程还需要ESP-AT-17/18、37～44的实板验证；源码审查和主机测试不能替代目标构建或实板证据。
+
+Windows Xtensa汇编器不能可靠处理非ASCII对象路径。`Build.ps1`遇到中文源码路径时，在ASCII的`AsciiBuildRoot`下建立独立、只用于构建的源码副本，并保留输出目录；SDK和工具链同样须使用ASCII路径。不通过junction绕过此限制，因为idf.py会解析项目junction回真实路径。
+
+已授权的平台诊断可调用`gw_core_wifi_scan`，本地网页使用相同扫描实现。真实主动/被动扫描最多32条、最长15秒，受更早请求截止时间限制，扫描期间持有网络互斥租约。扫描超时会停止当前扫描；为防迟到SCAN_DONE事件误配到下个请求，该驱动实例禁止后续扫描直至重启，其余网络连接继续工作。

@@ -240,7 +240,8 @@ static esp_err_t journal_start(const char *key, const char *identity, const cJSO
     *journal = j;
     return ESP_OK;
 }
-static esp_err_t journal_finish(const char *key, cJSON *j, esp_err_t result, const cJSON *details) {
+static esp_err_t journal_finish(const char *key, cJSON *j, esp_err_t result, const cJSON *details,
+                                const cJSON *configuration) {
     replace(j, "phase",
             cJSON_CreateString(
                 result == ESP_ERR_TIMEOUT || result == ESP_ERR_NOT_FINISHED ? "UNKNOWN" : "DONE"));
@@ -252,14 +253,18 @@ static esp_err_t journal_finish(const char *key, cJSON *j, esp_err_t result, con
         char committed[80];
         snprintf(committed, sizeof(committed), "actions/target/%s", key + 15);
         char *raw = cJSON_PrintUnformatted(j);
-        if (!raw)
+        char *full = configuration ? cJSON_PrintUnformatted(configuration) : NULL;
+        if (!raw || !full)
             e = ESP_ERR_NO_MEM;
         else {
-            gw_store_op_t ops[2] = {{.key = key, .data = raw, .size = strlen(raw) + 1},
-                                    {.key = committed, .data = raw, .size = strlen(raw) + 1}};
-            e = gw_store_transaction(ops, 2);
-            free(raw);
+            gw_store_op_t ops[3] = {
+                {.key = key, .data = raw, .size = strlen(raw)},
+                {.key = committed, .data = raw, .size = strlen(raw)},
+                {.key = "cloud/configuration", .data = full, .size = strlen(full)}};
+            e = gw_store_transaction(ops, 3);
         }
+        free(raw);
+        free(full);
     } else
         e = gw_store_put_json(key, j);
     cJSON_Delete(j);
@@ -293,30 +298,43 @@ esp_err_t gw_actions_configure(const cJSON *patch, const cJSON *complete, uint64
         const cJSON *field;
         cJSON_ArrayForEach(field, patch) {
             if (strcmp(field->string, "scan") && strcmp(field->string, "filters") &&
-                strcmp(field->string, "upload")) goto done;
+                strcmp(field->string, "upload"))
+                goto done;
         }
         radio_change = cJSON_GetObjectItemCaseSensitive(patch, "scan") ||
                        cJSON_GetObjectItemCaseSensitive(patch, "filters");
-        target = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(complete, "radios"), "nrf54");
+        target = cJSON_GetObjectItemCaseSensitive(
+            cJSON_GetObjectItemCaseSensitive(complete, "radios"), "nrf54");
         const cJSON *upload_patch = cJSON_GetObjectItemCaseSensitive(patch, "upload");
         if (upload_patch) {
-            if (!cJSON_IsObject(upload_patch)) goto done;
+            if (!cJSON_IsObject(upload_patch))
+                goto done;
             upload = gw_capture_upload_configuration();
-            if (!upload) { e = ESP_ERR_NO_MEM; goto done; }
-            cJSON_ArrayForEach(field, upload_patch) {
-                if (!strcmp(field->string, "batchMaxRecords") || !strcmp(field->string, "flushIntervalMs"))
-                    replace(upload, field->string, cJSON_Duplicate(field, true));
-                else goto done;
+            if (!upload) {
+                e = ESP_ERR_NO_MEM;
+                goto done;
             }
-            if (!gw_capture_upload_valid(upload)) goto done;
+            cJSON_ArrayForEach(field, upload_patch) {
+                if (!strcmp(field->string, "batchMaxRecords") ||
+                    !strcmp(field->string, "flushIntervalMs"))
+                    replace(upload, field->string, cJSON_Duplicate(field, true));
+                else
+                    goto done;
+            }
+            if (!gw_capture_upload_valid(upload))
+                goto done;
+            if (!cJSON_Compare(upload, cJSON_GetObjectItemCaseSensitive(complete, "upload"), true))
+                goto done;
         }
-        if (!radio_change && !upload) goto done;
+        if (!radio_change && !upload)
+            goto done;
     } else
         goto done;
     if (radio_change && !cJSON_IsObject(target))
         goto done;
     char key[64], identity[32];
-    snprintf(key, sizeof(key), "actions/config/%s/%s", radio_change ? (esp ? "esp32" : "nrf54") : "gateway",
+    snprintf(key, sizeof(key), "actions/config/%s/%s",
+             radio_change ? (esp ? "esp32" : "nrf54") : "gateway",
              radio_change ? (adv ? "advertising" : "scan") : "upload");
     snprintf(identity, sizeof(identity), "%llu", (unsigned long long)revision);
     cJSON *old = gw_store_get_json(key);
@@ -330,19 +348,26 @@ esp_err_t gw_actions_configure(const cJSON *patch, const cJSON *complete, uint64
     }
     cJSON *j = NULL;
     cJSON *request = cJSON_CreateObject();
-    if (!request) { e = ESP_ERR_NO_MEM; goto done; }
-    if (radio_change) cJSON_AddItemToObject(request, "radioTarget", cJSON_Duplicate(target, true));
-    if (upload) cJSON_AddItemToObject(request, "upload", cJSON_Duplicate(upload, true));
+    if (!request) {
+        e = ESP_ERR_NO_MEM;
+        goto done;
+    }
+    cJSON_AddItemToObject(request, "patch", cJSON_Duplicate(patch, true));
+    if (radio_change)
+        cJSON_AddItemToObject(request, "radioTarget", cJSON_Duplicate(target, true));
+    if (upload)
+        cJSON_AddItemToObject(request, "upload", cJSON_Duplicate(upload, true));
     e = journal_start(key, identity, request, &j, details);
     cJSON_Delete(request);
     if (e != ESP_OK || !j)
         goto done;
     e = gw_core_maintenance_acquire(key);
     if (e != ESP_OK) {
-        e = journal_finish(key, j, e, *details);
+        e = journal_finish(key, j, e, *details, complete);
         goto done;
     }
-    if (!radio_change) e = ESP_OK;
+    if (!radio_change)
+        e = ESP_OK;
     else if (esp)
         e = gw_ble_configure(target, adv, revision, deadline, details);
     else {
@@ -356,19 +381,93 @@ esp_err_t gw_actions_configure(const cJSON *patch, const cJSON *complete, uint64
     }
     if (e == ESP_OK && upload) {
         e = gw_capture_configure_upload(upload);
-        if (e != ESP_OK && radio_change) e = ESP_ERR_TIMEOUT;
+        if (e != ESP_OK && radio_change)
+            e = ESP_ERR_TIMEOUT;
     }
     if (e == ESP_OK && !*details) {
         *details = cJSON_CreateObject();
-        if (radio_change) cJSON_AddStringToObject(*details, "radio", esp ? "ESP32" : "NRF54");
-        cJSON_AddStringToObject(*details, "group", radio_change ? (adv ? "advertising" : "scan") : "upload");
+        if (radio_change)
+            cJSON_AddStringToObject(*details, "radio", esp ? "ESP32" : "NRF54");
+        cJSON_AddStringToObject(*details, "group",
+                                radio_change ? (adv ? "advertising" : "scan") : "upload");
     }
-    if (e == ESP_OK && upload) cJSON_AddItemToObject(*details, "upload", gw_capture_upload_configuration());
-    e = journal_finish(key, j, e, *details);
+    if (e == ESP_OK && upload)
+        cJSON_AddItemToObject(*details, "upload", gw_capture_upload_configuration());
+    e = journal_finish(key, j, e, *details, complete);
     if (e != ESP_ERR_TIMEOUT && e != ESP_ERR_NOT_FINISHED)
         gw_core_maintenance_release(key);
 done:
     cJSON_Delete(upload);
+    xSemaphoreGive(action_lock);
+    return e;
+}
+esp_err_t gw_actions_recover_config(const cJSON *patch, const cJSON *complete, uint64_t revision,
+                                    cJSON **details) {
+    if (!details || !action_lock || !revision || !cJSON_IsObject(patch) ||
+        !cJSON_IsObject(complete))
+        return ESP_ERR_INVALID_ARG;
+    *details = NULL;
+    if (xSemaphoreTake(action_lock, 0) != pdTRUE)
+        return ESP_ERR_NOT_FINISHED;
+    const cJSON *radios = cJSON_GetObjectItemCaseSensitive(patch, "radios"), *target = NULL;
+    const char *name = "nrf54";
+    bool radio_change = true, adv = false;
+    char key[64], identity[32];
+    esp_err_t e = ESP_ERR_TIMEOUT;
+    if (radios) {
+        if (!cJSON_IsObject(radios) || cJSON_GetArraySize(radios) != 1 ||
+            cJSON_GetArraySize(patch) != 1)
+            goto done;
+        name = radios->child->string;
+        if (strcmp(name, "nrf54") && strcmp(name, "esp32"))
+            goto done;
+        adv = cJSON_GetObjectItemCaseSensitive(radios->child, "advertising") != NULL;
+    } else
+        radio_change = cJSON_GetObjectItemCaseSensitive(patch, "scan") ||
+                       cJSON_GetObjectItemCaseSensitive(patch, "filters");
+    if (radio_change)
+        target = cJSON_GetObjectItemCaseSensitive(
+            cJSON_GetObjectItemCaseSensitive(complete, "radios"), name);
+    snprintf(key, sizeof(key), "actions/config/%s/%s", radio_change ? name : "gateway",
+             radio_change ? (adv ? "advertising" : "scan") : "upload");
+    snprintf(identity, sizeof(identity), "%llu", (unsigned long long)revision);
+    cJSON *j = gw_store_get_json(key);
+    if (!j)
+        goto done;
+    const cJSON *request = cJSON_GetObjectItemCaseSensitive(j, "request"),
+                *stored_patch = cJSON_GetObjectItemCaseSensitive(request, "patch");
+    if (strcmp(identity, gw_action_string(j, "identity")) ||
+        !cJSON_Compare(stored_patch, patch, true) || strcmp(gw_action_string(j, "phase"), "DONE"))
+        goto release;
+    const cJSON *result = cJSON_GetObjectItemCaseSensitive(j, "result");
+    if (!cJSON_IsNumber(result))
+        goto release;
+    e = (esp_err_t)result->valueint;
+    if (e == ESP_OK) {
+        if (radio_change &&
+            !cJSON_Compare(target, cJSON_GetObjectItemCaseSensitive(request, "radioTarget"),
+                           true)) {
+            e = ESP_ERR_TIMEOUT;
+            goto release;
+        }
+        const cJSON *upload = cJSON_GetObjectItemCaseSensitive(request, "upload");
+        if (upload &&
+            !cJSON_Compare(upload, cJSON_GetObjectItemCaseSensitive(complete, "upload"), true)) {
+            e = ESP_ERR_TIMEOUT;
+            goto release;
+        }
+        cJSON *committed = gw_store_get_json("cloud/configuration");
+        bool matches = cJSON_Compare(committed, complete, true);
+        cJSON_Delete(committed);
+        if (!matches) {
+            e = ESP_ERR_TIMEOUT;
+            goto release;
+        }
+    }
+    *details = cJSON_Duplicate(cJSON_GetObjectItemCaseSensitive(j, "details"), true);
+release:
+    cJSON_Delete(j);
+done:
     xSemaphoreGive(action_lock);
     return e;
 }
@@ -385,27 +484,47 @@ esp_err_t gw_actions_execute(const cJSON *command, uint64_t deadline, cJSON **de
         const char *profile = gw_action_string(params, "profile");
         if (!strcmp(profile, "NETWORK")) {
             *details = gw_core_state();
-            if (!*details) { e = ESP_ERR_NO_MEM; goto done; }
+            if (!*details) {
+                e = ESP_ERR_NO_MEM;
+                goto done;
+            }
             const char *scan = gw_action_string(params, "wifiScan");
             if (*scan && strcmp(scan, "OFF")) {
                 if (strcmp(scan, "PASSIVE") && strcmp(scan, "ACTIVE")) {
-                    e = ESP_ERR_INVALID_ARG; goto done;
+                    e = ESP_ERR_INVALID_ARG;
+                    goto done;
                 }
                 cJSON *aps = NULL;
                 e = gw_core_wifi_scan(!strcmp(scan, "ACTIVE"), deadline, &aps);
-                if (e != ESP_OK) { cJSON_Delete(aps); goto done; }
-                cJSON *ap;
-                cJSON_ArrayForEach(ap, aps) {
+                if (e != ESP_OK) {
+                    cJSON_Delete(aps);
+                    goto done;
+                }
+                cJSON *ap = aps->child;
+                while (ap) {
+                    cJSON *next = ap->next;
+                    const cJSON *signal = cJSON_GetObjectItemCaseSensitive(ap, "rssi");
+                    if (!cJSON_IsNumber(signal) || signal->valuedouble < -127 ||
+                        signal->valuedouble > 20) {
+                        cJSON_Delete(cJSON_DetachItemViaPointer(aps, ap));
+                        ap = next;
+                        continue;
+                    }
                     cJSON *rssi = cJSON_DetachItemFromObjectCaseSensitive(ap, "rssi");
                     cJSON *security = cJSON_DetachItemFromObjectCaseSensitive(ap, "security");
                     cJSON_AddItemToObject(ap, "rssiDbm", rssi);
                     cJSON_AddItemToObject(ap, "authentication", security);
+                    ap = next;
                 }
                 cJSON_AddItemToObject(*details, "accessPoints", aps);
             }
-            e = ESP_OK; goto done;
+            e = ESP_OK;
+            goto done;
         }
-        if (strcmp(profile, "BLE")) { e = ESP_ERR_NOT_SUPPORTED; goto done; }
+        if (strcmp(profile, "BLE")) {
+            e = ESP_ERR_NOT_SUPPORTED;
+            goto done;
+        }
         *details = gw_ble_diagnostics();
         cJSON_AddItemToObject(*details, "nrf54", gw_nrf_diagnostics((int64_t)deadline));
         e = *details ? ESP_OK : ESP_ERR_NO_MEM;
@@ -432,7 +551,7 @@ esp_err_t gw_actions_execute(const cJSON *command, uint64_t deadline, cJSON **de
         }
     } else
         e = ESP_ERR_NOT_SUPPORTED;
-    e = journal_finish("actions/current", j, e, *details);
+    e = journal_finish("actions/current", j, e, *details, NULL);
 done:
     xSemaphoreGive(action_lock);
     return e;
@@ -456,7 +575,7 @@ esp_err_t gw_actions_recover(const cJSON *command, uint64_t deadline, cJSON **de
     } else if (!strcmp(gw_action_string(command, "type"), "FIRMWARE_UPGRADE")) {
         e = gw_ota_recover(command, deadline, details);
         if (e != ESP_ERR_NOT_FINISHED) {
-            e = journal_finish("actions/current", j, e, *details);
+            e = journal_finish("actions/current", j, e, *details, NULL);
             j = NULL;
         }
     } else if (!strncmp(gw_action_string(command, "type"), "GATT_", 5) &&
@@ -466,7 +585,7 @@ esp_err_t gw_actions_recover(const cJSON *command, uint64_t deadline, cJSON **de
         e = gw_gatt_nrf_recover(command, deadline, details);
         if (e != ESP_ERR_TIMEOUT && e != ESP_ERR_NOT_FINISHED) {
             gw_core_maintenance_release(gw_action_string(command, "taskId"));
-            e = journal_finish("actions/current", j, e, *details);
+            e = journal_finish("actions/current", j, e, *details, NULL);
             j = NULL;
         }
     }

@@ -8,10 +8,25 @@ static bool fail_store;
 static unsigned effects, transactions;
 static esp_err_t effect_result, recover_result;
 static char maintenance[129];
+bool gw_capture_upload_valid(const cJSON *v) {
+    const cJSON *batch = cJSON_GetObjectItemCaseSensitive(v, "batchMaxRecords"),
+                *flush = cJSON_GetObjectItemCaseSensitive(v, "flushIntervalMs");
+    return cJSON_IsNumber(batch) && cJSON_IsNumber(flush) && batch->valueint >= 1 &&
+           batch->valueint <= 1000 && flush->valueint >= 100 && flush->valueint <= 60000;
+}
+esp_err_t gw_capture_configure_upload(const cJSON *v) {
+    return gw_store_put_json("capture/upload", v);
+}
+cJSON *gw_capture_upload_configuration(void) {
+    cJSON *v = gw_store_get_json("capture/upload");
+    return v ? v : cJSON_Parse("{\"batchMaxRecords\":64,\"flushIntervalMs\":250}");
+}
 cJSON *gw_core_state(void) { return cJSON_CreateObject(); }
-esp_err_t gw_core_wifi_scan(bool active,uint64_t deadline,cJSON **aps) {
-    (void)active; (void)deadline;
-    *aps=cJSON_Parse("[{\"ssid\":\"ap\",\"bssid\":\"11:22:33:44:55:66\",\"channel\":1,\"rssi\":-50,\"security\":\"WPA2_PSK\"}]");
+esp_err_t gw_core_wifi_scan(bool active, uint64_t deadline, cJSON **aps) {
+    (void)active;
+    (void)deadline;
+    *aps = cJSON_Parse("[{\"ssid\":\"ap\",\"bssid\":\"11:22:33:44:55:66\",\"channel\":1,\"rssi\":-"
+                       "50,\"security\":\"WPA2_PSK\"}]");
     return ESP_OK;
 }
 uint64_t gw_core_mono_ms(void) { return 100; }
@@ -190,6 +205,9 @@ int main(void) {
     assert(gw_actions_configure(patch, complete, 1, 10000, &out) == ESP_OK);
     cJSON_Delete(out);
     assert(effects == 1 && transactions == 1);
+    assert(gw_actions_recover_config(patch, complete, 1, &out) == ESP_OK);
+    cJSON_Delete(out);
+    assert(effects == 1);
     assert(gw_actions_configure(patch, complete, 1, 10000, &out) == ESP_OK);
     cJSON_Delete(out);
     assert(effects == 1);
@@ -256,6 +274,34 @@ int main(void) {
     cJSON_Delete(out);
     assert(effects == 1);
     cJSON_Delete(ota);
+    reset_test();
+    cJSON *upload_patch = cJSON_Parse("{\"upload\":{\"batchMaxRecords\":100}}"), *up = NULL;
+    cJSON_AddItemToObject(complete, "upload",
+                          cJSON_Parse("{\"batchMaxRecords\":100,\"flushIntervalMs\":250}"));
+    assert(gw_actions_configure(upload_patch, complete, 10, 10000, &out) == ESP_OK && effects == 0);
+    cJSON_Delete(out);
+    up = gw_capture_upload_configuration();
+    assert(cJSON_GetObjectItemCaseSensitive(up, "batchMaxRecords")->valueint == 100 &&
+           cJSON_GetObjectItemCaseSensitive(up, "flushIntervalMs")->valueint == 250);
+    cJSON_Delete(up);
+    cJSON_Delete(upload_patch);
+    upload_patch =
+        cJSON_Parse("{\"scan\":{\"enabled\":true},\"upload\":{\"flushIntervalMs\":500}}");
+    cJSON_ReplaceItemInObjectCaseSensitive(cJSON_GetObjectItemCaseSensitive(complete, "upload"),
+                                           "flushIntervalMs", cJSON_CreateNumber(500));
+    assert(gw_actions_configure(upload_patch, complete, 11, 10000, &out) == ESP_OK && effects == 1);
+    cJSON_Delete(out);
+    cJSON_Delete(upload_patch);
+    cJSON *diagnostic = command("wifi-diagnostics", "DIAGNOSTICS"),
+          *params = cJSON_GetObjectItemCaseSensitive(diagnostic, "parameters");
+    cJSON_AddStringToObject(params, "profile", "NETWORK");
+    cJSON_AddStringToObject(params, "wifiScan", "PASSIVE");
+    assert(gw_actions_execute(diagnostic, 10000, &out) == ESP_OK);
+    cJSON *ap = cJSON_GetArrayItem(cJSON_GetObjectItemCaseSensitive(out, "accessPoints"), 0);
+    assert(cJSON_GetObjectItemCaseSensitive(ap, "rssiDbm")->valueint == -50 &&
+           !strcmp(gw_action_string(ap, "authentication"), "WPA2_PSK"));
+    cJSON_Delete(out);
+    cJSON_Delete(diagnostic);
     cJSON_Delete(patch);
     cJSON_Delete(complete);
     cJSON_Delete(database);
