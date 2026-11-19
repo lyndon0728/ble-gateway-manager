@@ -4,11 +4,13 @@
 
 本文以仓库中的 [OpenAPI](../internal/platform/assets/openapi.json)、[消息 Schema](../internal/platform/assets/message-contracts.schema.json) 和服务器业务校验为准。服务器能创建任务，不等于网关已执行；以下职责与交付状态须分别验收。
 
+2026-11-19 三方文档统一基线：**[GW32-E2E-1.0](../../docs/gateway-end-to-end-standard.md)**。本次不改变线上 Schema、API 或功能；跨层语义和待补齐项按该标准处理。[平台专项需求](gateway-platform-requirements.md) / [平台开发文档](gateway-platform-development.md) 是本协议的实现及验收映射。
+
 | 层级 | 当前提供的内容 | 尚需完成的执行与验证 |
 | --- | --- | --- |
 | 服务器 | 配置/能力/权限校验，持久任务与 ACK，广播字段，UUID 解析和自动连接规则，NRF54 组件 OTA 制品与结果校验 | 与真实 ESP 执行器联调及部署验证 |
 | nRF54L15 | 独立固件源码、UART 扫描/过滤/Central/广播/Peripheral，以及可选 MCUboot UART DFU | 目标 SDK 构建、镜像签名及实板验证，见 [验证记录](../../firmware/nrf54l15/VALIDATION.md) |
-| ESP32-S3 | 本文规定的执行、持久化和恢复契约 | **本仓库尚未提供生产 ESP 执行器**：网络切换、原生 BLE、双路去重、UART 转换、OTA 下载/传输/确认均需接入 |
+| ESP32-S3 | [0.2.1 固件](../../firmware/esp32s3/README.md)：HTTPS、UART、采集/spool、本地/远程配网、本地/远程 ESP OTA 与 nRF OTA；已有主机测试和目标构建 | MQTT、实际广播状态核对、本机 BLE 部分能力、nRF 硬件恢复等缺口见统一标准；实板及整机链路待验收 |
 
 示例中的网关、对端、任务、制品和摘要必须替换为实际已登记值。JSON 中的时间仅说明格式；创建任务时 `expiresAt` 必须晚于服务器当前时间，且不超过未来 7 天，不能直接重用文档日期。下文将内层 `configuration` 示例与完整 API 请求明确区分。
 
@@ -43,6 +45,8 @@ flowchart LR
 ## MQTT topic 与 HTTP 等价接口
 
 所有网关业务 MQTT 消息使用 QoS 1、`retain=false`。重复是预期行为；PUBACK 不是应用 ACK。
+
+MQTT 与 HTTPS 是保留的双传输需求，载荷和应用确认语义相同；当前 ESP 固件实现 HTTPS，尚缺 MQTT 适配（C02）。不能把平台 MQTT 已实现等同于设备已经支持，也不能因此删除 MQTT 需求。
 
 | 方向 | MQTT topic | HTTP |
 | --- | --- | --- |

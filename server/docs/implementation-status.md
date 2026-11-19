@@ -1,5 +1,7 @@
 # 服务器 0.2.0 实现与验收范围
 
+2026-11-19 三端贯通文档补充：[统一标准 GW32-E2E-1.0](../../docs/gateway-end-to-end-standard.md)、[平台对接需求](gateway-platform-requirements.md)和[平台贯通开发文档](gateway-platform-development.md)。这些文档统一 nRF54L15、ESP32-S3 与平台的接口及验收边界，保留全部既有功能；本轮文档更新不表示源代码缺口已补齐或真实硬件已贯通。当前 ESP MQTT 适配、nRF 独立可信组件源版本库存、ESP 原生部分 BLE 角色/安全模式仍须按开发文档逐项完成与验证。
+
 此文保留 0.2.0 服务器交付基线。当前 0.4.0 的 AI 和协议增量见 [AI 功能实现说明](ai-implementation.md)。0.3.0 已新增 24 页管理控制台和 13 个读取接口，当前增量及验证见 [前端实现说明](frontend-implementation.md) 与 [0.3.0 验证报告](frontend-validation.md)。
 
 本版在 V1.7 分层实现基础上适配 GW32I33V2 嵌入式协议 1.1，API 契约版本 1.8.0。目标是客户服务器上的单机可运行版本；管理与数据可分进程运行，使用本机 SQLite WAL 数据库。原有参考协议 1.0 保留；新型号按已提供的 ESP—服务器与 UART 设计稿实现服务端和模拟器，真实固件尚需联调。

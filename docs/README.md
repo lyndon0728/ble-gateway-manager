@@ -6,15 +6,19 @@
 
 | 顺序 | 文档 | 用途 |
 | --- | --- | --- |
+| 0 | **[三方贯通统一标准 GW32-E2E-1.0](gateway-end-to-end-standard.md)** | nRF、ESP、平台唯一职责/映射口径，C01～C11 冲突与源码缺口 |
 | 1 | [系统需求与验收清单](gateway-requirements.md) | 理解服务器、ESP和nRF职责及整机范围 |
-| 2 | [ESP32-S3详细需求](esp32s3-requirements.md) | 170条需求和44个专项验收场景 |
+| nRF | [nRF54L15需求](nrf54l15-requirements.md) / [开发文档](nrf54l15-development.md) | 既有系统需求映射、UART/BLE/广播/Peripheral/DFU 实现与贯通边界 |
+| 2 | [ESP32-S3详细需求](esp32s3-requirements.md) | 182条需求和50个专项验收场景 |
 | 3 | [ESP32-S3开发指南](esp32s3-development.md) | 工程结构、模块接口、调度/状态机、双OTA和实施步骤 |
+| 平台 | [平台贯通需求](../server/docs/gateway-platform-requirements.md) / [开发文档](../server/docs/gateway-platform-development.md) | 59条三方集成需求、11项贯通验收；保留平台其他功能 |
 | 配网专题 | [本地网页与平台远程网络配置](esp32s3-network-provisioning.md) | SoftAP、手机/笔记本、密码部署、在线/离线保存和版本对账 |
+| OTA专题 | [ESP本地与远程OTA](esp32s3-ota.md) | 签名制品、授权、候选槽、启动确认与恢复 |
 | 4 | [ESP持久化与恢复设计](esp32s3-persistence.md) | 对象、提交、接管、重放、GC与掉电恢复 |
 | 5 | [ESP验证计划](esp32s3-validation-plan.md) | 测试步骤、故障注入、证据、覆盖和阶段门槛 |
 | 6 | [系统对接指南](gateway-integration.md) | 两层协议的端到端时序 |
 | 接口依据 | [UART协议](../server/docs/gateway-uart-protocol.md) / [服务器协议](../server/docs/gateway-protocol.md) | 二进制字段和云端消息的权威定义 |
-| 现有实现 | [nRF工程](../firmware/nrf54l15/README.md) / [服务器联调](../server/docs/protocol-v11-integration.md) | 实际源码、工具、模拟器及其验证边界 |
+| 现有实现 | [nRF工程](../firmware/nrf54l15/README.md) / [ESP工程](../firmware/esp32s3/README.md) / [服务器联调](../server/docs/protocol-v11-integration.md) | 实际源码、工具、模拟器及其验证边界 |
 
 ## 后续文档格式
 
@@ -25,7 +29,7 @@
 ## 内容与变更规则
 
 1. 每份文档写明日期、版本、依据与状态：设计、已实现、已测试分别描述。
-2. 需求使用稳定`ESP-*`编号；验收使用`ESP-AT-*`，已有编号不重复分配或因排序改变。
+2. 保持已有系统需求及 `ACC-*`、`ESP-*`/`ESP-AT-*` 编号；nRF专项映射原系统编号，平台专项使用其独立编号。已有编号不重复分配或因排序改变。
 3. 开发函数名/目录若尚不存在，标注“计划接口/计划目录”；构建命令给出前提，不能把未执行命令写为成功记录。
 4. 外部协议变化须同步两层协议、Schema和实现，再更新需求、设计与验证映射；内部状态不得直接变成新线上字段。
 5. 用相对路径连接仓库内资料；使用官方来源链接核对外部API，并记录SDK版本。不要只引用本机绝对路径作为可交付依据。

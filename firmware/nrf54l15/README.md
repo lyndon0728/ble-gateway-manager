@@ -19,7 +19,7 @@ SDK 版本是本次新工程选定的基线，原工程没有已有 SDK 锁定�
 
 Zephyr 的扫描回调可能将已绑定设备的空中 RPA 替换为 identity address，且不会保留原始地址类型。为避免把 identity 冒充空中 MAC，本版本对匹配已保存 bond identity 的报告发送 `addr_type=0xFF`、全零地址，原始广播数据仍可上传。服务器不能按此地址自动连接；真实 identity 广播也会被保守地标为未知。关闭 `CONFIG_BT_PRIVACY` 无法关闭这条 Host IRK 解析路径。要让已绑定设备的 RPA 也参与原始地址去重/自动连接，需要后续接入原始 HCI 报告或扩展显式 identity 字段。
 
-协议来源：[UART 协议 1.1](../../server/docs/gateway-uart-protocol.md)、[ESP ↔ 服务器协议](../../server/docs/gateway-protocol.md)。完整范围见 [需求与验收清单](../../docs/gateway-requirements.md) 和 [系统对接指南](../../docs/gateway-integration.md)。UUID 16/32/128 位的服务器规则解析与标准化由服务器完成，nRF 接收协议规定的标准形式及连接参数。
+三方共同基准为 [GW32-E2E-1.0 端到端统一标准](../../docs/gateway-end-to-end-standard.md)。协议来源：[UART 协议 1.1](../../server/docs/gateway-uart-protocol.md)、[ESP ↔ 服务器协议](../../server/docs/gateway-protocol.md)；UART 线上帧版本仍为 1，平台 Schema 保持 1.0/1.1。详细要求见 [nRF 专项需求](../../docs/nrf54l15-requirements.md) 与 [nRF 开发文档](../../docs/nrf54l15-development.md)，完整范围见 [需求与验收清单](../../docs/gateway-requirements.md) 和 [系统对接指南](../../docs/gateway-integration.md)。UUID 16/32/128 位的服务器规则解析与标准化由服务器完成，nRF 接收协议规定的标准形式及连接参数。
 
 ## 文件结构
 
@@ -118,7 +118,7 @@ python tools/uart_probe.py --port COM8 dfu confirm D:\release\zephyr.signed.bin 
 
 擦除和完整镜像校验使用 30 秒命令等待；重发须沿用同一控制 ID 和相同内容。下载可跨 UART 重握手续传；nRF 自身复位后从头开始下载，不能把 RAM 中的 accepted_offset 当作断电检查点。重启前 ESP 应接管剩余采集 FIFO，nRF 复位不保留 RAM 记录。未确认试启动默认 120 秒后由运行中的主循环复位并回退，逾期确认返回 STALE；若新程序无法启动或主循环挂起，ESP 必须通过硬件复位触发 MCUboot 回退。不会自动把试启动固件标为永久有效。
 
-服务器组件路由、制品约束和成功结果校验已更新；**本仓库尚无 ESP32 固件执行器**。上述探针是可运行的串口传输参考，ESP 的下载、manifest 验签、任务 journal、GPIO 恢复及整机 OTA 联调仍需接入，不能将其描述为已完成整机 OTA。
+服务器组件路由、制品约束和成功结果校验已有实现；[ESP32-S3 固件](../esp32s3/README.md) 当前已有下载、manifest 验签、任务 journal、nRF UART DFU 传输及新启动校验/确认执行器。上述探针继续作为独立 UART 联调参考。ESP GPIO8 目前仅初始化为输入释放，挂死 nRF 的主动硬件恢复路径仍待完成；独立可信 nRF 版本的平台登记也尚未贯通，详见统一标准 C04、C06。本轮文档核对不代表 nRF NCS 目标构建、真实 MCUboot 验签/掉电回退或整机 OTA 已验收。
 
 ## 主机测试与验证边界
 

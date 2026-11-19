@@ -2,6 +2,8 @@
 
 关联文档：[详细需求清单](../../docs/gateway-requirements.md) · [系统流程与对接指南](../../docs/gateway-integration.md) · [ESP ↔ 服务器协议](gateway-protocol.md)。本文是板内二进制字段和状态机的权威定义。
 
+2026-11-19 三方统一采用 **[GW32-E2E-1.0](../../docs/gateway-end-to-end-standard.md)**；对应 [nRF 需求](../../docs/nrf54l15-requirements.md) / [开发文档](../../docs/nrf54l15-development.md) 与 [ESP 开发文档](../../docs/esp32s3-development.md)。本次文档对齐不改变帧版本、opcode、状态码或二进制字段。ESP `0.2.1` 已有持久化、采集、网络和升级执行源码及目标构建；尚缺的广播状态核对、硬件恢复、Peripheral 平台业务等见统一标准 C03～C05，不能把接口存在当成整机已经完成。
+
 **状态：nRF 固件 0.2.0 的实现接口与 ESP 对接规范。** 本文按 [nRF54L15 源码](../../firmware/nrf54l15/src) 核对；主机测试不能替代 NCS 目标编译、烧录和实板验证，目前尚未完成后三项。适用硬件为 2026 年 10 月 29 日 GW32I33V2 优化版，U1 为 ESP32-S3-WROOM-1-N8R8，U9 为 nRF54L15-QFAA-R；其他原理图版本必须先核对网表。本协议覆盖 ESP 主机控制 nRF 的扫描、Beacon 过滤、GATT Central、对外广播、Peripheral 数据通道及 UART DFU。协议 1.1 保留线上帧版本 `01`，以 HELLO 能力位启用新增操作。ESP 的持久化、去重、联网和升级任务编排是对接方必须实现的责任，本文不表示已有生产级 ESP 固件。[固件构建与验证边界](../../firmware/nrf54l15/README.md) · [原理图 PDF（本地资料）](D:/chat/GW32_AT2401C_Optimized_20261029/GW32_Optimized_Final.pdf) · [最终网表（本地资料）](D:/chat/GW32_AT2401C_Optimized_20261029/evidence/final_v6.net) · [ESP 与服务器协议](gateway-protocol.md)
 
 ## 串口参数

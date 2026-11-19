@@ -1,6 +1,6 @@
 # GW32 系统流程与协议对接指南
 
-基线：2026-11-18；nRF 固件 0.2.0。本文连接 [需求清单](gateway-requirements.md)、[UART 协议](../server/docs/gateway-uart-protocol.md) 与 [服务器协议](../server/docs/gateway-protocol.md)，不引入第三套字段定义。
+文档版本：1.1；基线：2026-11-19；nRF 固件 0.2.0、ESP 固件 0.2.1；统一标准：**[GW32-E2E-1.0](gateway-end-to-end-standard.md)**。本文连接 [需求清单](gateway-requirements.md)、[UART 协议](../server/docs/gateway-uart-protocol.md) 与 [服务器协议](../server/docs/gateway-protocol.md)，不引入第三套字段定义。时序是必须实现的目标流程；具体源码缺口见统一标准 C01～C11。
 
 ESP 执行器的详细开发与验收要求见 [ESP32-S3 软件需求](esp32s3-requirements.md)。
 
@@ -16,7 +16,7 @@ flowchart LR
     E <-->|可选本机 BLE| B
 ```
 
-当前 nRF 和服务端有实现；ESP 框内是真实固件待实现内容。模拟器仅用于软件流程验证，Python 探针仅用于串口联调。
+当前三方均已有实现；ESP 已有目标构建和主机测试证据，nRF 目标构建/实板及整机链路尚未完成。ESP 当前网络路径为 HTTPS，MQTT 仍保留为必需功能并列为 C02 缺口。模拟器仅用于软件流程验证，Python 探针仅用于串口联调。
 
 | 管理意图 | 服务器接口/对象 | ESP 动作 | nRF 接口 |
 | --- | --- | --- | --- |
@@ -26,9 +26,11 @@ flowchart LR
 | 连接与 GATT | GATT_* 任务 / 自动连接规则 | 验证证据、持久意图、序列化副作用、查询结果 | 0x10～0x18；0x0A 连接信息 |
 | Peripheral 手机收发 | 云端业务契约待定义 | 认证、业务解析、路由和业务级 ACK | 上行 0x22；状态 0x0D、通知 0x0E、断开 0x0F |
 | 网络 | CONFIGURE / network | 候选试用、绑定接口探测、应用 ACK 后提交 | 不发送给 nRF |
-| 本地网页配网 | 手机/笔记本→ESP SoftAP安全会话 | 与远程共享候选管理；本地版本和云revision分离，明确离线保存/回退 | 不发送给 nRF；本地及云对账扩展待实现 |
+| 本地网页配网 | 手机/笔记本→ESP SoftAP安全会话 | 与远程共享候选管理；本地版本和云revision分离，明确离线保存/回退 | 不发送给 nRF；源码已有，实际开窗入口/实板待验收 |
 | ESP 本机 BLE | CONFIGURE / radios.esp32 | 本机 BLE 驱动与同一合并队列 | 不发送给 nRF |
 | nRF 升级 | FIRMWARE_UPGRADE / component=NRF54 | 下载校验、journal、维护、恢复与结果证据 | 0x30～0x37 |
+| ESP 远程升级 | FIRMWARE_UPGRADE / component=GATEWAY | 下载验签、候选槽写入、试启动确认、结果证据 | 不发送给 nRF |
+| ESP 本地升级 | 现场授权网页 / Security2 会话 | 与远程共用镜像校验和升级租约；本地状态独立 | 不发送给 nRF |
 
 表中的 `0x10～0x18` 为 CMD_REQ 内的 opcode；它与帧 type `0x10 CMD_REQ` 不是同一个命名空间。
 
@@ -86,6 +88,8 @@ sequenceDiagram
 
 同一 MAC 不等于同一事件。匹配必须区分 AD 字节、ADV/SCAN_RSP 和时间上下文；同无线电重复仍是独立观测。按服务器协议，每条观测最多等待 150 ms，到期选符合 50 ms 时间窗约束、尚未配对且时间差最小的另一射频候选，同差取先入队者。缺少有效时间映射或可比较上下文、以及迟到的记录分别保留。服务器解析与客户投递不阻塞原始持久 ACK。
 
+同一双路采集任务分别向两个 radio 下发等价过滤目标；独立配置能力保留，不能自动覆盖另一 radio 的设置（C10）。双路匹配保留 NRF54 主记录和两路 observedBy，以保留 nRF 自动连接证据；内部缓存批次必须拆成平台允许的每批最多 200 事件。
+
 ## 5. 服务器自动连接
 
 1. 服务器按 AD type 解析 16/32/128 位服务 UUID，保留原始位宽并统一表示。
@@ -116,6 +120,8 @@ sequenceDiagram
 三种 `mode` 是链路属性；Beacon/自定义是载荷格式。服务器下发完整 AD 的 Base64，不直接发送终端命令字符串。广播间隔使用毫秒，不把“每秒次数”当额外无单位字段。
 
 同模式同间隔的内容更新使用在线更新；AD 与 ScanRsp 不是空口原子写。失败须恢复两者，恢复失败转 FAULT。手机已连接时实际状态可以为 PAUSED；关闭目标广播不会强制断开手机。手机 RX 数据不自动执行服务器命令，更不能以公开 GATT 写入替代任务授权。
+
+**当前差距 C03：** ESP 广播路径已有 SET/GET 配置读回，但尚未执行上述 GET_ADV_STATUS 的完整实际状态核对；图中这一步仍为源码待办。**C07：** ESP 本机可连接广播等参数支持集尚未齐备，不能因为平台接受三种模式就宣称两个 radio 都支持。**C05：** Peripheral 到平台的业务封装、认证及回发任务仍需三方冻结。
 
 ## 7. 经 ESP UART 升级 nRF
 
@@ -153,7 +159,7 @@ sequenceDiagram
 | --- | --- |
 | 控制响应丢失 | 沿用同一 msg_id 和内容重试；DFU 使用 30 s 等待 |
 | UART 重握手但 nRF 未重启 | 读 STATUS，核对 session/摘要/偏移；不要重新擦除仍有效下载 |
-| nRF 下载中复位 | 旧 RAM 会话不可作持久证据，重新 BEGIN 从 0 传输 |
+| nRF 下载中复位 | 旧 RAM 会话不可作持久证据；先按 journal 对账，重新传输须有效授权后 BEGIN 从 0；ESP 分阶段恢复缺口 C11 |
 | 块乱序、内容冲突或校验失败 | 停止推进，读取错误，按协议终止或重新开始 |
 | FINISH 成功但未重启 | 仍是 READY，不能报告升级成功 |
 | MCUboot 拒绝镜像或恢复旧镜像 | 新 HELLO 后核对实际镜像；不以相同版本字符串确认 |
@@ -163,16 +169,30 @@ sequenceDiagram
 
 当前服务器要求成功证据绑定任务制品 SHA；设备独立 nRF 版本登记和 `fromFirmwareVersions` 的限制见服务器协议。硬件强制防降级与断电跨启动续传未实现。
 
+**当前差距 C04/C06：** ESP 尚无挂死 nRF 的主动 GPIO8 复位恢复路径；独立可信 nRF 源版本尚未登记。上表硬件回退是必须完成的需求，不是现有代码已执行的事实；平台在无法证明指定源版本时继续拒绝升级，不能拿 ESP 版本代替。
+
+**当前差距 C11：** ESP 当前把 boot 变化统一转入试启动判断，尚未充分区分下载中断和 FINISH/READY 后重启。正常试启动走 VERIFY_RUNNING/CONFIRM；下载中断须先对账，旧 offset 不得跨 boot 使用。有效授权后的重新传输从0开始，不要求同一任务必定自动重传。
+
 ## 8. 本地网页配网与远程配置的衔接
 
 现场授权打开限时SoftAP，手机/笔记本连接后用本机网页认证，填写Wi-Fi/以太网、DHCP/静态IP和主备顺序。本地凭据先安全保存，再建立独立transactionId的候选；实际接口通过TLS/设备身份挑战才显示平台可达。无互联网时用户可明确LOCAL_ONLY保存，保留lastVerified及旧凭据，不伪造云任务或成功修订。
 
-平台远程仍走CONFIGURE→逐接口networkProbe→RESULT_PERSISTED→提交；修改密码先经拟新增秘密安装接口获得设备持久回执，再引用credentialRef。本地改动设置localOverride，联网后由管理员明确采用或覆盖，执行正式任务才同步平台revision。两入口共用网络租约，旧任务/OTA冲突先对账；详细协议和未实现接口见[配网设计](esp32s3-network-provisioning.md)。
+平台远程仍走CONFIGURE→逐接口networkProbe→RESULT_PERSISTED→提交；修改密码先经已有秘密安装扩展获得设备持久回执，再引用credentialRef。本地改动设置localOverride，联网后由管理员明确采用或覆盖，执行正式任务才同步平台revision。两入口共用网络租约，旧任务/OTA冲突先对账；详细协议、实现与旧部署兼容边界见[配网设计](esp32s3-network-provisioning.md)。
+
+平台 configuration/effective 的 `complete=false` 不能用作完整恢复快照（C08）；ESP 使用本机持久完整目标或受控重放。当前普通 SNTP 不提供密码学时间证明（C09），不能宣称可信 UTC 验收已完成。默认构建未启用本地开窗入口，量产前须按实板确认现场授权方式。
+
+### 8.1 ESP 本地与远程 OTA
+
+两入口共同遵循[ESP OTA 协议](esp32s3-ota.md)：先验证授权、签名 manifest、型号/硬件、大小/格式及 SHA，再写非运行槽；新镜像启动后核对健康与运行镜像并确认，失败进入规定回退路径。远程由 GATEWAY 任务驱动，结果持久并等待 RESULT_PERSISTED；本地由已认证会话驱动，不伪造云任务或复用 nRF DFU 命令。网络配置、ESP OTA 和 nRF OTA 的资源租约必须互斥；过期/断连/掉电按 journal 恢复，不能把重启受理当升级成功。
 
 ## 9. 实施与验收入口
 
 | 工作 | 入口 |
 | --- | --- |
+| 三方标准与冲突处理 | [GW32-E2E-1.0](gateway-end-to-end-standard.md) |
+| nRF 需求与开发 | [专项需求](nrf54l15-requirements.md) / [开发文档](nrf54l15-development.md) |
+| ESP 需求与开发 | [专项需求](esp32s3-requirements.md) / [开发文档](esp32s3-development.md) |
+| 平台需求与开发 | [专项需求](../server/docs/gateway-platform-requirements.md) / [开发文档](../server/docs/gateway-platform-development.md) |
 | nRF SDK 构建、板定义及 DFU 变体 | [固件 README](../firmware/nrf54l15/README.md) |
 | 主机测试及验证限制 | [VALIDATION](../firmware/nrf54l15/VALIDATION.md) |
 | 串口帧黄金向量与命令字段 | [UART 协议](../server/docs/gateway-uart-protocol.md) |
@@ -180,4 +200,4 @@ sequenceDiagram
 | 服务器模拟器和自动连接 API 示例 | [协议联调](../server/docs/protocol-v11-integration.md) |
 | 端到端验收用例及未实现清单 | [需求清单第 13～14 节](gateway-requirements.md#13-集成验收清单) |
 
-本次没有生成已验证的可烧录镜像；没有执行真实网络、BLE 空口、目标 Flash 或硬件复位。联调时以实际记录更新验证结论，不把上述时序图视为整机已经执行的证据。
+本次只更新文档，没有重新构建或烧录镜像，没有执行真实网络、BLE 空口、目标 Flash 或硬件复位。既有 ESP 构建产物见其验证记录；不能把构建通过、上述时序图或文档统一视为整机已经贯通的证据。

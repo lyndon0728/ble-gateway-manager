@@ -2,11 +2,11 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 文档版本 / 日期 | 1.0 / 2026-11-19 |
+| 文档版本 / 日期 | 1.1 / 2026-11-19 |
 | 需求依据 | [ESP 专项需求](esp32s3-requirements.md) ESP-NET、ESP-PROV-001～020；[验收计划](esp32s3-validation-plan.md) ESP-AT-17/18、37～44 |
 | 范围 | 手机或笔记本连接网关热点，用浏览器配置上联网；平台远程修改同一组网络参数 |
 | 当前状态 | 本文保留设计契约；对应固件及平台扩展已有源码/部分主机证据，完整实板验收尚未完成 |
-| 协议边界 | 现有服务器消息仍按 [服务器协议](../server/docs/gateway-protocol.md)；本文新增接口明确列为草案，不表示当前 Schema/API 已接受 |
+| 协议边界 | 遵循 [GW32-E2E-1.0 三方贯通标准](gateway-end-to-end-standard.md)与[服务器协议](../server/docs/gateway-protocol.md)；本地接口与平台配网扩展已有源码/Schema，准确字段见[平台联调](../server/docs/network-provisioning-integration.md)，仍须共同部署及实板验收 |
 
 ## 1. 用户操作与职责
 
@@ -56,17 +56,19 @@ SoftAP 是配置入口，STA 是连接现场路由器的上行接口，页面必
 
 开窗须来自明确现场授权，例如已验证的实体操作或维护流程；按钮、引脚和长按动作必须依照实际板卡冻结，本文件不虚构硬件。可在首次出厂安装状态使用预先授权的有限窗口；普通断网/云端失联不得自动变成永久开放热点。平台远程配置 STA 不需要打开 SoftAP；远程开窗没有现成命令，本版不以网络配置字段偷偷实现。
 
+当前固件已有按钮与制造授权开窗入口，但默认 `GW_SETUP_BUTTON_GPIO=-1`、`GW_FACTORY_AUTHORIZED_SETUP=n`，因此默认配置不会打开热点，相关网页/OTA 路由也可能被链接器裁除。交付本地功能前必须按实际板卡启用并验证授权入口；不能把默认目标构建通过等同本地配网已经可用。
+
 网页至少提供：设备型号/标识、连接说明、登录、当前网络脱敏摘要、Wi-Fi 列表与刷新/隐藏网络、密码“保持/替换”、DHCP/静态输入、Ethernet/Wi-Fi 主备、变更预览、验证并应用、明确的仅本地保存、进度/错误、恢复旧配置、退出。
 
-移动端避免把“此网络无互联网”当作失败；指导用户保持连接并打开系统浏览器。AP+STA 同时工作时，STA 所连路由器的信道优先，热点可能迁移信道；浏览器断开不代表配置失败，重连后查询同一个 transactionId。ESP-IDF 对该行为有明确说明。[Wi-Fi 模式与信道](https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-guides/wifi-driver/overview.html)
+移动端避免把“此网络无互联网”当作失败；指导用户保持连接并打开系统浏览器。AP+STA 同时工作时，STA 所连路由器的信道优先，热点可能迁移信道；浏览器断开不代表配置失败，重连后查询同一个 transactionId。ESP-IDF 对该行为有明确说明。[Wi-Fi 模式与信道](https://docs.espressif.com/projects/esp-idf/en/v5.5.6/esp32s3/api-guides/wifi-driver/overview.html)
 
 已知静态子网冲突在试用前处理；DHCP 后才发现冲突时，先迁移 SoftAP 网段并提示/允许客户端重新获取地址，再继续上行验证，不能用重叠路由得到假成功。若预设网段均冲突则拒绝候选并保留原配置。SoftAP 不向 Ethernet/STA 转发客户端流量，也不把管理服务绑定到这些上行接口。
 
-## 4. 本地安全会话与接口草案
+## 4. 本地安全会话与接口契约
 
 ### 4.1 传输选择
 
-首版使用 **SoftAP + HTTP transport + protocomm Security 2**，以 SRP6a 建立会话并用 AES-GCM 保护业务内容；仅提供 Security 2，不提供 security0 或认证失败后的明文兼容路径。该安全组件和 HTTP transport 来自 ESP-IDF，浏览器适配器及网页仍须本项目开发和验证，不能声称官方已提供本项目完整网页客户端。[官方 protocomm](https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-reference/provisioning/protocomm.html)
+首版使用 **SoftAP + HTTP transport + protocomm Security 2**，以 SRP6a 建立会话并用 AES-GCM 保护业务内容；仅提供 Security 2，不提供 security0 或认证失败后的明文兼容路径。该安全组件和 HTTP transport 来自 ESP-IDF；本项目浏览器适配器及网页已有源码和协议测试，真实移动浏览器/实板兼容性仍须验证，不能声称官方已提供本项目完整网页客户端。[固定版本 protocomm](https://docs.espressif.com/projects/esp-idf/en/v5.5.6/esp32s3/api-reference/provisioning/protocomm.html)
 
 HTTP 可返回本地静态页面和最小发现信息；密码、配置、状态细节和控制全部置于已认证加密消息中，禁止普通明文 JSON 配置接口。使用锁定且经过审查的客户端加密实现和协议测试向量，不自创密码算法。检查普通 HTTP 源下浏览器的安全随机数/WASM/所需 API 能力；缺失时停止提交并提示兼容浏览器，不能降级为明文或使用 Math.random。
 
@@ -78,7 +80,7 @@ ESP 固件0.2.1对POST正文设置15 s固定接收预算，收到新字节不续
 
 ### 4.2 HTTP 与加密业务封装
 
-以下是**拟新增本地接口**，与云端 `/api/v1/...` 和 UART 无关。锁定 SDK 时固化 protobuf/session 映射及黄金向量。
+以下是本地接口契约，与云端 `/api/v1/...` 和 UART 分开。入口已由 [gw_provision](../firmware/esp32s3/components/gw_provision/README.md)实现；protobuf/session 映射以已锁定 ESP-IDF v5.5.6 及既有 Security2 协议向量核验，接口存在不替代每项产品要求的实际验收。
 
 | 端点 | 内容 | 权限 |
 | --- | --- | --- |
@@ -145,11 +147,11 @@ PUT_CREDENTIAL、候选创建和应用等修改均检查版本/所有者；已�
 1. 校验权限、候选完整性、引用凭据、版本 CAS 和资源租约，持久保存回退快照。
 2. 试用时间为 120 s 与窗口剩余期限的较小值，以单调时钟计时；浏览器重连不能重新延长。
 3. 按远程配置相同规则验证候选首选接口和 uplinkOrder 中发生变化的接口；DNS、TLS和应用请求实际绑定受测接口。
-4. 使用第 7 节拟新增设备 probe 接口进行随机挑战应答；校验 TLS 主机/证书、设备身份、transactionId、接口、快照标识、nonce 和时限。不伪造云端 taskId/resultId，不借用旧连接应答。
+4. 使用第 7 节设备 probe 接口进行随机挑战应答；校验 TLS 主机/证书、设备身份、transactionId、接口、快照标识、nonce 和时限。不伪造云端 taskId/resultId，不借用旧连接应答。
 5. 全部必要接口通过后原子提交本地快照、lastVerified、generation+1、localRevision+1 和 localOverride；显示“平台已连接，待配置同步”。云端 reportedConfigurationRevision 保持不变。
 6. 超时、任一验证失败、窗口关闭或提交前重启，恢复试用前的实际配置，保留失败记录。整板重启不自动续跑旧 AP 会话或旧挑战。
 
-可信 UTC/设备身份缺失时，不绕过 TLS 日期/主机校验来获得 ONLINE。仍可操作本地认证和保存网络；页面显示 `TIME_UNTRUSTED` 或身份未配置，并走明确的 LOCAL_ONLY。现有普通心跳、MQTT 连接成功或第三方 ping 都不能代替上述带事务绑定的应用证明；新 probe 扩展未实现前不得展示本地 ONLINE 验证通过。
+可信 UTC/设备身份缺失时，不绕过 TLS 日期/主机校验来获得 ONLINE。仍可操作本地认证和保存网络；页面显示 `TIME_UNTRUSTED` 或身份未配置，并走明确的 LOCAL_ONLY。现有普通心跳、MQTT 连接成功或第三方 ping 都不能代替上述带事务绑定的应用证明。probe 在 gw_cloud 和平台已有实现；对未部署该扩展的旧平台，仍不得展示本地 ONLINE 验证通过。当前制造指定 SNTP 不提供密码学认证，时间信任验证按统一标准 C09 保留，不因接口存在视为通过。
 
 ### 5.2 LOCAL_ONLY 是明确选择
 
@@ -169,15 +171,15 @@ PUT_CREDENTIAL、候选创建和应用等修改均检查版本/所有者；已�
 
 平台管理 API `PUT /api/v1/gateways/{id}/configuration` 使用既有权限、If-Match、Idempotency-Key、expectedReportedRevision，生成 CONFIGURE 并由服务器分配 desiredRevision。[配置服务](../server/internal/platform/control.go)
 
-现有 [平台配置页面](../frontend/src/features/gateway/ConfigurationEditor.vue) 已能编辑网络参数和 credentialRef，但缺少密码安装、本地状态对账和冲突裁决。普通 GET configuration 返回最近补丁；管理 GET configuration/effective 合并已验证补丁，仍标记 `complete=false`、`ACKNOWLEDGED_PATCH_NOT_RUNTIME_READBACK`，不是完整设备实况；设备凭据不能当管理员调用。[合并视图与权限](../server/internal/platform/frontend_api.go)
+现有 [平台配置页面](../frontend/src/features/gateway/ConfigurationEditor.vue) 编辑网络参数和 credentialRef，并集成 [网络配网面板](../frontend/src/features/gateway/NetworkProvisioningPanel.vue)提供凭据安装、本地状态查看和对账裁决。普通 GET configuration 返回最近补丁；管理 GET configuration/effective 合并已验证补丁，仍标记 `complete=false`、`ACKNOWLEDGED_PATCH_NOT_RUNTIME_READBACK`，不是完整设备实况；设备凭据不能当管理员调用。设备完整快照恢复缺口按统一标准 C08 管理。[合并视图与权限](../server/internal/platform/frontend_api.go)
 
 远程试用仍完全遵循现有协议：保存 candidate → 逐接口探测 → EXECUTING/NONE 的 networkProbe → 对应 RESULT_PERSISTED 持久 ACK → 原子提交 → SUCCEEDED/VERIFIED。必要 probe 必须已在服务器前一事务接管；不得首发 probe 与成功结果在同批绕过校验。窗口最长 120 s 且受任务 TTL 限制，失败/未提交重启回退。[服务器结果校验](../server/internal/platform/control_gw32.go)
 
-### 6.2 待新增的秘密投递接口
+### 6.2 秘密投递接口
 
 远程修改 SSID 所指网络的密码时，采用“**安装凭据 → 安装回执 → 下发引用 → 试用提交**”。保留 `network.wifiSta.credentialRef`，不往现有配置 Schema 或普通任务加入 password 字段。
 
-| 草案接口 | 调用方与内容 | 完成条件 |
+| 接口 | 调用方与内容 | 完成条件 |
 | --- | --- | --- |
 | `POST /api/v1/gateways/{id}/network-credentials` | 有专项权限管理员，经 TLS 提交 SSID/security/密码、幂等键 | 秘密库加密存储后返回不可变 credentialRef/version；查询和幂等响应不回显密码 |
 | `GET /api/v1/gateway-network-credentials/pending` | 当前设备身份，经 TLS 领取仅本设备待安装凭据 | 身份绑定 namespace/gateway，不接受越权查询参数；禁止缓存、代理/访问日志记录正文 |
@@ -191,7 +193,7 @@ PUT_CREDENTIAL、候选创建和应用等修改均检查版本/所有者；已�
 
 以下是版本化扩展的设计基线。2026-11-19已同步设备源码、服务端、Schema/OpenAPI、权限和页面；准确线上字段及兼容约束见[平台联调文档](../server/docs/network-provisioning-integration.md)。完整双入口交付仍需实板与客户端验收。
 
-| 草案接口 | 关键请求与应答 | 约束 |
+| 接口 | 关键请求与应答 | 约束 |
 | --- | --- | --- |
 | `POST /api/v1/gateway-network-probes` | 设备发送 local transactionId、interface、snapshotId、随机 nonce；返回同值和 receiptId | 通过设备身份和 TLS，nonce 至少 128 随机位、仅当前 boot/期限有效；逐接口连接绑定；服务端持久回执不等于配置已采用 |
 | `PUT /api/v1/gateway-network-state` | 设备上报desiredLocalNetwork与actualNetwork完整脱敏快照、各自snapshotId、当前activeInterface、networkGeneration/localRevision、localOverride、验证状态、最后已知平台修订及本地凭据安装元数据 | 区分保存目标和实际激活配置；以设备身份确定租户/网关；幂等持久后返回同步token，不授予设备分配平台revision的权限 |
@@ -204,9 +206,9 @@ snapshotId 是脱敏完整网络快照的 SHA-256：按 RFC 8785 JSON canonicali
 - `ADOPT_LOCAL`：管理员选择当前已保存的desiredLocalNetwork，界面同时展示actualNetwork及其差异；平台以该完整network建立正常配置任务、分配自己的新revision。即使当前已回退到旧网络，也要试用并验证选定目标，不能仅修改数据库就算成功。
 - `APPLY_PLATFORM`：管理员明确覆盖本地改动，任务绑定所看到的 generation/snapshotId；若现场又修改，拒绝陈旧裁决并重新展示差异。
 - 两种裁决任务均验证候选uplinkOrder中的全部接口，不能只按ESP当前配置计算变化集：平台旧verified快照与设备本地现状可能不同。额外probe仍按既有持久ACK门槛执行。
-- 拟新增独立任务前置条件 `networkPrecondition={expectedNetworkGeneration,snapshotId,resolutionToken}`，其中snapshotId指管理员作裁决时看到的本地已保存目标，属于比较基线，不是APPLY_PLATFORM的新候选摘要。resolutionToken须绑定设备、裁决动作、基线世代/摘要、候选network摘要及唯一任务，重放同任务幂等，不能授权另一任务。该前置条件不塞进现有network对象，需要同步任务Schema/验证/hash/签名语义后才能发送；普通网络任务也应带expectedNetworkGeneration防陈旧写入。
+- 独立任务前置条件 `networkPrecondition={expectedNetworkGeneration,snapshotId,resolutionToken}` 已纳入平台扩展及设备执行器，其中snapshotId指管理员作裁决时看到的本地已保存目标，属于比较基线，不是APPLY_PLATFORM的新候选摘要。resolutionToken须绑定设备、裁决动作、基线世代/摘要、候选network摘要及唯一任务，重放同任务幂等，不能授权另一任务。该前置条件不塞进现有network对象；共同部署时同步任务Schema/验证/hash/签名语义，普通网络任务也应带expectedNetworkGeneration防陈旧写入。
 - 正常平台任务提交时推进 networkGeneration、正确回报平台 revision，清除该次裁决覆盖的 localOverride；localRevision 保留历史值。不能把本地 revision 填入 reportedConfigurationRevision。
-- 新扩展未实现时，发生本地改动的设备必须保留覆盖保护，拒绝自动接受冲突的远程网络任务，并用现有允许的失败结果表达无法执行；不得忽略 schema 擅加字段。页面注明未具备对账能力，完整双入口功能不放行。
+- 与未实现或未部署扩展的旧平台兼容时，发生本地改动的设备必须保留覆盖保护，拒绝自动接受冲突的远程网络任务，并用现有允许的失败结果表达无法执行；不得忽略 schema 擅加字段。该组合的页面须注明未具备对账能力，完整双入口功能不放行。
 
 设备的 `lastKnownPlatformRevision` 是最近可验证的平台修订，不是专用网络序号；平台其他配置组的修订变化不代表本地网络被同步。离线产生多次本地提交时按最新快照对账，同时保留有界审计历史及未终结事务证据。
 
@@ -223,16 +225,16 @@ snapshotId 是脱敏完整网络快照的 SHA-256：按 RFC 8785 JSON canonicali
 | Flash 满/损坏 | 准入前预留凭据/事务/回退/审计空间；不可持久不试用，不假报保存成功 |
 | Wi-Fi/BLE 共存 | 有界扫描和页面请求；采集/持久接管继续；实际降级/丢包可诊断，不静默改云端 BLE 目标 |
 
-新增计划组件 `gw_provision` 管理 SoftAP、网页、加密会话和授权窗口；`gw_network` 独占候选与实际接口；`gw_credentials` 管理秘密及不可变引用；`gw_store` 提交事务；`gw_cloud` 处理现有任务和新增对账。网络驱动试用使用 RAM 配置，不能让驱动自动写 NVS 绕过统一提交/回退；锁定 IDF 后核对 `esp_wifi_set_storage` 等实际行为。
+实际组件 `gw_provision` 管理 SoftAP、网页、加密会话和授权窗口；`gw_core` 内部的网络/凭据/存储模块负责候选与实际接口、秘密及不可变引用、持久事务；`gw_cloud` 处理任务、秘密投递、probe 和状态同步。逻辑职责仍按[开发指南](esp32s3-development.md)分离，不假定每个职责都有独立组件目录。当前网络驱动使用 `esp_wifi_set_storage(WIFI_STORAGE_RAM)`，试用不通过驱动自动写 NVS 绕过统一提交/回退；真实掉电恢复仍须验证。
 
 存储扩展详见[持久化设计](esp32s3-persistence.md)。建议物理/逻辑分离：秘密实体在加密凭据区，事务仅引用 credentialRef/version；未发布或写入一半的秘密不可被候选引用。窗口/session 密钥不跨启动恢复；业务 transaction/journal、版本、回退引用和结果必须恢复。
 
-实现分期：先做本地受保护页面与配置事务，再做远程秘密安装和本地状态对账扩展，最后完成手机/笔记本与真实双接口验收。平台已有网络表单不能替代 ESP 执行器；ESP-IDF 示例不能直接证明已具备本地浏览器安全客户端。
+当前本地页面/配置事务、远程秘密安装和本地状态对账已有源码，后续按统一标准关闭差距并完成手机/笔记本与真实双接口验收。平台已有网络表单不能替代 ESP 执行器；ESP-IDF 示例不能直接证明本项目的浏览器安全客户端或整机验证已通过。
 
 ## 9. 验收与未冻结项
 
 本功能新增 ESP-PROV-001～020 和 ESP-AT-37～44，完整步骤见[验证计划](esp32s3-validation-plan.md)。至少覆盖首次无网、隐藏 SSID、错误密码、静态冲突、AP 信道迁移、浏览器重连、认证攻击、凭据安装失败、掉电各提交点、完全离线的远程任务、双入口冲突及 OTA 互斥。
 
-上线前必须冻结：实际现场开窗动作、制造标签和 setup 凭据重置、浏览器密码客户端/静态页信任方案、IDF/组件版本、分区/秘密库、云端扩展 Schema/ACL/幂等和迁移、国家信道、后台重试/容量及共存指标。已加入固件和平台扩展，浏览器/协议/服务器主机测试已有证据；目标构建及其余验证的实际状态见[固件VALIDATION](../firmware/esp32s3/VALIDATION.md)，实板及完整手机兼容验收仍待执行。
+当前工程已锁定 ESP-IDF v5.5.6、NimBLE、CH390 0.4.1，并有分区/秘密存储实现、平台扩展 Schema/ACL/幂等及数据库迁移。上线前仍须按目标部署核实现场开窗动作、制造标签和 setup 凭据重置、静态页信任、分区容量/Flash 寿命、秘密库保护与恢复、共同部署/迁移、国家信道、后台重试及共存指标。浏览器/协议/服务器主机测试已有证据；目标构建及其余验证的实际状态见[固件VALIDATION](../firmware/esp32s3/VALIDATION.md)，实板及完整手机兼容验收仍待执行。
 
-官方参考：2026-11-19 查阅的 ESP-IDF stable 页显示 v6.1.1，仅作为能力参考，不锁定工程 SDK。另见 [Wi-Fi 驱动 API](https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-reference/network/esp_wifi.html) 和 [JSON Canonicalization Scheme](https://www.rfc-editor.org/rfc/rfc8785)。
+工程 API/Kconfig 以已锁定 v5.5.6 核对，浮动 stable 页不改变编译基线。参考 [Wi-Fi 驱动 API](https://docs.espressif.com/projects/esp-idf/en/v5.5.6/esp32s3/api-reference/network/esp_wifi.html) 和 [JSON Canonicalization Scheme](https://www.rfc-editor.org/rfc/rfc8785)。本版 1.1 只修正文档现状、补统一标准引用和兼容说明，不改变既有接口、功能或验收编号。

@@ -2,28 +2,53 @@
 
 | 项目 | 基线 |
 | --- | --- |
-| 文档版本 / 日期 | 1.2 / 2026-11-19 |
+| 文档版本 / 日期 | 1.3 / 2026-11-19 |
 | 输入需求 | [ESP32-S3 需求规格](esp32s3-requirements.md)：182 条需求、50 个验收用例 |
-| 对接对象 | nRF54L15 应用 0.2.0；UART 协议 1.1、线上 frame version=1；服务器既有 1.0/1.1 消息 |
+| 对接对象 | [GW32-E2E-1.0 三方贯通标准](gateway-end-to-end-standard.md)；ESP 应用 0.2.1、nRF54L15 应用 0.2.0；UART 协议文档 1.1、线上 frame version=1；服务器既有 1.0/1.1 消息 |
 | 当前状态 | 设计已形成，ESP工程和平台配网扩展已有源码；验证状态见固件VALIDATION |
 | 配套文档 | [本地与远程配网](esp32s3-network-provisioning.md)、[本地与远程 OTA](esp32s3-ota.md)、[持久化与恢复设计](esp32s3-persistence.md)、[验证计划](esp32s3-validation-plan.md)、[文档维护约定](README.md) |
 
 本文把需求转为模块、接口、状态、恢复算法和开发步骤。2026-11-19已新增[固件工程](../firmware/esp32s3/README.md)；以下逻辑模块和拟议接口保留设计职责，实际组件合并、API及容量以源码和[实现决策](../firmware/esp32s3/IMPLEMENTATION.md)为准，测试证据见[验证记录](../firmware/esp32s3/VALIDATION.md)。设计中的名称不自动成为同名C接口或测试入口。线上字段仍以 [UART 协议](../server/docs/gateway-uart-protocol.md)、[服务器协议](../server/docs/gateway-protocol.md) 和两份 JSON Schema 为准。
 
+本版仅统一三方文档，保留 182 条需求和 50 项验收。跨端语义冲突采用 GW32-E2E-1.0；源码与标准的差距按同名 C01～C11 登记，不能用改写需求来掩盖。文档修订号不触发线上 UART/JSON 版本变化。
+
 ## 1. 开发约束与技术决策
 
 | 类别 | 决策 | 落地要求 |
 | --- | --- | --- |
-| 工程框架 | 使用 ESP-IDF 组件工程、FreeRTOS 和 C；协议/算法核心保持可主机编译 | IDF、工具链及所有第三方组件在 M0 锁定；不在文档中假定已安装 |
-| BLE Host | 优先评估 ESP-IDF 支持的 BLE Host，最终选择必须覆盖扫描、广播与所需 GATT | 选择结果、版本和共存压力数据记入 Markdown 决策记录；不同时维护两套未经验证路径 |
+| 工程框架 | ESP-IDF v5.5.6 组件工程、FreeRTOS 和 C；协议/算法核心保持可主机编译 | 使用工程锁定依赖和同版 CI；目标构建记录与实板验收分别保存 |
+| BLE Host | 当前采用 NimBLE，支持范围按本机实现及运行时能力核验 | 版本选择已写入实现决策；可连接广播、绑定安全及共存差距逐项保留，不借 nRF 能力扩大 ESP 声明 |
 | 芯片通信 | 一条 UART1，单控制请求，异步 RX/TX/持久完成事件 | 重用协议向量，不使用通用 AT 命令替换已有二进制协议 |
-| 存储 | 单一写入者、追加事务、提交后确认、恢复后重建索引 | 具体记录/根/GC 契约见持久化文档；NVS 只适合的对象才放入 |
+| 存储 | 每个后端串行提交，提交后确认，恢复后重建索引 | 当前低频对象用加密 NVS 快照，高频采集用 gwspool 记录/轮转根；具体原子边界见实现决策，等效实现仍须满足持久化契约 |
 | 外部 JSON | 有界解析、严格字段、无损整数、持久保存服务器摘要 | 不对含 desiredRevision 的最终命令重新计算原 TaskRequest 摘要 |
 | 业务并发 | 一个网关任务执行所有者；UART、接管、网络和存储继续独立推进 | 不能把一次 30 s DFU 响应等待写成阻塞整个主循环 |
-| SDK / 板版本 | 未冻结项显式保留 | 不猜 CH390H 引脚/驱动版本，不把 Oct29 板定义自动用于新 PCB |
+| SDK / 板版本 | SDK/BLE Host 已锁定，CH390 组件为 0.4.1；目标板引脚单独冻结 | 不猜 CH390H/按钮 GPIO，不把 Oct29 板定义自动用于新 PCB；GPIO8 受控复位链仍须补实现与实测 |
 | 文档 | 后续新增和更新的项目说明统一 Markdown `.md` | JSON/YAML/CSV 等机器契约或真实配置保持其原生格式，不把它们误改为文档 |
 
-ESP-IDF 的组件模型和 `idf.py` 构建入口用于组织目标工程；FreeRTOS 的核亲和、栈参数和同步 API 必须按锁定的 IDF 版本核对，不能套用其他 FreeRTOS 移植的默认约定。[组件构建](https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-guides/build-system.html) · [IDF FreeRTOS](https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-reference/system/freertos_idf.html)
+ESP-IDF 的组件模型和 `idf.py` 构建入口用于组织目标工程；FreeRTOS 的核亲和、栈参数和同步 API 必须按锁定的 IDF 版本核对，不能套用其他 FreeRTOS 移植的默认约定。[组件构建](https://docs.espressif.com/projects/esp-idf/en/v5.5.6/esp32s3/api-guides/build-system.html) · [IDF FreeRTOS](https://docs.espressif.com/projects/esp-idf/en/v5.5.6/esp32s3/api-reference/system/freertos_idf.html)
+
+### 1.1 三方映射与当前实现差距
+
+| 跨端路径 | 固定映射及实现入口 | 必须补齐或验证的证据 |
+| --- | --- | --- |
+| 平台 CONFIGURE → nRF 扫描 | `gw_cloud → gw_actions → gw_nrf_scan`；完整目标 → 0x05/0x06，旧基本扫描兼容语义见 UART 协议 | revision 无损、null RSSI 清除、16/32/128 位 UUID 等价匹配、厂商与 Beacon 掩码过滤；相同业务双路目标由平台分别下发，ESP 不自动改另一侧（C10） |
+| 平台 CONFIGURE → 广播 | `gw_actions → gw_nrf_advertise` 或 `gw_ble_configure`；保存原补丁及合并后的完整目标 | nRF 现执行 0x07/0x08，仅回显配置还不足以确认实际状态；须补 0x0C 读回、PAUSED/FAULT/最后错误及恢复证据（C03）。ESP 当前拒绝可连接模式，保留能力门控和实现差距（C07） |
+| nRF 观测 → ESP → 平台 | UART 0x20/0x21/0x22 → `gw_capture/gw_spool`；ADV/GATT 原始事件按 1.1 上传，Peripheral 进入独立 inbox | 同事务观测/水位、CUSTODY、跨源一对一去重、稳定事件身份、RAW_PERSISTED；Peripheral 业务认证和平台回发仍需统一契约（C05） |
+| UUID 规则 → GATT | 平台创建任务，ESP 检查新鲜 nRF ADV；`gw_actions/gw_gatt` 维护动作、连接和证据 | 规范 UUID 不改写原始 AD；自动连接 radio=NRF54；0x17 终态持久后才推进下一 op_seq；本机绑定安全差距按 C07 管理 |
+| 平台传输 | `gw_http/gw_cloud` 当前实现 HTTPS 设备入口 | MQTT 为保留的产品需求，须补同一任务 journal、spool、应用 ACK 和切换重试路径（C02），不得把 HTTPS 已存在写成双传输均实现 |
+| 本地/远程配网 | `gw_provision → gw_core`；`gw_cloud` 执行远程凭据领取/回执、本地 probe 和状态同步；平台 network_provisioning 扩展 | 源码/Schema 已存在（C01）；仍需真实手机、接口绑定、断网/掉电、双入口竞态验收。设备全量快照恢复缺口为 C08，时间信任差距为 C09 |
+| GATEWAY OTA | `gw_actions/gw_ota`；本地 uploadId 与远程 taskId 分开，均走非运行槽和 90 s 试启动 | 本地离线恢复不依赖服务器/UTC；远程仍检查授权时限，成功结果等待 RESULT_PERSISTED；完整回滚证据待实板验收 |
+| NRF54 OTA | `gw_actions/gw_ota → gw_nrf`；0x30～0x37，默认 120 s 试启动 | GPIO8 当前仅释放为输入，挂死时受控复位/回退链待补（C04）；平台独立 nRF 可信源版本登记待补（C06），不可用 ESP 版本绕过 |
+| NRF54 OTA 重启恢复 | `gw_ota.nrf_transfer` 当前遇 boot 变化直接转 `nrf_trial` | 按 journal 分辨传输中断与试启动，不能直接将旧镜像判作回滚；旧会话失效，允许重新传输时须有效授权、新 BEGIN、offset=0（C11） |
+
+当前具体代码状态可从 [nRF 适配器](../firmware/esp32s3/components/gw_nrf/gw_nrf.c)、[动作调度](../firmware/esp32s3/components/gw_actions/gw_actions.c)、[本机 BLE](../firmware/esp32s3/components/gw_actions/gw_ble.c)、[云端适配器](../firmware/esp32s3/components/gw_cloud/gw_cloud.c)核对。表中的“须补”是后续源码工作单，不表示本次已修改源码。能力发布与验收必须逐目标核对实现、nRF HELLO 和真实验证结果，不能仅凭型号或静态平台清单。
+
+### 1.2 联调顺序与不变量
+
+1. 以统一标准固定字段、枚举、单位和版本域；配置使用 `radios.nrf54/esp32`，GATT 使用 `NRF54/ESP32`，OTA 使用 `NRF54/GATEWAY`。不私改 Schema 名称或将本地 API 的十进制字符串套入云端数值字段。
+2. 平台创建持久任务，ESP 保留原 requestDigest 和完整命令；先持久意图，再执行每个 UART/本机动作，按其真实终态生成结果。局部补丁、完整目标、实际状态分别保存。
+3. 按扫描 → 去重/上传 → UUID 自动连接/GATT → 广播 → 双入口配网 → 双组件 OTA 验证端到端闭环；串口控制、数据接管和任务结果分别取证。测试需包含功能交叠及恢复，不能仅逐接口返回 OK。
+4. 复用原 50 项验收编号，给每个 C01～C11 记录关联用例、三方提交号和证据；实现缺口关闭后再进行真实设备验收。本次文档一致性检查不产生硬件通过记录。
 
 ## 2. 计划工程结构与依赖方向
 
@@ -146,7 +171,7 @@ stateDiagram-v2
 
 维护三种时间：`mono_ms`（本次ESP启动内deadline）、nRF采集单调时钟映射、UTC锚。时间锚带两端启动ID、采样时刻、RTT与误差；TIME_PROBE样本必须未重试且扣除nRF处理时间后的净RTT在0～50 ms。用于某观测的锚须满足其capture_ms距锚≤60 s；不能用新锚给久积压观测强行校时。UTC跳变重建锚，已定稿事件不变。
 
-任务在可信UTC下把expiresAt映射到本启动的单调deadline；GATT还取timeoutMs的较早截止。校时变化后重新审查，但不得让已过期任务重新有效或扩大既有操作预算；ESP重启后不能继续使用旧mono deadline。可信时钟引导与证书策略属于M0待冻结项，不通过禁用TLS校验解决。
+任务在可信UTC下把expiresAt映射到本启动的单调deadline；GATT还取timeoutMs的较早截止。校时变化后重新审查，但不得让已过期任务重新有效或扩大既有操作预算；ESP重启后不能继续使用旧mono deadline。当前实现使用制造指定 SNTP 服务器校时，该时间源未做密码学认证，时间信任与安全冷启动仍按 C09 验收；不能将“已同步”直接写成“可信时间已验收”，也不能通过禁用TLS校验解决。
 
 ## 6. UART 会话状态机与调度
 
@@ -212,7 +237,7 @@ valid_frame(type=20/21/22)
 
 输入JSON采用有界token解析或能保留整数原始字面的等效实现；revision、sequence和计数不得先转换double再截回u64。检查UTF-8、字段集合、数组上限、Base64和数值范围后才分配业务对象。不得只依赖云端已经校验而跳过设备边界。
 
-MQTT与HTTPS共享同一持久对象和结果队列。每个发送尝试带传输实例ID、身份、batch/result关联和deadline，响应只能推进对应对象。MQTT PUBACK只更新传输统计，不能触发事件回收。设备身份不随接口、IP或重连改变。
+MQTT与HTTPS必须共享同一持久对象和结果队列；当前 0.2.1 仅实现 HTTPS 设备路径，MQTT 补齐项见 C02。每个发送尝试带传输实例ID、身份、batch/result关联和deadline，响应只能推进对应对象。MQTT PUBACK只更新传输统计，不能触发事件回收。设备身份不随接口、IP或重连改变。
 
 | 流 | 版本与匹配 | 持久后动作 |
 | --- | --- | --- |
@@ -263,7 +288,7 @@ requestDigest是服务端原TaskRequest的摘要，保持服务器给出的值�
 
 `STABLE → CANDIDATE_DURABLE → PROBING → WAIT_PROBE_ACK → COMMIT → STABLE`；未提交时失败/重启走`ROLLBACK_LAST_GOOD`。候选窗口最多120 s，并受任务有效期限制。
 
-建议候选探测先使用绑定接口的HTTPS等价结果入口，即使正常上报使用MQTT，也避免复用旧接口会话。具体绑定API在锁定IDF后验证；源地址配置、路由、DNS、TLS与应用应答均须可证明走被测接口，不能只填interface字符串。
+候选探测使用绑定接口的HTTPS等价结果入口，即使后续正常上报使用MQTT，也避免复用旧接口会话。当前绑定实现见 gw_http；源地址配置、路由、DNS、TLS与应用应答仍须通过实板证明走被测接口，不能只填interface字符串。
 
 | 阶段 | 实现要求 |
 | --- | --- |
@@ -281,15 +306,15 @@ requestDigest是服务端原TaskRequest的摘要，保持服务器给出的值�
 
 ### 10.1 本地网页与首次离线部署
 
-gw_provision提供限时SoftAP及手机/笔记本浏览器页面，静态资源全部本地，秘密和控制经protocomm Security2认证加密。默认窗口10min/空闲5min/单次硬上限30min；具体开窗硬件和浏览器适配先冻结再实现。AP+STA信道变化和网段冲突须支持重连后查询同一事务，不能因网页断线重新提交。
+gw_provision提供限时SoftAP及手机/笔记本浏览器页面，静态资源全部本地，秘密和控制经protocomm Security2认证加密。默认窗口10min/空闲5min/单次硬上限30min；浏览器适配已有源码，现场开窗 GPIO 仍须按实板配置并验证。默认按钮未指定且制造开窗授权关闭时没有本地开窗入口；默认构建通过不代表完整网页路由已链接。AP+STA信道变化和网段冲突须支持重连后查询同一事务，不能因网页断线重新提交。
 
 本地在线配置验证候选各必要接口的TLS、设备身份和新鲜平台挑战后才提交；本地没有云任务，不能伪造TaskResult或推进desiredRevision。用户明确选择LOCAL_ONLY可持久保存activeLocalSnapshot和未验证状态，保留lastVerified与旧凭据。网络实际可达、配置已保存、平台已同步分别显示；失败不自动降级成离线成功。
 
 ### 10.2 远程凭据与本地改动对账
 
-平台新增秘密接口经TLS接收并加密存储密码，设备私有领取、加密持久安装并回执后，现有CONFIGURE才引用credentialRef。该扩展没有现成实现，不能在当前network Schema私加password。
+平台秘密接口经TLS接收并加密存储密码，设备私有领取、加密持久安装并回执后，现有CONFIGURE才引用credentialRef。当前设备 gw_cloud/gw_core、平台 network_provisioning、Schema/OpenAPI 及页面已有该扩展源码，必须按[平台联调](../server/docs/network-provisioning-integration.md)共同部署；仍不能在 network Schema 或普通任务中私加 password。
 
-所有网络提交推进networkGeneration，本地另推进localRevision并设置localOverride；config/network保留平台确认快照，network/current独立记录实际本地来源，不把本地改动伪装成平台revision。恢复在线先上报本地状态，管理员明确ADOPT_LOCAL或APPLY_PLATFORM后生成带generation/快照前置条件的正常任务，完成probe/ACK再清除对应override。扩展未实现时阻止陈旧远程网络任务覆盖本地改动，不能伪称已对账。
+所有网络提交推进networkGeneration，本地另推进localRevision并设置localOverride；config/network保留平台确认快照，network/current独立记录实际本地来源，不把本地改动伪装成平台revision。恢复在线先上报本地状态，管理员明确ADOPT_LOCAL或APPLY_PLATFORM后生成带generation/快照前置条件的正常任务，完成probe/ACK再清除对应override。对未部署扩展的旧平台保留兼容保护：阻止陈旧远程网络任务覆盖本地改动，不能伪称已对账。
 
 ## 11. 无线资源与广播控制
 
@@ -316,6 +341,8 @@ gw_provision提供限时SoftAP及手机/笔记本浏览器页面，静态资源�
 - 模式/间隔变化可能重启广告，任务结果必须报告实际状态和错误；本机BLE走等价适配器。
 - 可连接模式要求该目标的ADV+PERIPHERAL能力；手机已连时PAUSED可以正常，enabled=false不等于断开手机。
 - 恢复配置来源只能是原持久目标或后续服务器配置任务；不创造临时revision。nRF BEGIN的维护暂停和Central自暂停不修改配置revision。
+
+上述为要求的完整路径。当前 gw_nrf_advertise 只执行 0x07 写入及 0x08 配置读回，没有完成 0x0C 实际状态核对（C03）；后续补实现时，bit10 可用须读 0x0C，旧兼容路径按协议通过 0x08/0x09 取得足够证据。不能把可选的 0x0B 优化当成取消实际状态核验的理由。广播字段没有可直接设置 RF 发射功率的属性；载荷中的 Tx Power/测距参考字节仍只是内容，不能赋予隐藏控制含义。
 
 ESP自己的BLE扫描/广播必须有独立驱动验证和能力声明；不能因nRF支持而授予ESP32_BLE_PERIPHERAL。Wi-Fi共存参数与扫描空档归入压力验证，不在此承诺同步双扫描无损。
 
@@ -382,7 +409,8 @@ BEGIN不是删除现有RAM FIFO；开始维护后可一边下载一边接管剩�
 | 同boot、FAULT | 原session ABORT成功后才能重新开始；失败保持维护并诊断 |
 | 同boot、ABORTED | 新任务/允许重试需新session；旧session不可重开 |
 | REBOOT_PENDING | 等启动变化；拒绝ABORT，不能无限重发延长倒计时 |
-| 新boot、IDLE | 先读running_confirmed、版本并核验实际主镜像；可能试启动、已确认或回滚，不能仅凭IDLE判断失败 |
+| 新boot、IDLE，journal 证明仍在传输且未执行 FINISH | 记录下载中断，废弃旧 session/offset；核验实际运行镜像和确认状态。若有效授权、期限及恢复策略允许重新传输，以新 BEGIN 从零开始；不要求同任务必自动重传 |
+| 新boot、IDLE，FINISH 结果不明或已到 READY/REBOOT/确认阶段 | 先读 running_confirmed、版本并核验实际主镜像；区分试启动、已确认、回滚或未知状态，不能仅凭 IDLE 判断失败或重新传输 |
 | 明确旧下载中断且仍为已确认旧镜像 | 任务仍有效并允许重试时，重新BEGIN从0；旧RAM offset无效 |
 | 期望镜像实际已确认、结果未交付 | 恢复原成功证据/结果，不重传镜像 |
 
@@ -390,13 +418,15 @@ BEGIN不是删除现有RAM FIFO；开始维护后可一边下载一边接管剩�
 
 成功详情沿用component=NRF54、firmwareVersion、nrfBootId、bootConfirmed、imageSha256。nRF源版本没有独立服务器登记，非空fromFirmwareVersions受当前服务端限制，不能拿ESP版本替代。错误MCUboot签名可能直到启动才被拒绝，不保证FINISH阶段能识别。
 
+**当前恢复缺口 C11：** [gw_ota.c](../firmware/esp32s3/components/gw_actions/gw_ota.c) 的 nrf_transfer 对 boot 变化直接调用 nrf_trial，后者可能因仍运行已确认旧版本而记录 ROLLED_BACK，没有先按持久阶段分辨传输中断。后续源码必须按上表分支恢复，保留 FINISH 意图不明时的镜像核验；不能跨 boot 续传旧 RAM 会话，也不能无有效授权自动 BEGIN。是否重新开始由既有授权和恢复策略决定。本次仅记录差距，原 ESP-AT-28/36 应覆盖传输中重启与 FINISH/READY 后重启两类证据。
+
 ### 13.3 ESP 自身 OTA
 
 先核对nRF没有未完成确认义务和不可安全中断的动作，再写ESP非运行应用槽。必须保存升级journal、当前任务及旧格式读取能力。试运行不做破坏性的共享数据格式迁移；新固件失败后旧应用仍须读懂已接管spool和任务日志。
 
 ESP-IDF 固定 v5.5.6，启用应用回滚，ESP 试启动预算为 90 s。持久 journal 分辨 LOCAL 与远程来源；两个入口都核对实际运行槽、完整镜像 SHA/版本、存储/身份、关键模块及 nRF 健康。远程继续检查任务授权、可信时间和可用上联；本地离线试启动不以互联网/UTC 为必要条件。服务器目前对 GATEWAY 成功主要检查版本/VERIFIED，设备仍须取得实际启动和运行镜像证据。
 
-只支持应用槽升级，不通过当前任务更新ESP bootloader、分区表、凭据或nRF bootloader。安全启动/加密/eFuse、防降级与救援策略进入制造设计，不能因文档更新自动执行不可逆配置。[ESP应用OTA与回滚](https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-reference/system/ota.html)
+只支持应用槽升级，不通过当前任务更新ESP bootloader、分区表、凭据或nRF bootloader。安全启动/加密/eFuse、防降级与救援策略进入制造设计，不能因文档更新自动执行不可逆配置。[ESP应用OTA与回滚](https://docs.espressif.com/projects/esp-idf/en/v5.5.6/esp32s3/api-reference/system/ota.html)
 
 ### 13.4 本地网页 OTA 实现
 
@@ -506,11 +536,11 @@ idf.py -B build-gw32 size
 
 | 决策 | 完成前不能声称的能力 | 记录要求 |
 | --- | --- | --- |
-| IDF/BLE Host/CH390H及板版本 | 目标可构建和实际网口可用 | 版本、来源、许可证、兼容证据、选定引脚 |
+| 板版本、CH390H/开窗 GPIO 及受控 nRF reset | 新板网口/现场开窗可用、nRF 挂死自动回退 | IDF v5.5.6/NimBLE/CH390 0.4.1 已锁定；另记录实际引脚、复位电路与板上验证，不能将二者混为未选 SDK |
 | Flash布局/后端/寿命/GC | 离线容量与掉电可靠性 | 分区、记录格式版本、最大镜像、写放大和故障注入 |
 | UTC引导与凭据制造 | 安全冷启动和TTL任务执行 | 信任根、时间来源、密钥轮换及恢复流程 |
 | BLE Peripheral手机认证/云端数据契约 | BLE手机业务或云端双向闭环 | Schema/权限/业务ACK/抗重放/迁移版本，与Wi-Fi网页配网分开 |
-| 本地网页/平台配网扩展 | 安全浏览器配网和双入口网络闭环 | 开窗、制造凭据、浏览器加密与网页信任、秘密投递、对账Schema及实板证据 |
+| 本地网页/平台配网部署与实板验收 | 生产环境安全浏览器配网和双入口网络闭环 | 源码/Schema 已存在；补开窗、制造凭据、浏览器兼容与网页信任、共同部署及真实双接口证据 |
 | 绑定预置及维护 | 通用加密配对管理 | 当前仅预置bond；后续命令/工具及授权 |
 | 双组件健康与安全版本 | 可生产OTA、硬件防降级 | 健康预算、回滚/救援、密钥与不可逆制造步骤 |
 | 峰值负载和停机指标 | 包率、离线时长、共存或恢复性能 | 实测场景、板/SDK/镜像版本、指标与证据 |
