@@ -2,6 +2,8 @@
 
 基线：2026-11-18；nRF 固件 0.2.0。本文连接 [需求清单](gateway-requirements.md)、[UART 协议](../server/docs/gateway-uart-protocol.md) 与 [服务器协议](../server/docs/gateway-protocol.md)，不引入第三套字段定义。
 
+ESP 执行器的详细开发与验收要求见 [ESP32-S3 软件需求](esp32s3-requirements.md)。
+
 ## 1. 两层接口及数据责任
 
 ```mermaid

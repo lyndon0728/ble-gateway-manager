@@ -4,6 +4,8 @@
 
 本文把用户需求拆分为可实现、可联调和可验收的条目。二进制字段以 [UART 协议](../server/docs/gateway-uart-protocol.md) 为准；服务器消息字段以 [服务器协议](../server/docs/gateway-protocol.md)、[消息 Schema](../server/internal/platform/assets/message-contracts.schema.json) 和 [OpenAPI](../server/internal/platform/assets/openapi.json) 为准。端到端流程见 [对接指南](gateway-integration.md)。
 
+ESP 主机的模块、持久化事务、网络恢复、任务和升级执行细节见 [ESP32-S3 专项需求](esp32s3-requirements.md)。
+
 ## 1. 目标与职责
 
 网关同时支持按规则采集 BLE 广播、受控连接外部 BLE 设备、对外发送 Beacon 或自定义广播，以及通过 ESP32-S3 的网络与 UART 链路升级 nRF54L15。

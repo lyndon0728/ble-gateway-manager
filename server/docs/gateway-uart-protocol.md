@@ -247,7 +247,7 @@ INFO 的能力位是独立命名空间，与 UART HELLO 无关：bit0 表示 RX 
 
 ## ESP 经 UART 升级 nRF
 
-该通道接收已经经过服务器和 ESP 验证的 MCUboot 签名 `app_update.bin`。默认非 DFU 构建不声明能力位 12；启用须具有 MCUboot、可用的双镜像槽和正确的板级验签公钥。服务器制品 manifest 的签名和 MCUboot 镜像签名是两层独立校验：ESP 校验 manifest、SHA-256、目标组件及型号，nRF 的 MCUboot 在启动时验证镜像签名。串口 CRC 与整包 SHA-256 不能替代签名。
+该通道接收已经经过服务器和 ESP 验证、本项目 DFU 构建生成的 MCUboot 签名 `zephyr.signed.bin`。默认非 DFU 构建不声明能力位 12；启用须具有 MCUboot、可用的双镜像槽和正确的板级验签公钥。服务器制品 manifest 的签名和 MCUboot 镜像签名是两层独立校验：ESP 校验 manifest、SHA-256、目标组件及型号，nRF 的 MCUboot 在启动时验证镜像签名。串口 CRC 与整包 SHA-256 不能替代签名。
 
 当前升级范围仅为 nRF 应用，不含 MCUboot 本身、ESP 固件、任意分区或裸 bin。首次安装需通过调试器部署与签名密钥匹配的 MCUboot 和初始签名应用，之后才能走 UART 升级。构建采用已审查的 MCUboot swap-using-offset 双槽模式，上传只写 secondary 槽；必须显式提供部署方签名密钥，不能把 SDK 开发默认密钥作为生产信任根。镜像大小为 `32..max_image_size`，以上限查询值为准；当前官方 664 KiB 槽布局按固件保留空间后最多接收 600 KiB，改变分区后不能沿用该常数。具体构建入口见 [固件 README](../../firmware/nrf54l15/README.md)。
 
