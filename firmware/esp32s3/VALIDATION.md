@@ -16,7 +16,28 @@
 | 最终内置网页 | 独立加密模拟设备配合Chrome通过：原配网流程、错误签名拒绝、丢响应后重新认证续传、上传中取消、确认安装/查询、查询失败撤销旧READY按钮及CONFIRMING显示；手机/桌面视口不代表手机实机 |
 | 平台升级兼容性 | `go test ./internal/platform -run 'Artifact\|Firmware' -count=1` 通过，覆盖原始清单签名及组件/兼容性/升级任务；没有连接真实网关 |
 
-目标构建及本次提交的 GitHub 验证结果在完成后记录于下方。完整协议和复现步骤见[OTA设计](../../docs/esp32s3-ota.md)。未使用生产私钥，未烧录设备，未执行eFuse操作。
+完整协议和复现步骤见[OTA设计](../../docs/esp32s3-ota.md)。未使用生产私钥，未烧录设备，未执行eFuse操作。
+
+### 完整本地功能目标验证
+
+[GitHub运行44470481423](https://github.com/lyndon0728/ble-gateway-manager/actions/runs/44470481423)，源码提交`51b1230`：Linux主机测试与ESP32-S3目标构建两个job全部成功。目标job执行镜像容量检查，并检查实际ELF中的本地OTA函数、开窗函数及网页资源符号；产物含bin/elf/map、实际sdkconfig、符号列表及日志，保留14天。本记录之后的更新仅补充Markdown验证证据，不改变该已验证源码。
+
+默认板卡安全配置没有设置按钮/首次开窗授权，两者关闭时链接器会移除本地接口，不能据此证明网页功能已链接。本次Linux CI及Windows完整验证均显式使用`sdkconfig.local-setup-test`，确认`CONFIG_GW_FACTORY_AUTHORIZED_SETUP=y`；该配置只提供首次未配网时一次600秒窗口，量产仍须核实设置按键GPIO或实现并验证其他现场授权入口。
+
+完整入口构建首次暴露并修复了SDK资源符号名称不匹配：ESP-IDF v5.5.6实际生成`_binary_app_js_start`等basename符号，原代码错误引用带`assets_`前缀的名称。修复后Windows和Linux完整链接都通过；不能将修复前失败运行44469256683作为通过证据。
+
+Windows使用独立ASCII源码副本、独立SDKCONFIG完成全部目标编译及链接，并核对149个源文件/头文件/资源/构建配置与仓库逐字节相同。实际链接地址：`gw_actions_local_ota=0x420178ac`、`gw_provision_open_window=0x4200fa08`、`_binary_app_js_start=0x3c11e23c`，均不是被丢弃的零地址符号。
+
+| 0.2.0 Windows完整本地功能镜像 | 实测值 |
+| --- | --- |
+| 应用描述版本 | 0.2.0 |
+| 应用bin | 1,410,064字节，`0x158410` |
+| 最小OTA槽 | `0x280000`，剩余`0x127BF0`，约46% |
+| 应用bin SHA-256 | `ec2e7339476001791d719735e2750d939c34e307faa2cedb89a0517d255bc0b8` |
+| Bootloader | 20,544字节，`0x5040` |
+| 实际镜像打包验证 | 对上述bin使用临时测试Ed25519密钥生成并独立验签，版本/长度/摘要通过；临时材料已销毁，未生成生产签名包 |
+
+上述摘要仅属于本次Windows完整本地功能构建，不能替代Linux CI或未来量产配置的镜像摘要。代码和目标构建已验证，现场按键、真实AP上传、手机兼容、Flash断电和90秒试启动回退仍需按验收计划执行。
 
 ## 0.1.0 基线记录
 
