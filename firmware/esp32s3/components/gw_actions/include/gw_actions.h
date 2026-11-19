@@ -13,6 +13,16 @@ esp_err_t gw_actions_execute(const cJSON *command, uint64_t deadline_ms, cJSON *
  * means an outstanding trial/maintenance obligation, TIMEOUT means UNKNOWN. */
 esp_err_t gw_actions_recover(const cJSON *command, uint64_t deadline_ms, cJSON **details);
 /* Read-only recovery of configuration completion. Successful execution already
- * committed cloud/configuration and the action result in one store transaction. */
+ * committed cloud/configuration and the action result in one store transaction.
+ */
 esp_err_t gw_actions_recover_config(const cJSON *patch, const cJSON *complete, uint64_t revision,
                                     cJSON **details);
+
+/* Only call from the authenticated Security2 SoftAP endpoint during its window.
+ */
+esp_err_t gw_actions_local_ota(const cJSON *request, uint64_t window_deadline_ms, cJSON **response);
+/* Nonblocking; repeat while the setup window remains closed if action lock
+ * busy. */
+void gw_actions_local_ota_window_closed(void);
+/* Boot health gate: core/capture/UART/actions/provision init succeeded. */
+void gw_actions_local_ota_boot_ready(void);

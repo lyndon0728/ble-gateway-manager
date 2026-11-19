@@ -21,3 +21,13 @@ esp_err_t gw_gatt_nrf_recover(const cJSON *command, uint64_t deadline, cJSON **d
 esp_err_t gw_ota_init(void);
 esp_err_t gw_ota_execute(const cJSON *command, uint64_t deadline, cJSON **details);
 esp_err_t gw_ota_recover(const cJSON *command, uint64_t deadline, cJSON **details);
+
+esp_err_t gw_ota_local_init(void);
+esp_err_t gw_ota_local_dispatch(const cJSON *request, uint64_t window_deadline_ms,
+                                cJSON **response);
+void gw_ota_local_tick(void);
+void gw_ota_local_window_closed(void);
+void gw_ota_local_boot_ready(void);
+
+/* Immediate cross-task revocation, before attempting the action mutex. */
+void gw_ota_local_revoke(void);

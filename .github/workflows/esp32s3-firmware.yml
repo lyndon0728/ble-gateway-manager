@@ -39,7 +39,7 @@ jobs:
           . /opt/esp/idf/export.sh
           python -m pip install 'jsonschema==4.25.1'
           python firmware/esp32s3/scripts/test_host.py --cc gcc --idf "$IDF_PATH"
-          node --test firmware/esp32s3/components/gw_provision/tests/security2.test.mjs
+          node --test firmware/esp32s3/components/gw_provision/tests/security2.test.mjs firmware/esp32s3/components/gw_provision/tests/ota.test.mjs
   target-build:
     runs-on: ubuntu-24.04
     # Official v5.5.6 multi-platform manifest, verified against Docker Hub.
@@ -55,8 +55,15 @@ jobs:
           idf.py --version | tee idf-version.txt
           idf.py --version | grep -F 'v5.5.6'
           cd firmware/esp32s3
-          idf.py -DIDF_TARGET=esp32s3 build 2>&1 | tee target-build.log
+          # Exercise the complete local HTTP/Security2/OTA path. The default
+          # board-safe configuration has no unverified setup GPIO/entry point.
+          idf.py -DIDF_TARGET=esp32s3 -DSDKCONFIG_DEFAULTS='sdkconfig.defaults;sdkconfig.local-setup-test' build 2>&1 | tee target-build.log
           idf.py size 2>&1 | tee target-size.log
+          grep -Fx 'CONFIG_GW_FACTORY_AUTHORIZED_SETUP=y' sdkconfig
+          xtensa-esp32s3-elf-nm build/gw32_esp32s3.elf > target-symbols.txt
+          grep -E '^[0-9a-fA-F]+ [Tt] gw_actions_local_ota$' target-symbols.txt
+          grep -E '^[0-9a-fA-F]+ [Tt] gw_provision_open_window$' target-symbols.txt
+          grep -F '_binary_app_js_start' target-symbols.txt
       - name: Preserve target build evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -68,8 +75,10 @@ jobs:
             idf-version.txt
             firmware/esp32s3/target-build.log
             firmware/esp32s3/target-size.log
+            firmware/esp32s3/target-symbols.txt
             firmware/esp32s3/dependencies.lock
             firmware/esp32s3/sdkconfig
+            firmware/esp32s3/sdkconfig.local-setup-test
             firmware/esp32s3/build/*.bin
             firmware/esp32s3/build/*.elf
             firmware/esp32s3/build/*.map

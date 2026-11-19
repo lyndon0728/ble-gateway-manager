@@ -7,6 +7,7 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "gw_core.h"
+#include "gw_actions.h"
 #include "gw_provision_guard.h"
 #include "lwip/sockets.h"
 #include "mbedtls/platform_util.h"
@@ -244,7 +245,18 @@ static esp_err_t network_handler(uint32_t id, const uint8_t *input, ssize_t leng
     cJSON *response = NULL;
     bool close_after = false;
     const cJSON *op = cJSON_GetObjectItemCaseSensitive(request, "operation");
-    esp_err_t result = gw_core_dispatch(request, &response);
+    bool ota = cJSON_IsString(op) &&
+               (!strcmp(op->valuestring, "OTA_BEGIN") ||
+                !strcmp(op->valuestring, "OTA_WRITE") ||
+                !strcmp(op->valuestring, "OTA_STATUS") ||
+                !strcmp(op->valuestring, "OTA_COMMIT") ||
+                !strcmp(op->valuestring, "OTA_ABORT"));
+    uint64_t window_deadline;
+    portENTER_CRITICAL(&state_lock);
+    window_deadline = state.deadline;
+    portEXIT_CRITICAL(&state_lock);
+    esp_err_t result = ota ? gw_actions_local_ota(request, window_deadline, &response)
+                           : gw_core_dispatch(request, &response);
     if (result == ESP_OK && response && cJSON_IsString(op) &&
         !strcmp(op->valuestring, "CLOSE_WINDOW")) {
         const cJSON *code = cJSON_GetObjectItemCaseSensitive(response, "code");
@@ -388,6 +400,7 @@ static void stop_locked(void) {
     state.open = false;
     portEXIT_CRITICAL(&state_lock);
     gw_core_set_local_window_deadline(0);
+    gw_actions_local_ota_window_closed();
     if (state.server) {
         httpd_stop(state.server);
         state.server = NULL;
@@ -424,6 +437,10 @@ static void supervisor(void *arg) {
         }
         if (state.server && !active())
             stop_locked();
+        /* A request may briefly hold the action mutex as the window closes.
+         * Retry the nonblocking abort hook after the HTTP server has stopped. */
+        if (!state.server)
+            gw_actions_local_ota_window_closed();
         xSemaphoreGive(state.lifecycle);
     }
 }

@@ -4,7 +4,8 @@
 #include "monocypher-ed25519.h"
 #include <assert.h>
 static cJSON *database;
-static bool fail_store;
+static bool fail_store, lock_busy;
+static unsigned local_closed, local_revoked_count;
 static unsigned effects, transactions;
 static esp_err_t effect_result, recover_result;
 static char maintenance[129];
@@ -25,7 +26,8 @@ cJSON *gw_core_state(void) { return cJSON_CreateObject(); }
 esp_err_t gw_core_wifi_scan(bool active, uint64_t deadline, cJSON **aps) {
     (void)active;
     (void)deadline;
-    *aps = cJSON_Parse("[{\"ssid\":\"ap\",\"bssid\":\"11:22:33:44:55:66\",\"channel\":1,\"rssi\":-"
+    *aps = cJSON_Parse("[{\"ssid\":\"ap\",\"bssid\":\"11:22:33:44:55:66\","
+                       "\"channel\":1,\"rssi\":-"
                        "50,\"security\":\"WPA2_PSK\"}]");
     return ESP_OK;
 }
@@ -34,7 +36,7 @@ SemaphoreHandle_t xSemaphoreCreateMutex(void) { return (void *)1; }
 int xSemaphoreTake(SemaphoreHandle_t s, TickType_t t) {
     (void)s;
     (void)t;
-    return pdTRUE;
+    return !lock_busy;
 }
 void xSemaphoreGive(SemaphoreHandle_t s) { (void)s; }
 void vTaskDelay(TickType_t t) { (void)t; }
@@ -140,6 +142,16 @@ void gw_capture_radio_enabled(uint8_t r, bool e) {
 }
 esp_err_t gw_ble_init(void) { return ESP_OK; }
 esp_err_t gw_ota_init(void) { return ESP_OK; }
+void gw_ota_local_tick(void) {}
+void gw_ota_local_revoke(void) { local_revoked_count++; }
+void gw_ota_local_window_closed(void) { local_closed++; }
+void gw_ota_local_boot_ready(void) {}
+esp_err_t gw_ota_local_dispatch(const cJSON *r, uint64_t d, cJSON **o) {
+    (void)r;
+    (void)d;
+    *o = cJSON_Parse("{\"code\":\"OK\"}");
+    return ESP_OK;
+}
 esp_err_t gw_gatt_nrf_init(void) { return ESP_OK; }
 cJSON *gw_ble_diagnostics(void) { return cJSON_CreateObject(); }
 esp_err_t gw_ble_configure(const cJSON *p, bool a, uint64_t r, uint64_t d, cJSON **out) {
@@ -189,13 +201,35 @@ int main(void) {
     assert(gw_actions_init() == ESP_OK);
     reset_test();
     cJSON *out = NULL;
+    cJSON *local = cJSON_Parse("{\"requestId\":\"local-test\",\"operation\":"
+                               "\"OTA_STATUS\",\"body\":{}}");
+    ota_ready = false;
+    assert(gw_actions_local_ota(local, 10000, &out) == ESP_OK &&
+           !strcmp(gw_action_string(out, "code"), "NOT_READY"));
+    cJSON_Delete(out);
+    ota_ready = true;
+    lock_busy = true;
+    assert(gw_actions_local_ota(local, 10000, &out) == ESP_OK &&
+           !strcmp(gw_action_string(out, "code"), "BUSY"));
+    cJSON_Delete(out);
+    gw_actions_local_ota_window_closed();
+    assert(local_revoked_count == 1 && local_closed == 0 && atomic_load(&local_window_closed));
+    lock_busy = false;
+    assert(gw_actions_local_ota(local, 10000, &out) == ESP_OK && local_closed == 1 &&
+           !atomic_load(&local_window_closed));
+    cJSON_Delete(out);
+    cJSON_Delete(local);
+    out = NULL;
     cJSON *patch = cJSON_Parse("{\"radios\":{\"nrf54\":{\"scan\":{\"enabled\":true}}}}");
-    cJSON *complete = cJSON_Parse(
-        "{\"radios\":{\"nrf54\":{\"scan\":{\"enabled\":true,\"active\":false,\"intervalMs\":100,"
-        "\"windowMs\":50},\"filters\":{\"minRssi\":null,\"serviceUuids\":[\"180f\",\"0000180f-0000-"
-        "1000-8000-00805f9b34fb\"],\"manufacturerIds\":[76,76]},\"beaconRules\":[{\"action\":"
-        "\"ALLOW\",\"reportKinds\":[\"LEGACY_ADV\"],\"adType\":255,\"offset\":0,\"valueBase64\":"
-        "\"TAACFQ==\",\"maskBase64\":\"/////w==\"}]}}}");
+    cJSON *complete = cJSON_Parse("{\"radios\":{\"nrf54\":{\"scan\":{\"enabled\":true,"
+                                  "\"active\":false,\"intervalMs\":100,"
+                                  "\"windowMs\":50},\"filters\":{\"minRssi\":null,"
+                                  "\"serviceUuids\":[\"180f\",\"0000180f-0000-"
+                                  "1000-8000-00805f9b34fb\"],\"manufacturerIds\":[76,76]},"
+                                  "\"beaconRules\":[{\"action\":"
+                                  "\"ALLOW\",\"reportKinds\":[\"LEGACY_ADV\"],\"adType\":255,"
+                                  "\"offset\":0,\"valueBase64\":"
+                                  "\"TAACFQ==\",\"maskBase64\":\"/////w==\"}]}}}");
     struct gw_profile p;
     const cJSON *radio = cJSON_GetObjectItemCaseSensitive(
         cJSON_GetObjectItemCaseSensitive(complete, "radios"), "nrf54");
@@ -305,7 +339,8 @@ int main(void) {
     cJSON_Delete(patch);
     cJSON_Delete(complete);
     cJSON_Delete(database);
-    puts("PASS: actions intent/replay/conflict/storage failure/UNKNOWN/OTA recovery and profile "
+    puts("PASS: actions intent/replay/conflict/storage failure/UNKNOWN/OTA "
+         "recovery and profile "
          "conversion");
     return 0;
 }

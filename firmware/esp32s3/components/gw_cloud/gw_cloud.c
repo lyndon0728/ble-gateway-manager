@@ -1,4 +1,5 @@
 #include "gw_cloud.h"
+#include "esp_app_desc.h"
 #include "esp_random.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
@@ -812,7 +813,7 @@ static void heartbeat(void) {
   cJSON_AddStringToObject(body, "namespaceId", namespace_id);
   cJSON_AddStringToObject(body, "gatewayId", gateway_id);
   cJSON_AddStringToObject(body, "observedAt", observed);
-  cJSON_AddStringToObject(body, "firmwareVersion", "gw-esp32s3/0.1.0");
+  cJSON_AddStringToObject(body, "firmwareVersion", esp_app_get_description()->version);
   xSemaphoreTake(mutex, portMAX_DELAY);
   cJSON_AddNumberToObject(body, "reportedConfigurationRevision",
                           num(journal, "reportedRevision"));

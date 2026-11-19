@@ -1,6 +1,6 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GW32 网络配置</title><link rel="stylesheet" href="/style.css"></head>
-<body><main><header><p class="eyebrow">GW32 GATEWAY</p><h1>网关网络配置</h1><p>保持连接网关热点。此页面可离线使用，手机提示“无互联网”时请选择继续连接。</p></header>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GW32 设备设置</title><link rel="stylesheet" href="/style.css"></head>
+<body><main><header><p class="eyebrow">GW32 GATEWAY</p><h1>网关设备设置</h1><p>保持连接网关热点。此页面可离线使用，手机提示“无互联网”时请选择继续连接。</p></header>
 <section id="login-panel"><h2>登录设备</h2><form id="login"><label>本地设置账号<input id="username" maxlength="64" autocomplete="username" required></label><label>本地设置口令<input id="setup-password" type="password" maxlength="128" autocomplete="current-password" required></label><button type="submit">登录</button><p class="hint">使用设备交付的本地账号与口令，与现场 Wi-Fi 密码不同。</p></form></section>
 <section id="config-panel" hidden><div class="heading"><h2>连接配置</h2><button type="button" id="refresh" class="secondary">刷新状态</button></div><p id="connection" role="status"></p>
 <form id="network-form"><fieldset><legend>上联网</legend><label>上行顺序<select id="order"><option value="WIFI_STA">仅 Wi-Fi</option><option value="ETHERNET,WIFI_STA">以太网主用，Wi-Fi 备用</option><option value="WIFI_STA,ETHERNET">Wi-Fi 主用，以太网备用</option><option value="ETHERNET">仅以太网</option></select></label></fieldset>
@@ -8,5 +8,11 @@
 <fieldset><legend>以太网</legend><div class="ip-settings" data-interface="ethernet"><label>IPv4<select data-ip="mode"><option value="DHCP">自动获取 DHCP</option><option value="STATIC">静态地址</option></select></label><div data-static hidden><label>IP 地址<input data-ip="address" inputmode="decimal"></label><label>前缀长度<input data-ip="prefixLength" type="number" min="1" max="30" value="24"></label><label>默认网关<input data-ip="gateway" inputmode="decimal"></label><label>DNS（逗号分隔）<input data-ip="dns" inputmode="decimal"></label></div></div></fieldset>
 <div class="actions"><button id="preview" type="submit">检查并预览</button><button id="apply" type="button" disabled>验证并应用</button><button id="local-only" type="button" class="secondary" disabled>仅本地保存</button></div><p class="hint">“仅本地保存”不代表已连接平台；在线验证失败会恢复原网络。上行连接可能导致热点短暂换信道，重连后可查询同一事务。</p></form>
 <section id="preview-panel" hidden><h2>待应用参数</h2><pre id="preview-output"></pre></section>
+<section id="ota-panel"><h2>ESP32-S3 本地固件升级</h2><p class="hint">选择发布包中配套的签名文件与固件。设备会验证签名、型号、版本与文件完整性；无需联网。升级期间保持供电，网络配置会保留。</p>
+<label>签名清单（verification.json）<input id="ota-manifest" type="file" accept=".json,application/json"></label>
+<label>应用固件（firmware.bin）<input id="ota-image" type="file" accept=".bin,application/octet-stream"></label>
+<p id="ota-state" role="status">尚未查询升级状态</p><p id="ota-id" class="hint"></p><progress id="ota-progress" max="1" value="0" aria-label="固件上传进度"></progress><p id="ota-bytes" aria-live="polite"></p>
+<div class="actions"><button id="ota-upload" type="button">上传 / 继续上传</button><button id="ota-status" type="button" class="secondary">查询升级状态</button><button id="ota-abort" type="button" class="secondary" disabled>取消升级</button><button id="ota-install" type="button" disabled>安装并重启</button></div>
+<p class="hint">上传后还需确认安装。连接中断时重新登录，查询设备进度，并重新选择同一组文件继续上传。设备重启或设置窗口到期会取消未提交的上传，须重新开始。重启后按设置键打开热点并查询最终结果。</p></section>
 <section><h2>操作结果</h2><p id="transaction-id"></p><pre id="result" aria-live="polite"></pre><div class="actions"><button id="query" type="button" class="secondary">查询上次事务</button><button id="cancel" type="button" class="secondary">取消未提交事务</button><button id="restore" type="button" class="secondary">恢复前一配置</button><button id="close" type="button" class="secondary">退出并关闭热点</button></div></section>
 </section><p id="notice" role="alert"></p><footer>参数已保存 · 网络已连接 · 平台已连接 · 平台已同步：四个状态分别确认。</footer></main><script src="/app.js" defer></script></body></html>

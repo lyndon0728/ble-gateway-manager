@@ -2,12 +2,16 @@ param(
     [string]$SdkRoot = "$env:LOCALAPPDATA/GW32/esp-idf-v5.5.6",
     [string]$ToolsRoot = "$env:LOCALAPPDATA/GW32/espressif",
     [string]$BuildDirectory = 'build',
-    [string]$AsciiBuildRoot = "$env:LOCALAPPDATA/GW32/builds"
+    [string]$AsciiBuildRoot = "$env:LOCALAPPDATA/GW32/builds",
+    [switch]$LocalSetupTest
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $sdkFull = [IO.Path]::GetFullPath($SdkRoot)
 $toolsFull = [IO.Path]::GetFullPath($ToolsRoot)
+if ($LocalSetupTest -and -not $PSBoundParameters.ContainsKey('BuildDirectory')) {
+    $BuildDirectory = 'build-local-setup-test'
+}
 if ($sdkFull -match '[^\x00-\x7F]' -or $toolsFull -match '[^\x00-\x7F]') {
     throw 'The SDK and toolchain paths must contain ASCII characters only on Windows.'
 }
@@ -35,7 +39,25 @@ if ($projectRoot -match '[^\x00-\x7F]') {
 }
 Push-Location -LiteralPath $projectRoot
 try {
-    idf.py -B $BuildDirectory build
+    $idfArguments = @('-B', $BuildDirectory)
+    if ($LocalSetupTest) {
+        # SDKCONFIG_DEFAULTS does not override a cached sdkconfig. Keep this
+        # evaluation profile isolated from every board/production configuration.
+        $testBuildFull = if ([IO.Path]::IsPathRooted($BuildDirectory)) {
+            [IO.Path]::GetFullPath($BuildDirectory)
+        } else {
+            [IO.Path]::GetFullPath((Join-Path $projectRoot $BuildDirectory))
+        }
+        if (Test-Path -LiteralPath $testBuildFull) {
+            throw 'LocalSetupTest requires a new BuildDirectory. Choose a fresh directory; no existing build/configuration will be overwritten.'
+        }
+        New-Item -ItemType Directory -Path $testBuildFull | Out-Null
+        $testSdkconfig = Join-Path $testBuildFull 'sdkconfig.local-setup-test'
+        $testDefaults = (Join-Path $projectRoot 'sdkconfig.defaults') + ';' + (Join-Path $projectRoot 'sdkconfig.local-setup-test')
+        $idfArguments += @('-D', "SDKCONFIG=$testSdkconfig", '-D', "SDKCONFIG_DEFAULTS=$testDefaults")
+        Write-Output 'Local setup evaluation profile: first unconfigured boot may open one 600-second setup window. A verified production authorization/button design is still required.'
+    }
+    & idf.py @idfArguments build
     if ($LASTEXITCODE -ne 0) { throw 'ESP32-S3 target build failed' }
     idf.py -B $BuildDirectory size
     if ($LASTEXITCODE -ne 0) { throw 'Image size check failed' }

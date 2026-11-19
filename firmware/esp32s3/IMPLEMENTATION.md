@@ -1,6 +1,6 @@
-# ESP32-S3 0.1.0 实现决策与交付范围
+# ESP32-S3 0.2.0 实现决策与交付范围
 
-日期：2026-11-19。本文将[开发设计](../../docs/esp32s3-development.md)映射到本次源码；它不替代[验证记录](VALIDATION.md)或[44项整机验收](../../docs/esp32s3-validation-plan.md)。
+日期：2026-11-19。本文将[开发设计](../../docs/esp32s3-development.md)映射到本次源码；它不替代[验证记录](VALIDATION.md)或[50项整机验收](../../docs/esp32s3-validation-plan.md)。
 
 ## 两层协议与模块
 
@@ -41,6 +41,14 @@ SDK固定ESP-IDF v5.5.6，BLE Host采用NimBLE，CH390组件固定0.4.1。默认
 远程凭据单独通过设备认证接口投递；CONFIGURE仅引用credentialRef。候选验证把DNS与TLS连接绑定被测接口，平台逐项确认EXECUTING探测结果后才提交。最终SUCCEEDED获得RESULT_PERSISTED后更新平台确认版本并解除租约。旧候选回退后，未确认的旧probe不会经同名旧接口重发成新证明。
 
 平台新增数据库v4迁移、OpenAPI/消息Schema和网络配置页面；[平台联调文档](../../server/docs/network-provisioning-integration.md)包含部署主密钥、权限、请求与结果契约。此扩展必须与固件一起部署。
+
+## 本地与远程 ESP OTA
+
+`gw_actions/gw_ota.c` 复用制造发行公钥、原始 manifest 验签、非运行槽写入和运行镜像核验。远程任务继续使用 taskId/digest/TTL 与云端持久结果；本地使用独立 source=LOCAL/uploadId 和 `ota/local`，与远程 `ota/active` 分开，不能把本地结果合成为不存在的云任务或配置 revision。
+
+`gw_provision` 的已认证 Security2 业务通道转交五个 OTA 操作；每块最多 4096 字节，BEGIN 固定本次窗口期限，空闲 5 min 中止。仅最后一块完全相同字节可重试，接收 offset 保留 RAM，避免每块重写整个 NVS 快照。RECEIVING/READY 经掉电或窗口收尾后不自动安装；COMMIT 持久意图和设置启动槽后安排重启，恢复以实际启动槽和镜像为准。
+
+本地试运行确认不等待服务器或 UTC，使用持久签名安装授权及 90 s 限时健康流程；核心、接管、nRF、动作及配网初始化、至少 10 s 启动观察、实际镜像与 nRF 健康条件满足才标有效。远程继续受其授权及网络恢复约束。本地/云端动作共用维护租约，网络候选和另一组件 OTA 不能抢占。完整协议、打包和状态见[OTA 设计](../../docs/esp32s3-ota.md)；真实硬件回滚必须另有证据。
 
 ## 明确边界
 

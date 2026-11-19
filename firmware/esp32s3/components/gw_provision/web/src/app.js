@@ -1,4 +1,5 @@
 import { ProvisionClient, requestId, utf8 } from './security2.js';
+import { LocalOtaUi } from './ota.js';
 const client = new ProvisionClient();
 const $ = id => document.getElementById(id);
 let state = {}, credentialRef = '', candidate = null, prepared = null;
@@ -7,7 +8,7 @@ let busy = false, polling = false;
 function notice(message) { $('notice').textContent = message || ''; }
 function show(value) { $('result').textContent = JSON.stringify(value, null, 2); }
 function remember(id) { if (id) { transactionId=id;sessionStorage.setItem('gw32.transactionId',id);$('transaction-id').textContent=`事务：${id}`; } }
-function bodyOf(response) { if(response.code!=='OK' && response.code!=='ACCEPTED') throw Error(`${response.code}${response.body?.message?': '+response.body.message:''}`);return response.body || {}; }
+function bodyOf(response) { if(response.code!=='OK' && response.code!=='ACCEPTED') throw Object.assign(Error(`${response.code}${response.body?.message?': '+response.body.message:''}`),{code:response.code});return response.body || {}; }
 function envelope(operation,body={}) {
   return {apiVersion:'1.0',requestId:requestId(),operation,expectedNetworkGeneration:String(state.networkGeneration||'0'),baseLocalRevision:String(state.localRevision||'0'),body};
 }
@@ -17,6 +18,7 @@ async function run(action) {
   try{await action();}catch(e){notice(e.message);if(!client.channel){$('login-panel').hidden=false;$('config-panel').hidden=true;}}
   finally{busy=false;}
 }
+const ota = new LocalOtaUi({ $, call, run, notice });
 function ipRead(name) {
   const box=document.querySelector(`[data-interface="${name}"]`),get=key=>box.querySelector(`[data-ip="${key}"]`).value.trim();
   if(get('mode')==='DHCP')return {mode:'DHCP'};
@@ -73,7 +75,7 @@ async function create() {
 async function query() {if(!transactionId)throw Error('没有已记录的事务');const result=await call('GET_TRANSACTION',{transactionId});remember(transactionId);if(['COMMITTED','ROLLED_BACK','CANCELLED'].includes(result.state)){polling=false;await refresh();}return result;}
 $('login').addEventListener('submit',event=>{event.preventDefault();run(async()=>{
   const password=$('setup-password').value;$('setup-password').value='';await client.login($('username').value,password);
-  $('login-panel').hidden=true;$('config-panel').hidden=false;await refresh(true);remember(transactionId);
+  $('login-panel').hidden=true;$('config-panel').hidden=false;await refresh(true);remember(transactionId);await ota.refresh();
 });});
 $('network-form').addEventListener('submit',event=>{event.preventDefault();run(prepare);});
 $('network-form').addEventListener('input',invalidate);

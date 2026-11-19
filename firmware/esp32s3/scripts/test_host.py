@@ -9,6 +9,7 @@ p = argparse.ArgumentParser()
 p.add_argument("--cc", default="cc")
 p.add_argument("--idf", required=True)
 args = p.parse_args()
+subprocess.run([sys.executable, str(pathlib.Path(__file__).with_name("test_package_ota.py"))], check=True)
 project = pathlib.Path(__file__).resolve().parents[1]
 components = project / "components"
 cjson = pathlib.Path(args.idf).resolve() / "components/json/cJSON"

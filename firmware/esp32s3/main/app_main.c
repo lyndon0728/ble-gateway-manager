@@ -30,23 +30,31 @@ void app_main(void) {
     rollback_unconfirmed_image();
     return;
   }
+  bool boot_healthy = true;
   err = gw_capture_init();
   if (err == ESP_OK)
     err = gw_nrf_init(gw_capture_nrf, NULL);
   if (err != ESP_OK) {
+    boot_healthy = false;
     ESP_LOGE(TAG, "BLE custody unavailable (%s)", esp_err_to_name(err));
     rollback_unconfirmed_image();
   } else {
     err = gw_actions_init();
     if (err != ESP_OK) {
+      boot_healthy = false;
       ESP_LOGE(TAG, "Radio/action recovery unavailable (%s)",
                esp_err_to_name(err));
       rollback_unconfirmed_image();
     }
   }
   err = gw_provision_init();
-  if (err != ESP_OK)
+  if (err != ESP_OK) {
+    boot_healthy = false;
     ESP_LOGE(TAG, "Local provisioning unavailable (%s)", esp_err_to_name(err));
+    rollback_unconfirmed_image();
+  }
+  if (boot_healthy)
+    gw_actions_local_ota_boot_ready();
   err = gw_cloud_init();
   if (err != ESP_OK)
     ESP_LOGW(TAG,

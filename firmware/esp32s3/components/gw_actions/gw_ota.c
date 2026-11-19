@@ -13,6 +13,8 @@
 #include "mbedtls/base64.h"
 #include "mbedtls/sha256.h"
 #include "monocypher-ed25519.h"
+#include <math.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -158,20 +160,13 @@ static bool unique_keys(const cJSON *j, unsigned depth) {
 }
 /* Exact raw manifest bytes are authenticated with a factory-provisioned
  * release key. The network cannot install or replace this trust anchor. */
-static esp_err_t manifest(const cJSON *command, uint64_t deadline, cJSON **out) {
+static esp_err_t verify_manifest(const cJSON *command, const cJSON *response, cJSON **out) {
     const cJSON *p = cJSON_GetObjectItemCaseSensitive(command, "parameters");
-    const char *artifact = gw_action_string(p, "artifactId"),
-               *component = gw_action_string(p, "component");
+    const char *component = gw_action_string(p, "component");
     if (!*component)
         component = "GATEWAY";
-    if (!safe_id(artifact) || (strcmp(component, "NRF54") && strcmp(component, "GATEWAY")))
-        return ESP_ERR_INVALID_ARG;
-    char path[192];
-    snprintf(path, sizeof(path), "/api/v1/artifacts/%s/verification", artifact);
-    cJSON *response = NULL, *m = NULL;
-    esp_err_t e = gw_http_json(path, "GET", NULL, NULL, deadline, &response);
-    if (e != ESP_OK)
-        return e;
+    cJSON *m = NULL;
+    esp_err_t e;
     const char *raw = gw_action_string(response, "manifest"),
                *signature = gw_action_string(response, "signature");
     size_t length = strlen(raw);
@@ -247,6 +242,21 @@ static esp_err_t manifest(const cJSON *command, uint64_t deadline, cJSON **out) 
     e = ESP_OK;
 done:
     cJSON_Delete(m);
+    return e;
+}
+static esp_err_t manifest(const cJSON *command, uint64_t deadline, cJSON **out) {
+    const cJSON *p = cJSON_GetObjectItemCaseSensitive(command, "parameters");
+    const char *artifact = gw_action_string(p, "artifactId"),
+               *component = gw_action_string(p, "component");
+    if (!safe_id(artifact) ||
+        (*component && strcmp(component, "NRF54") && strcmp(component, "GATEWAY")))
+        return ESP_ERR_INVALID_ARG;
+    char path[192];
+    snprintf(path, sizeof(path), "/api/v1/artifacts/%s/verification", artifact);
+    cJSON *response = NULL;
+    esp_err_t e = gw_http_json(path, "GET", NULL, NULL, deadline, &response);
+    if (e == ESP_OK)
+        e = verify_manifest(command, response, out);
     cJSON_Delete(response);
     return e;
 }
@@ -351,6 +361,7 @@ static esp_err_t download(cJSON *j, uint64_t deadline) {
             goto done;
         esp_app_desc_t desc;
         if (esp_ota_get_partition_description(p, &desc) != ESP_OK ||
+            !memchr(desc.version, 0, sizeof(desc.version)) ||
             strcmp(desc.version, gw_action_string(j, "version"))) {
             e = ESP_ERR_INVALID_VERSION;
             goto done;
@@ -646,6 +657,9 @@ static void trial_expired(void *arg) {
     esp_restart();
 }
 esp_err_t gw_ota_init(void) {
+    esp_err_t local_error = gw_ota_local_init();
+    if (local_error != ESP_OK)
+        return local_error;
     cJSON *j = gw_store_get_json(OTA_KEY);
     if (j && strcmp(gw_action_string(j, "phase"), "CONFIRMED") &&
         strcmp(gw_action_string(j, "phase"), "FAILED") &&
@@ -874,4 +888,445 @@ done:
         e = ESP_ERR_NOT_FINISHED;
     cJSON_Delete(j);
     return e;
+}
+
+/* Local uploads share image authentication with cloud OTA, but keep independent
+ * durable evidence: no invented cloud task, revision, or UTC requirement. */
+#define LOCAL_OTA_KEY "ota/local"
+#define LOCAL_OTA_OWNER "local-ota"
+#define LOCAL_CHUNK_SIZE 4096
+static atomic_bool local_revoked;
+void gw_ota_local_revoke(void) { atomic_store(&local_revoked, true); }
+static struct {
+    cJSON *journal;
+    const esp_partition_t *partition;
+    esp_ota_handle_t handle;
+    size_t offset, last_offset, last_size;
+    uint8_t last_hash[32];
+    uint64_t deadline, idle_deadline, boot_started;
+    bool boot_ready;
+    esp_timer_handle_t reboot_timer;
+} local_ota;
+
+static bool local_is(const char *value) {
+    return !strcmp(gw_action_string(local_ota.journal, "phase"), value);
+}
+static bool local_uploading(void) { return local_is("RECEIVING") || local_is("READY"); }
+static esp_err_t local_phase(const char *value) {
+    cJSON *next = cJSON_Duplicate(local_ota.journal, true);
+    if (!next)
+        return ESP_ERR_NO_MEM;
+    set(next, "phase", cJSON_CreateString(value));
+    set(next, "offset", cJSON_CreateNumber((double)local_ota.offset));
+    esp_err_t e = gw_store_put_json(LOCAL_OTA_KEY, next);
+    if (e == ESP_OK) {
+        cJSON_Delete(local_ota.journal);
+        local_ota.journal = next;
+    } else
+        cJSON_Delete(next);
+    return e;
+}
+static void local_release(void) {
+    if (local_ota.handle) {
+        esp_ota_abort(local_ota.handle);
+        local_ota.handle = 0;
+    }
+    local_ota.deadline = local_ota.idle_deadline = 0;
+    gw_core_maintenance_release(LOCAL_OTA_OWNER);
+    (void)gw_ble_restore(gw_core_mono_ms() + 2000);
+}
+static esp_err_t local_stop(const char *state) {
+    /* Even a journal write failure must revoke this boot's upload authority. */
+    esp_err_t e = local_phase(state);
+    local_release();
+    if (e != ESP_OK && local_ota.journal)
+        set(local_ota.journal, "phase", cJSON_CreateString("FAILED"));
+    return e;
+}
+static cJSON *local_status(void) {
+    cJSON *j = local_ota.journal ? cJSON_Duplicate(local_ota.journal, true) : cJSON_CreateObject();
+    if (!j)
+        return NULL;
+    cJSON_DeleteItemFromObjectCaseSensitive(j, "manifestHash");
+    cJSON_DeleteItemFromObjectCaseSensitive(j, "partition");
+    set(j, "source", cJSON_CreateString("LOCAL"));
+    if (!local_ota.journal) {
+        set(j, "phase", cJSON_CreateString("NONE"));
+        set(j, "sizeBytes", cJSON_CreateNumber(0));
+    }
+    set(j, "offset", cJSON_CreateNumber((double)local_ota.offset));
+    set(j, "chunkSize", cJSON_CreateNumber(LOCAL_CHUNK_SIZE));
+    return j;
+}
+static bool local_keys(const cJSON *j, const char *const *keys, size_t n) {
+    if (!cJSON_IsObject(j))
+        return false;
+    const cJSON *v;
+    cJSON_ArrayForEach(v, j) {
+        bool found = false;
+        for (size_t i = 0; i < n; i++)
+            if (v->string && !strcmp(v->string, keys[i]))
+                found = true;
+        if (!found)
+            return false;
+    }
+    return unique_keys(j, 0);
+}
+static bool local_uint(const cJSON *j, const char *key, size_t max, size_t *value) {
+    const cJSON *v = cJSON_GetObjectItemCaseSensitive(j, key);
+    if (!cJSON_IsNumber(v) || !isfinite(v->valuedouble) || v->valuedouble < 0 ||
+        v->valuedouble > (double)max || floor(v->valuedouble) != v->valuedouble)
+        return false;
+    *value = (size_t)v->valuedouble;
+    return true;
+}
+static esp_err_t local_begin(const cJSON *body, uint64_t deadline) {
+    static const char *const keys[] = {"uploadId", "manifest", "signature"};
+    const char *id = gw_action_string(body, "uploadId"), *raw = gw_action_string(body, "manifest");
+    if (!local_keys(body, keys, 3) || !safe_id(id) || strlen(id) > 64 || !*raw ||
+        strlen(raw) > 8192 || !manifest_shape(raw))
+        return ESP_ERR_INVALID_ARG;
+    cJSON *parsed = cJSON_Parse(raw), *command_json = cJSON_CreateObject(), *m = NULL;
+    if (!parsed || !command_json) {
+        cJSON_Delete(parsed);
+        cJSON_Delete(command_json);
+        return ESP_ERR_NO_MEM;
+    }
+    cJSON *params = cJSON_AddObjectToObject(command_json, "parameters");
+    cJSON_AddStringToObject(params, "component", "GATEWAY");
+    cJSON_AddStringToObject(params, "expectedFirmwareVersion", gw_action_string(parsed, "version"));
+    cJSON_Delete(parsed);
+    esp_err_t e = verify_manifest(command_json, body, &m);
+    cJSON_Delete(command_json);
+    if (e != ESP_OK)
+        return e;
+    const esp_partition_t *p = esp_ota_get_next_update_partition(NULL);
+    size_t total = 0;
+    esp_ota_img_states_t running_state;
+    if (esp_ota_get_state_partition(esp_ota_get_running_partition(), &running_state) == ESP_OK &&
+        running_state == ESP_OTA_IMG_PENDING_VERIFY) {
+        e = ESP_ERR_NOT_FINISHED;
+        goto done;
+    }
+    if (!p || p == esp_ota_get_running_partition() ||
+        !local_uint(m, "sizeBytes", p->size, &total) || total < 32 ||
+        strcmp(gw_action_string(m, "imageFormat"), "ESP_IDF_APP_BIN") ||
+        strcmp(gw_action_string(m, "component"), "GATEWAY") ||
+        strlen(gw_action_string(m, "version")) >= sizeof(esp_app_get_description()->version)) {
+        e = ESP_ERR_INVALID_ARG;
+        goto done;
+    }
+    uint8_t digest[32];
+    char hex[65];
+    if (mbedtls_sha256((const unsigned char *)raw, strlen(raw), digest, 0)) {
+        e = ESP_FAIL;
+        goto done;
+    }
+    gw_action_hex_encode(digest, 32, hex);
+    if (!strcmp(id, gw_action_string(local_ota.journal, "uploadId"))) {
+        e = !strcmp(hex, gw_action_string(local_ota.journal, "manifestHash"))
+                ? ESP_OK
+                : ESP_ERR_INVALID_STATE;
+        goto done;
+    }
+    if (local_uploading() || local_is("REBOOT_PENDING") || local_is("CONFIRMING")) {
+        e = ESP_ERR_NOT_FINISHED;
+        goto done;
+    }
+    if (gw_core_mono_ms() >= deadline || atomic_load(&local_revoked)) {
+        e = ESP_ERR_TIMEOUT;
+        goto done;
+    }
+    if ((e = gw_core_maintenance_acquire(LOCAL_OTA_OWNER)) != ESP_OK) {
+        e = ESP_ERR_NOT_FINISHED;
+        goto done;
+    }
+    if ((e = gw_ble_pause(deadline)) != ESP_OK) {
+        local_release();
+        goto done;
+    }
+    if (gw_core_mono_ms() >= deadline || atomic_load(&local_revoked)) {
+        local_release();
+        e = ESP_ERR_TIMEOUT;
+        goto done;
+    }
+    cJSON *j = cJSON_CreateObject();
+    if (!j) {
+        local_release();
+        e = ESP_ERR_NO_MEM;
+        goto done;
+    }
+    cJSON_AddStringToObject(j, "source", "LOCAL");
+    cJSON_AddStringToObject(j, "uploadId", id);
+    cJSON_AddStringToObject(j, "version", gw_action_string(m, "version"));
+    cJSON_AddStringToObject(j, "sha256", gw_action_string(m, "sha256"));
+    cJSON_AddStringToObject(j, "manifestHash", hex);
+    cJSON_AddStringToObject(j, "partition", p->label);
+    cJSON_AddStringToObject(j, "phase", "RECEIVING");
+    cJSON_AddNumberToObject(j, "sizeBytes", (double)total);
+    cJSON_AddNumberToObject(j, "offset", 0);
+    e = gw_store_put_json(LOCAL_OTA_KEY, j);
+    if (e != ESP_OK) {
+        cJSON_Delete(j);
+        local_release();
+        goto done;
+    }
+    cJSON_Delete(local_ota.journal);
+    local_ota.journal = j;
+    local_ota.partition = p;
+    local_ota.offset = local_ota.last_size = local_ota.last_offset = 0;
+    local_ota.deadline = deadline;
+    local_ota.idle_deadline = gw_core_mono_ms() + 300000;
+    e = esp_ota_begin(p, total, &local_ota.handle);
+    if (e == ESP_OK && (gw_core_mono_ms() >= deadline || atomic_load(&local_revoked)))
+        e = ESP_ERR_TIMEOUT;
+    if (e != ESP_OK)
+        (void)local_stop("FAILED");
+done:
+    cJSON_Delete(m);
+    return e;
+}
+static esp_err_t local_write(const cJSON *body) {
+    static const char *const keys[] = {"uploadId", "offset", "data"};
+    size_t offset, n = 0, total = 0;
+    const char *encoded = gw_action_string(body, "data");
+    size_t text_size = strlen(encoded);
+    if (!local_keys(body, keys, 3) || !local_ota.partition ||
+        !local_uint(body, "offset", local_ota.partition->size, &offset) || !text_size ||
+        text_size > 5464 || text_size % 4 ||
+        !local_uint(local_ota.journal, "sizeBytes", local_ota.partition->size, &total))
+        return ESP_ERR_INVALID_ARG;
+    for (size_t i = 0; i < text_size; i++) {
+        unsigned char c = (unsigned char)encoded[i];
+        if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+              c == '+' || c == '/' ||
+              (c == '=' && i >= text_size - 2 && (i == text_size - 1 || encoded[i + 1] == '='))))
+            return ESP_ERR_INVALID_ARG;
+    }
+    uint8_t *data = malloc(LOCAL_CHUNK_SIZE), digest[32];
+    if (!data)
+        return ESP_ERR_NO_MEM;
+    esp_err_t e = ESP_ERR_INVALID_ARG;
+    if (mbedtls_base64_decode(data, LOCAL_CHUNK_SIZE, &n, (const unsigned char *)encoded,
+                              text_size) ||
+        !n || n > LOCAL_CHUNK_SIZE || mbedtls_sha256(data, n, digest, 0))
+        goto done;
+    if (local_uploading() && offset == local_ota.last_offset && local_ota.last_size == n &&
+        !memcmp(digest, local_ota.last_hash, 32)) {
+        e = ESP_OK;
+        goto done;
+    }
+    if (!local_is("RECEIVING") || !local_ota.handle || offset != local_ota.offset ||
+        n > total - offset) {
+        e = ESP_ERR_INVALID_STATE;
+        goto done;
+    }
+    e = esp_ota_write(local_ota.handle, data, n);
+    if (e != ESP_OK) {
+        (void)local_stop("FAILED");
+        goto done;
+    }
+    local_ota.last_offset = offset;
+    local_ota.last_size = n;
+    memcpy(local_ota.last_hash, digest, 32);
+    local_ota.offset += n;
+    if (local_ota.offset == total) {
+        e = esp_ota_end(local_ota.handle);
+        local_ota.handle = 0;
+        esp_app_desc_t desc;
+        uint8_t expected[32];
+        if (e == ESP_OK &&
+            (partition_hash(local_ota.partition, total, digest) != ESP_OK ||
+             !gw_action_hex(gw_action_string(local_ota.journal, "sha256"), expected, 32) ||
+             memcmp(digest, expected, 32)))
+            e = ESP_ERR_INVALID_CRC;
+        if (e == ESP_OK &&
+            (esp_ota_get_partition_description(local_ota.partition, &desc) != ESP_OK ||
+             !memchr(desc.version, 0, sizeof(desc.version)) ||
+             strcmp(desc.version, gw_action_string(local_ota.journal, "version"))))
+            e = ESP_ERR_INVALID_VERSION;
+        if (e == ESP_OK && (gw_core_mono_ms() >= local_ota.deadline || atomic_load(&local_revoked)))
+            e = ESP_ERR_TIMEOUT;
+        if (e == ESP_OK)
+            e = local_phase("READY");
+        if (e != ESP_OK)
+            (void)local_stop("FAILED");
+    }
+done:
+    free(data);
+    return e;
+}
+static void local_restart(void *unused) {
+    (void)unused;
+    esp_restart();
+}
+static esp_err_t local_commit(void) {
+    if (local_is("REBOOT_PENDING"))
+        return ESP_OK;
+    if (!local_is("READY") || !local_ota.partition)
+        return ESP_ERR_INVALID_STATE;
+    esp_err_t e;
+    if (!local_ota.reboot_timer) {
+        const esp_timer_create_args_t args = {.callback = local_restart, .name = "local_reboot"};
+        if ((e = esp_timer_create(&args, &local_ota.reboot_timer)) != ESP_OK)
+            return e;
+    }
+    if ((e = local_phase("REBOOT_PENDING")) != ESP_OK)
+        return e;
+    if (gw_core_mono_ms() >= local_ota.deadline || atomic_load(&local_revoked)) {
+        (void)local_stop("ABORTED");
+        return ESP_ERR_TIMEOUT;
+    }
+    e = esp_ota_set_boot_partition(local_ota.partition);
+    if (e != ESP_OK) {
+        (void)local_stop("FAILED");
+        return e;
+    }
+    e = esp_timer_start_once(local_ota.reboot_timer, 2000000);
+    /* Candidate is durable. Never release maintenance or claim aborted here. */
+    if (e != ESP_OK)
+        esp_restart();
+    return ESP_OK;
+}
+void gw_ota_local_window_closed(void) {
+    atomic_store(&local_revoked, false);
+    if (local_uploading())
+        (void)local_stop("ABORTED");
+}
+void gw_ota_local_boot_ready(void) { local_ota.boot_ready = true; }
+esp_err_t gw_ota_local_init(void) {
+    cJSON_Delete(local_ota.journal);
+    local_ota.journal = gw_store_get_json(LOCAL_OTA_KEY);
+    local_ota.boot_started = gw_core_mono_ms();
+    local_ota.boot_ready = false;
+    local_ota.handle = 0;
+    local_ota.offset = 0;
+    if (!local_ota.journal)
+        return ESP_OK;
+    const cJSON *offset = cJSON_GetObjectItemCaseSensitive(local_ota.journal, "offset");
+    if (cJSON_IsNumber(offset) && offset->valuedouble >= 0 && offset->valuedouble <= 0x280000)
+        local_ota.offset = (size_t)offset->valuedouble;
+    if (local_uploading())
+        return local_stop("ABORTED");
+    if (local_is("REBOOT_PENDING") || local_is("CONFIRMING")) {
+        const esp_partition_t *running = esp_ota_get_running_partition();
+        if (!running || strcmp(running->label, gw_action_string(local_ota.journal, "partition")) ||
+            strcmp(esp_app_get_description()->version,
+                   gw_action_string(local_ota.journal, "version")))
+            return local_stop("ROLLED_BACK");
+        return gw_core_maintenance_acquire(LOCAL_OTA_OWNER);
+    }
+    return ESP_OK;
+}
+void gw_ota_local_tick(void) {
+    uint64_t now = gw_core_mono_ms();
+    if (local_uploading() &&
+        (!local_ota.deadline || now >= local_ota.deadline || now >= local_ota.idle_deadline)) {
+        (void)local_stop("ABORTED");
+        return;
+    }
+    if (!(local_is("REBOOT_PENDING") || local_is("CONFIRMING")) || !local_ota.boot_ready ||
+        now < local_ota.boot_started + 10000)
+        return;
+    const esp_partition_t *running = esp_ota_get_running_partition();
+    /* REBOOT_PENDING can still be observed on the uploading boot. */
+    if (!running || strcmp(running->label, gw_action_string(local_ota.journal, "partition")) ||
+        strcmp(esp_app_get_description()->version, gw_action_string(local_ota.journal, "version")))
+        return;
+    uint64_t deadline = now + 2500;
+    if (trial_deadline && deadline >= trial_deadline)
+        return;
+    size_t total;
+    uint8_t hash[32], expected[32];
+    if (!local_uint(local_ota.journal, "sizeBytes", running->size, &total) ||
+        partition_hash(running, total, hash) != ESP_OK ||
+        !gw_action_hex(gw_action_string(local_ota.journal, "sha256"), expected, 32) ||
+        memcmp(hash, expected, 32) || nrf_health(deadline) != ESP_OK)
+        return;
+    uint32_t caps = 0;
+    uint8_t dfu[62];
+    if (!gw_nrf_identity(NULL, &caps, NULL) ||
+        ((caps & (1u << 12)) && (dfu_status(dfu, deadline) != ESP_OK || !dfu[9])))
+        return;
+    if (local_phase("CONFIRMING") != ESP_OK)
+        return;
+    if ((trial_deadline && gw_core_mono_ms() + 100 >= trial_deadline) ||
+        esp_ota_mark_app_valid_cancel_rollback() != ESP_OK)
+        return;
+    if (trial_timer)
+        esp_timer_stop(trial_timer);
+    trial_deadline = 0;
+    if (local_phase("CONFIRMED") == ESP_OK)
+        local_release();
+}
+esp_err_t gw_ota_local_dispatch(const cJSON *request, uint64_t window_deadline, cJSON **response) {
+    static const char *const envelope[] = {
+        "apiVersion",       "requestId", "operation", "body", "expectedNetworkGeneration",
+        "baseLocalRevision"};
+    static const char *const id_only[] = {"uploadId"};
+    if (!response)
+        return ESP_ERR_INVALID_ARG;
+    *response = NULL;
+    const char *id = gw_action_string(request, "requestId"),
+               *op = gw_action_string(request, "operation");
+    const cJSON *body = cJSON_GetObjectItemCaseSensitive(request, "body");
+    const char *code = "OK";
+    esp_err_t e = ESP_OK;
+    gw_ota_local_tick();
+    uint64_t now = gw_core_mono_ms();
+    if (!local_keys(request, envelope, 6) || !safe_id(id) || strlen(id) > 64 ||
+        strcmp(gw_action_string(request, "apiVersion"), "1.0") || !cJSON_IsObject(body))
+        code = "INVALID_ARGUMENT";
+    else if (window_deadline <= now)
+        code = "SESSION_EXPIRED";
+    else if (!strcmp(op, "OTA_BEGIN"))
+        e = local_begin(body, window_deadline);
+    else if (!strcmp(op, "OTA_STATUS")) {
+        if (!local_keys(body, id_only, 1))
+            e = ESP_ERR_INVALID_ARG;
+        else if (*gw_action_string(body, "uploadId") &&
+                 strcmp(gw_action_string(body, "uploadId"),
+                        gw_action_string(local_ota.journal, "uploadId")))
+            e = ESP_ERR_INVALID_STATE;
+    } else if (!*gw_action_string(body, "uploadId") ||
+               strcmp(gw_action_string(body, "uploadId"),
+                      gw_action_string(local_ota.journal, "uploadId")))
+        e = ESP_ERR_INVALID_STATE;
+    else if (!strcmp(op, "OTA_WRITE"))
+        e = local_write(body);
+    else if (!strcmp(op, "OTA_COMMIT") && local_keys(body, id_only, 1))
+        e = local_commit();
+    else if (!strcmp(op, "OTA_ABORT") && local_keys(body, id_only, 1)) {
+        if (local_uploading())
+            e = local_stop("ABORTED");
+        else if (!local_is("ABORTED"))
+            e = ESP_ERR_INVALID_STATE;
+    } else
+        e = ESP_ERR_INVALID_ARG;
+    if (e != ESP_OK)
+        code =
+            e == ESP_ERR_INVALID_ARG || e == ESP_ERR_INVALID_SIZE || e == ESP_ERR_INVALID_RESPONSE
+                ? "INVALID_ARGUMENT"
+            : e == ESP_ERR_INVALID_CRC     ? "INTEGRITY_ERROR"
+            : e == ESP_ERR_INVALID_VERSION ? "VERSION_MISMATCH"
+            : e == ESP_ERR_TIMEOUT         ? "SESSION_EXPIRED"
+            : e == ESP_ERR_NOT_FINISHED    ? "BUSY"
+            : e == ESP_ERR_INVALID_STATE   ? "CONFLICT"
+                                           : "STORAGE_FAULT";
+    else if (!strcmp(code, "OK") && !strcmp(op, "OTA_COMMIT"))
+        code = "ACCEPTED";
+    if (e == ESP_OK && !strcmp(code, "OK") && local_uploading())
+        local_ota.idle_deadline = now + 300000;
+    cJSON *out = cJSON_CreateObject(), *status = local_status();
+    if (!out || !status) {
+        cJSON_Delete(out);
+        cJSON_Delete(status);
+        return ESP_ERR_NO_MEM;
+    }
+    cJSON_AddStringToObject(out, "apiVersion", "1.0");
+    cJSON_AddStringToObject(out, "requestId", id);
+    cJSON_AddStringToObject(out, "code", code);
+    cJSON_AddItemToObject(out, "body", status);
+    *response = out;
+    return ESP_OK;
 }

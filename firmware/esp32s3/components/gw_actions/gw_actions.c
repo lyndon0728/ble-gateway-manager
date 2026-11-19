@@ -7,11 +7,13 @@
 #include "mbedtls/base64.h"
 #include "mbedtls/sha256.h"
 #include <math.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 static SemaphoreHandle_t action_lock;
+static atomic_bool local_window_closed;
 static bool actions_ready, ota_ready, gatt_ready;
 const char *gw_action_string(const cJSON *o, const char *key) {
     const cJSON *v = cJSON_GetObjectItemCaseSensitive(o, key);
@@ -609,6 +611,9 @@ static void restore_radios(void *arg) {
         vTaskDelay(pdMS_TO_TICKS(2000));
         if (xSemaphoreTake(action_lock, 0) != pdTRUE)
             continue;
+        if (atomic_exchange(&local_window_closed, false))
+            gw_ota_local_window_closed();
+        gw_ota_local_tick();
         if (gw_core_maintenance_acquire("radio-restore") != ESP_OK) {
             xSemaphoreGive(action_lock);
             continue;
@@ -702,4 +707,45 @@ esp_err_t gw_actions_init(void) {
         }
     actions_ready = xTaskCreate(restore_radios, "radio_restore", 8192, NULL, 3, NULL) == pdPASS;
     return actions_ready ? ESP_OK : ESP_ERR_NO_MEM;
+}
+
+static esp_err_t local_unavailable(const cJSON *request, const char *code, cJSON **response) {
+    if (!response)
+        return ESP_ERR_INVALID_ARG;
+    cJSON *out = cJSON_CreateObject();
+    if (!out)
+        return ESP_ERR_NO_MEM;
+    cJSON_AddStringToObject(out, "apiVersion", "1.0");
+    cJSON_AddStringToObject(out, "requestId", gw_action_string(request, "requestId"));
+    cJSON_AddStringToObject(out, "code", code);
+    cJSON_AddObjectToObject(out, "body");
+    *response = out;
+    return ESP_OK;
+}
+esp_err_t gw_actions_local_ota(const cJSON *request, uint64_t deadline, cJSON **response) {
+    if (!response || !action_lock || !ota_ready || !actions_ready)
+        return local_unavailable(request, "NOT_READY", response);
+    if (xSemaphoreTake(action_lock, 0) != pdTRUE)
+        return local_unavailable(request, "BUSY", response);
+    if (atomic_exchange(&local_window_closed, false))
+        gw_ota_local_window_closed();
+    esp_err_t e = gw_ota_local_dispatch(request, deadline, response);
+    xSemaphoreGive(action_lock);
+    return e;
+}
+void gw_actions_local_ota_window_closed(void) {
+    gw_ota_local_revoke();
+    atomic_store(&local_window_closed, true);
+    if (action_lock && ota_ready && xSemaphoreTake(action_lock, 0) == pdTRUE) {
+        atomic_store(&local_window_closed, false);
+        gw_ota_local_window_closed();
+        xSemaphoreGive(action_lock);
+    }
+}
+void gw_actions_local_ota_boot_ready(void) {
+    if (action_lock && ota_ready && actions_ready &&
+        xSemaphoreTake(action_lock, (TickType_t)-1) == pdTRUE) {
+        gw_ota_local_boot_ready();
+        xSemaphoreGive(action_lock);
+    }
 }

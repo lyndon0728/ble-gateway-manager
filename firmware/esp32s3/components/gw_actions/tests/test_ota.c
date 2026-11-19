@@ -11,6 +11,8 @@ static uint8_t dfu_hash[32], dfu_state;
 static bool bad_stream, fail_store, untrusted, bad_signature, trial, trial_nrf, confirmed,
     fail_confirm, busy_begin, lost_chunk_reply, fault_chunk;
 static unsigned restarts, boots, confirms, aborts, uart_chunks, begin_count;
+static unsigned begin_advance, write_advance;
+static bool unhealthy, bad_description, fail_confirm_journal;
 static char owner[129];
 static esp_partition_t slot0 = {.size = 4096, .label = "ota_0"},
                        slot1 = {.size = 4096, .label = "ota_1"},
@@ -50,7 +52,8 @@ cJSON *gw_store_get_json(const char *key) {
     return cJSON_Duplicate(cJSON_GetObjectItemCaseSensitive(database, key), true);
 }
 esp_err_t gw_store_put_json(const char *key, const cJSON *v) {
-    if (fail_store)
+    if (fail_store || (fail_confirm_journal && !strcmp(key, LOCAL_OTA_KEY) &&
+                       !strcmp(gw_action_string(v, "phase"), "CONFIRMED")))
         return ESP_FAIL;
     cJSON_DeleteItemFromObjectCaseSensitive(database, key);
     cJSON_AddItemToObject(database, key, cJSON_Duplicate(v, true));
@@ -111,12 +114,14 @@ esp_err_t esp_ota_begin(const esp_partition_t *p, size_t n, esp_ota_handle_t *h)
     *h = 1;
     written = 0;
     begin_count++;
+    monotonic += begin_advance;
     return ESP_OK;
 }
 esp_err_t esp_ota_write(esp_ota_handle_t h, const void *p, size_t n) {
     (void)h;
     memcpy(flash + written, p, n);
     written += n;
+    monotonic += write_advance;
     return ESP_OK;
 }
 esp_err_t esp_ota_end(esp_ota_handle_t h) {
@@ -130,7 +135,10 @@ esp_err_t esp_ota_abort(esp_ota_handle_t h) {
 }
 esp_err_t esp_ota_get_partition_description(const esp_partition_t *p, esp_app_desc_t *d) {
     (void)p;
-    strcpy(d->version, "v2");
+    if (bad_description)
+        memset(d->version, 'x', sizeof(d->version));
+    else
+        strcpy(d->version, "v2");
     return ESP_OK;
 }
 esp_err_t esp_ota_set_boot_partition(const esp_partition_t *p) {
@@ -159,7 +167,7 @@ esp_err_t esp_timer_create(const esp_timer_create_args_t *args, esp_timer_handle
 }
 esp_err_t esp_timer_start_once(esp_timer_handle_t t, uint64_t us) {
     (void)t;
-    assert(us == 90000000);
+    assert(us == 90000000 || us == 2000000);
     return ESP_OK;
 }
 esp_err_t esp_timer_stop(esp_timer_handle_t t) {
@@ -205,6 +213,8 @@ esp_err_t gw_nrf_command(uint8_t opcode, const void *arg, size_t length, uint8_t
     *result = 0;
     switch (opcode) {
     case 3:
+        if (unhealthy)
+            return ESP_ERR_TIMEOUT;
         assert(*n >= 71);
         memset(out, 0, 71);
         *n = 71;
@@ -361,6 +371,11 @@ esp_err_t gw_http_stream(const char *path, uint64_t deadline, size_t limit, gw_h
     return sink(copy, sizeof(copy), context);
 }
 static cJSON *setup(bool nrf) {
+    atomic_store(&local_revoked, false);
+    unhealthy = bad_description = fail_confirm_journal = false;
+    begin_advance = write_advance = 0;
+    cJSON_Delete(local_ota.journal);
+    memset(&local_ota, 0, sizeof(local_ota));
     cJSON_Delete(database);
     database = cJSON_CreateObject();
     cJSON_Delete(verification);
@@ -393,7 +408,8 @@ static cJSON *setup(bool nrf) {
     cJSON_AddStringToObject(m, "version", "v2");
     cJSON_AddStringToObject(m, "component", nrf ? "NRF54" : "GATEWAY");
     cJSON_AddStringToObject(m, "sha256", hex);
-    cJSON_AddStringToObject(m, "imageFormat", "MCUBOOT_SIGNED_BIN");
+    cJSON_AddStringToObject(m, "imageFormat", nrf ? "MCUBOOT_SIGNED_BIN" : "ESP_IDF_APP_BIN");
+    cJSON_AddNumberToObject(m, "sizeBytes", sizeof(image));
     cJSON *models = cJSON_AddArrayToObject(m, "compatibleModels");
     cJSON_AddItemToArray(models, cJSON_CreateString("GW32I33V2"));
     char *raw = cJSON_PrintUnformatted(m);
@@ -413,7 +429,257 @@ static cJSON *setup(bool nrf) {
     cJSON_AddStringToObject(p, "expectedFirmwareVersion", "v2");
     return c;
 }
+static cJSON *local_request(const char *op, cJSON *body) {
+    cJSON *r = cJSON_CreateObject();
+    cJSON_AddStringToObject(r, "apiVersion", "1.0");
+    cJSON_AddStringToObject(r, "requestId", "local-request");
+    cJSON_AddStringToObject(r, "operation", op);
+    cJSON_AddItemToObject(r, "body", body);
+    return r;
+}
+static cJSON *local_body(void) {
+    cJSON *b = cJSON_CreateObject();
+    cJSON_AddStringToObject(b, "uploadId", "local-test");
+    return b;
+}
+static cJSON *local_begin_body(void) {
+    cJSON *b = cJSON_Duplicate(verification, true);
+    cJSON_AddStringToObject(b, "uploadId", "local-test");
+    return b;
+}
+static cJSON *local_expect(const char *op, cJSON *body, uint64_t deadline, const char *code) {
+    cJSON *request = local_request(op, body), *response = NULL;
+    assert(gw_ota_local_dispatch(request, deadline, &response) == ESP_OK);
+    if (strcmp(gw_action_string(response, "code"), code)) {
+        char *r = cJSON_PrintUnformatted(response);
+        fprintf(stderr, "local %s expected %s: %s\n", op, code, r);
+        free(r);
+        assert(0);
+    }
+    cJSON *status = cJSON_Duplicate(cJSON_GetObjectItemCaseSensitive(response, "body"), true);
+    cJSON_Delete(request);
+    cJSON_Delete(response);
+    return status;
+}
+static void local_check(const char *op, cJSON *body, uint64_t deadline, const char *code) {
+    cJSON_Delete(local_expect(op, body, deadline, code));
+}
+static cJSON *chunk(size_t offset, size_t count, bool corrupt) {
+    cJSON *b = local_body();
+    uint8_t bytes[sizeof(image)];
+    memcpy(bytes, image + offset, count);
+    if (corrupt)
+        bytes[0] ^= 1;
+    char encoded[1400];
+    size_t n;
+    assert(mbedtls_base64_encode((unsigned char *)encoded, sizeof(encoded), &n, bytes, count) == 0);
+    cJSON_AddNumberToObject(b, "offset", (double)offset);
+    cJSON_AddStringToObject(b, "data", encoded);
+    return b;
+}
+static void local_setup(void) { cJSON_Delete(setup(false)); }
+static void local_signed_field(const char *key, cJSON *value) {
+    cJSON *m = cJSON_Parse(gw_action_string(verification, "manifest"));
+    if (value)
+        set(m, key, value);
+    else
+        cJSON_DeleteItemFromObjectCaseSensitive(m, key);
+    char *raw = cJSON_PrintUnformatted(m);
+    uint8_t seed[32] = {9}, secret[64], public[32], signature[64];
+    char sig[89];
+    size_t n;
+    crypto_ed25519_key_pair(secret, public, seed);
+    crypto_ed25519_sign(signature, secret, (const uint8_t *)raw, strlen(raw));
+    assert(mbedtls_base64_encode((unsigned char *)sig, sizeof(sig), &n, signature, 64) == 0);
+    set(verification, "manifest", cJSON_CreateString(raw));
+    set(verification, "signature", cJSON_CreateString(sig));
+    free(raw);
+    cJSON_Delete(m);
+}
+static void local_tests(void) {
+    local_setup();
+    local_signed_field("sizeBytes", NULL);
+    local_check("OTA_BEGIN", local_begin_body(), 100000, "INVALID_ARGUMENT");
+    assert(!begin_count);
+    local_setup();
+    local_signed_field("sizeBytes", cJSON_CreateNumber(4097));
+    local_check("OTA_BEGIN", local_begin_body(), 100000, "INVALID_ARGUMENT");
+    assert(!begin_count);
+    local_setup();
+    local_signed_field("sizeBytes", cJSON_CreateNumber(1024.5));
+    local_check("OTA_BEGIN", local_begin_body(), 100000, "INVALID_ARGUMENT");
+    assert(!begin_count);
+    local_setup();
+    local_signed_field("imageFormat", cJSON_CreateString("MCUBOOT_SIGNED_BIN"));
+    local_check("OTA_BEGIN", local_begin_body(), 100000, "INVALID_ARGUMENT");
+    assert(!begin_count);
+    local_setup();
+    local_signed_field("component", cJSON_CreateString("NRF54"));
+    local_check("OTA_BEGIN", local_begin_body(), 100000, "INVALID_ARGUMENT");
+    assert(!begin_count);
+    local_setup();
+    local_signed_field("compatibleModels", cJSON_Parse("[\"wrong-board\"]"));
+    local_check("OTA_BEGIN", local_begin_body(), 100000, "INVALID_ARGUMENT");
+    assert(!begin_count);
+    local_setup();
+    local_signed_field("fromFirmwareVersions", cJSON_Parse("[\"v0\"]"));
+    local_check("OTA_BEGIN", local_begin_body(), 100000, "INVALID_ARGUMENT");
+    assert(!begin_count);
+    local_setup();
+    cJSON *status = local_expect("OTA_STATUS", cJSON_CreateObject(), 100000, "OK");
+    assert(!strcmp(gw_action_string(status, "phase"), "NONE"));
+    cJSON_Delete(status);
+    cJSON *b = local_begin_body();
+    cJSON_ReplaceItemInObjectCaseSensitive(b, "signature", cJSON_CreateString("bad"));
+    local_check("OTA_BEGIN", b, 100000, "INTEGRITY_ERROR");
+    assert(begin_count == 0 && !*owner);
+    local_check("OTA_BEGIN", local_begin_body(), 1000, "SESSION_EXPIRED");
+    assert(begin_count == 0);
+    strcpy(owner, "cloud-ota");
+    local_check("OTA_BEGIN", local_begin_body(), 100000, "BUSY");
+    assert(begin_count == 0 && !strcmp(owner, "cloud-ota"));
+    *owner = 0;
+    trial = true;
+    local_check("OTA_BEGIN", local_begin_body(), 100000, "BUSY");
+    assert(begin_count == 0);
+    trial = false;
+    fail_store = true;
+    local_check("OTA_BEGIN", local_begin_body(), 100000, "STORAGE_FAULT");
+    assert(begin_count == 0 && !*owner);
+    fail_store = false;
+    untrusted = true;
+    local_check("OTA_BEGIN", local_begin_body(), 100000, "OK");
+    assert(begin_count == 1 && !strcmp(owner, LOCAL_OTA_OWNER));
+    local_check("OTA_BEGIN", local_begin_body(), 200000, "OK");
+    assert(begin_count == 1 && local_ota.deadline == 100000);
+    b = local_begin_body();
+    cJSON_ReplaceItemInObjectCaseSensitive(b, "uploadId", cJSON_CreateString("another"));
+    local_check("OTA_BEGIN", b, 100000, "BUSY");
+    local_check("OTA_WRITE", chunk(512, 512, false), 100000, "CONFLICT");
+    assert(written == 0);
+    local_check("OTA_WRITE", chunk(0, 512, false), 100000, "OK");
+    local_check("OTA_WRITE", chunk(0, 512, false), 100000, "OK");
+    assert(written == 512);
+    local_check("OTA_WRITE", chunk(0, 512, true), 100000, "CONFLICT");
+    assert(written == 512);
+    local_check("OTA_COMMIT", local_body(), 100000, "CONFLICT");
+    assert(boots == 0);
+    local_check("OTA_WRITE", chunk(512, 512, false), 100000, "OK");
+    assert(local_is("READY") && written == sizeof(image));
+    local_check("OTA_WRITE", chunk(512, 512, false), 100000, "OK");
+    assert(written == sizeof(image));
+    local_check("OTA_COMMIT", local_body(), 100000, "ACCEPTED");
+    local_check("OTA_COMMIT", local_body(), 100000, "ACCEPTED");
+    assert(boots == 1 && local_is("REBOOT_PENDING"));
+    gw_ota_local_window_closed();
+    assert(local_is("REBOOT_PENDING"));
+    /* Simulated reboot; no server/UTC. Health gate and ten seconds precede
+     * confirmation. */
+    trial = true;
+    running = &slot1;
+    strcpy(description.version, "v2");
+    assert(gw_ota_init() == ESP_OK);
+    monotonic += 11000;
+    gw_ota_local_tick();
+    assert(confirms == 0);
+    gw_ota_local_boot_ready();
+    unhealthy = true;
+    gw_ota_local_tick();
+    assert(confirms == 0);
+    unhealthy = false;
+    gw_ota_local_tick();
+    assert(confirms == 1 && local_is("CONFIRMED") && !*owner && !trial_deadline);
+    gw_ota_local_tick();
+    assert(confirms == 1);
+    assert(!gw_store_get_json(OTA_KEY)); /* No synthetic cloud task. */
+
+    local_setup();
+    local_check("OTA_BEGIN", local_begin_body(), 100000, "OK");
+    local_check("OTA_WRITE", chunk(0, 512, false), 100000, "OK");
+    assert(gw_ota_local_init() == ESP_OK && local_is("ABORTED") && !*owner);
+    local_check("OTA_BEGIN", local_begin_body(), 100000, "OK");
+    assert(local_is("ABORTED") && begin_count == 1); /* Idempotent terminal ID. */
+    local_check("OTA_WRITE", chunk(512, 512, false), 100000, "CONFLICT");
+    b = local_begin_body();
+    cJSON_ReplaceItemInObjectCaseSensitive(b, "uploadId", cJSON_CreateString("new-upload"));
+    local_check("OTA_BEGIN", b, 100000, "OK");
+    assert(begin_count == 2);
+    gw_ota_local_window_closed();
+    assert(local_is("ABORTED") && !*owner);
+
+    local_setup();
+    local_check("OTA_BEGIN", local_begin_body(), 100000, "OK");
+    local_check("OTA_ABORT", local_body(), 100000, "OK");
+    local_check("OTA_ABORT", local_body(), 100000, "OK");
+    assert(aborts == 1 && !*owner);
+    local_setup();
+    begin_advance = 200000;
+    local_check("OTA_BEGIN", local_begin_body(), 100000, "SESSION_EXPIRED");
+    assert(local_is("FAILED") && aborts == 1 && boots == 0 && !*owner);
+    local_setup();
+    local_check("OTA_BEGIN", local_begin_body(), 100000, "OK");
+    write_advance = 200000;
+    local_check("OTA_WRITE", chunk(0, sizeof(image), false), 100000, "SESSION_EXPIRED");
+    assert(local_is("FAILED") && boots == 0 && !*owner);
+    local_setup();
+    local_check("OTA_BEGIN", local_begin_body(), 100000, "OK");
+    local_check("OTA_WRITE", chunk(0, sizeof(image), true), 100000, "INTEGRITY_ERROR");
+    assert(local_is("FAILED") && boots == 0 && !*owner);
+    local_setup();
+    local_check("OTA_BEGIN", local_begin_body(), 100000, "OK");
+    local_check("OTA_WRITE", chunk(0, sizeof(image), false), 100000, "OK");
+    assert(gw_ota_local_init() == ESP_OK && local_is("ABORTED")); /* READY never auto-installed. */
+    local_setup();
+    local_check("OTA_BEGIN", local_begin_body(), 100000, "OK");
+    local_check("OTA_WRITE", chunk(0, sizeof(image), false), 100000, "OK");
+    gw_ota_local_revoke();
+    local_check("OTA_COMMIT", local_body(), 100000, "SESSION_EXPIRED");
+    assert(local_is("ABORTED") && boots == 0);
+    local_setup();
+    local_check("OTA_BEGIN", local_begin_body(), 100000, "OK");
+    local_check("OTA_WRITE", chunk(0, sizeof(image), false), 100000, "OK");
+    local_check("OTA_COMMIT", local_body(), 100000, "ACCEPTED");
+    assert(gw_ota_local_init() == ESP_OK && local_is("ROLLED_BACK") && !*owner);
+    local_setup();
+    local_check("OTA_BEGIN", local_begin_body(), 1000000, "OK");
+    monotonic += 300001;
+    gw_ota_local_tick();
+    assert(local_is("ABORTED") && aborts == 1);
+    local_setup();
+    local_check("OTA_BEGIN", local_begin_body(), 100000, "OK");
+    bad_description = true;
+    local_check("OTA_WRITE", chunk(0, sizeof(image), false), 100000, "VERSION_MISMATCH");
+    assert(local_is("FAILED") && boots == 0);
+    local_setup();
+    local_signed_field("component", NULL);
+    local_check("OTA_BEGIN", local_begin_body(), 100000, "INVALID_ARGUMENT");
+    assert(begin_count == 0);
+    local_setup();
+    local_check("OTA_BEGIN", local_begin_body(), 100000, "OK");
+    local_check("OTA_WRITE", chunk(0, sizeof(image), false), 100000, "OK");
+    local_check("OTA_COMMIT", local_body(), 100000, "ACCEPTED");
+    trial = true;
+    running = &slot1;
+    strcpy(description.version, "v2");
+    assert(gw_ota_init() == ESP_OK);
+    gw_ota_local_boot_ready();
+    monotonic += 11000;
+    fail_confirm_journal = true;
+    gw_ota_local_tick();
+    assert(confirmed && local_is("CONFIRMING") && !trial_deadline && *owner);
+    /* Power loss between marking image VALID and committing result is recoverable. */
+    fail_confirm_journal = false;
+    assert(gw_ota_init() == ESP_OK);
+    gw_ota_local_boot_ready();
+    monotonic += 11000;
+    gw_ota_local_tick();
+    assert(local_is("CONFIRMED") && !*owner);
+    puts("PASS: local OTA authenticated manifest, lease/expiry/cancel, chunk "
+         "replay, Flash hash, "
+         "offline trial confirmation, lost reply and reboot recovery");
+}
 int main(void) {
+    local_tests();
     assert(expires_seconds("2024-02-29T12:00:00Z") > 0);
     assert(expires_seconds("2023-02-29T12:00:00Z") < 0);
     assert(expires_seconds("2024-01-01T00:00:00+08:00") == expires_seconds("2023-12-31T16:00:00Z"));

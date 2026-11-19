@@ -14,6 +14,9 @@ static unsigned actions, requests, resets;
 static esp_err_t action_result = ESP_OK, recovery_result = ESP_ERR_TIMEOUT;
 static uint64_t random_counter;
 static cJSON *transaction;
+static esp_app_desc_t running_app = {.version = "0.2.0"};
+static unsigned heartbeats;
+const esp_app_desc_t *esp_app_get_description(void) { return &running_app; }
 const char *esp_err_to_name(esp_err_t e) {
   return e == ESP_OK ? "OK" : "TEST_ERROR";
 }
@@ -161,6 +164,12 @@ esp_err_t gw_http_json(const char *p, const char *m, const cJSON *b,
   *out = NULL;
   if (fail_http)
     return ESP_FAIL;
+  if (!strcmp(p, "/api/v1/gateway-ingress/status")) {
+    assert(!strcmp(str(b, "firmwareVersion"), running_app.version));
+    assert(!strcmp(m, "POST"));
+    heartbeats++;
+    return ESP_OK;
+  }
   assert(!strcmp(p, "/api/v1/gateway-ingress/results"));
   const cJSON *r =
       cJSON_GetArrayItem(cJSON_GetObjectItemCaseSensitive(b, "results"), 0);
@@ -195,6 +204,10 @@ static cJSON *new_command(const char *id) {
 }
 int main(void) {
   assert(gw_cloud_init() == ESP_OK);
+  heartbeat();
+  strcpy(running_app.version, "0.3.1");
+  heartbeat();
+  assert(heartbeats == 2); /* Local/remote OTA heartbeat uses the running descriptor. */
   cJSON *c = new_command("t1");
   command(c);
   assert(actions == 0 && cJSON_GetArraySize(records()) == 1);
