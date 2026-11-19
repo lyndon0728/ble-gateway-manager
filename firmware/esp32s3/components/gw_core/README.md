@@ -37,7 +37,8 @@ gwfactory的NVS namespace为`factory`。使用锁定SDK的NVS分区生成/加密
 | namespace / gateway / token | string，平台设备身份；token是秘密 |
 | root_ca | PEM信任链，类型与HTTP组件读取方式一致；不得关闭主机名/证书检查 |
 | ntp_server | string，配置的SNTP服务器；缺失时没有自动默认时间源 |
-| model / fw_pubkey | 型号字符串及OTA验证公钥；按OTA组件契约 |
+| model / hardware | 型号和硬件版本字符串，用于OTA兼容性检查 |
+| artifact_keys | JSON对象，keyId映射Base64 Ed25519公钥；仅制造流程安装，按OTA组件契约 |
 
 当前timeTrusted表示从配置SNTP源得到合理UTC，并非密码学认证时间。TLS仍检查证书和主机名；需要认证授时的部署必须补充可信时间引导后再验收，不能将此标志当作硬件安全证明。
 
@@ -47,4 +48,4 @@ CH390默认关闭，GPIO默认-1；实际PCB核对后配置MOSI/MISO/SCLK/CS/INT
 
 `scripts/Test-Core.ps1`使用实际生产gw_rules.c，主机测试覆盖无损uint64、UTF-8/IPv4边界以及snapshot/active指针逐字节截断、位损坏和世代绑定。`Generate-Setup.py --self-test`对照10组独立Security2服务端公开值，包括前导零回归。它们不使用真实NVS，也不证明目标编译/掉电成立。
 
-截至本次编写，SDK下载遇到GitHub DNS超时和官方镜像TLS EOF，目标构建仍需使用锁定SDK实际运行并补证据。配置状态机、网络驱动及制造流程还需要ESP-AT-17/18、37～44的实板验证；当前能力与完整需求的映射以工程VALIDATION/状态文档为准。
+已获取官方ESP-IDF v5.5.6源代码及全部锁定子模块，提交为`880a203ae603d08a94d06aa01e0d6761958e5e9e`；目标工具链安装与目标编译记录见工程VALIDATION。CI使用官方v5.5.6容器及固定镜像摘要。配置状态机、网络驱动及制造流程还需要ESP-AT-17/18、37～44的实板验证；源码审查和主机测试不能替代目标构建或实板证据。

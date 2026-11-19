@@ -1,0 +1,265 @@
+/* Exercises production journal/config/dispatch code. Mocks replace physical
+ * actions and durable storage; digest uses a deterministic test-only hash. */
+#include "../gw_actions.c"
+#include "monocypher-ed25519.h"
+#include <assert.h>
+static cJSON *database;
+static bool fail_store;
+static unsigned effects, transactions;
+static esp_err_t effect_result, recover_result;
+static char maintenance[129];
+cJSON *gw_core_state(void) { return cJSON_CreateObject(); }
+esp_err_t gw_core_wifi_scan(bool active,uint64_t deadline,cJSON **aps) {
+    (void)active; (void)deadline;
+    *aps=cJSON_Parse("[{\"ssid\":\"ap\",\"bssid\":\"11:22:33:44:55:66\",\"channel\":1,\"rssi\":-50,\"security\":\"WPA2_PSK\"}]");
+    return ESP_OK;
+}
+uint64_t gw_core_mono_ms(void) { return 100; }
+SemaphoreHandle_t xSemaphoreCreateMutex(void) { return (void *)1; }
+int xSemaphoreTake(SemaphoreHandle_t s, TickType_t t) {
+    (void)s;
+    (void)t;
+    return pdTRUE;
+}
+void xSemaphoreGive(SemaphoreHandle_t s) { (void)s; }
+void vTaskDelay(TickType_t t) { (void)t; }
+int xTaskCreate(void (*f)(void *), const char *n, unsigned stack, void *p, unsigned priority,
+                void *h) {
+    (void)f;
+    (void)n;
+    (void)stack;
+    (void)p;
+    (void)priority;
+    (void)h;
+    return pdPASS;
+}
+esp_err_t gw_core_maintenance_acquire(const char *owner) {
+    if (*maintenance && strcmp(maintenance, owner))
+        return ESP_ERR_INVALID_STATE;
+    snprintf(maintenance, sizeof(maintenance), "%s", owner);
+    return ESP_OK;
+}
+void gw_core_maintenance_release(const char *owner) {
+    if (!strcmp(maintenance, owner))
+        *maintenance = 0;
+}
+cJSON *gw_store_get_json(const char *key) {
+    return cJSON_Duplicate(cJSON_GetObjectItemCaseSensitive(database, key), true);
+}
+esp_err_t gw_store_put_json(const char *key, const cJSON *value) {
+    if (fail_store)
+        return ESP_FAIL;
+    cJSON_DeleteItemFromObjectCaseSensitive(database, key);
+    cJSON_AddItemToObject(database, key, cJSON_Duplicate(value, true));
+    return ESP_OK;
+}
+esp_err_t gw_store_transaction(const gw_store_op_t *ops, size_t count) {
+    if (fail_store)
+        return ESP_FAIL;
+    transactions++;
+    for (size_t i = 0; i < count; i++) {
+        cJSON *j = cJSON_ParseWithLength(ops[i].data, ops[i].size);
+        assert(j);
+        assert(gw_store_put_json(ops[i].key, j) == ESP_OK);
+        cJSON_Delete(j);
+    }
+    return ESP_OK;
+}
+/* Crypto interoperability is separately tested against RFC/OpenSSL. */
+int mbedtls_sha256(const unsigned char *p, size_t n, unsigned char out[32], int mode) {
+    (void)mode;
+    uint8_t hash[64];
+    crypto_sha512(hash, p, n);
+    memcpy(out, hash, 32);
+    return 0;
+}
+int mbedtls_base64_decode(unsigned char *out, size_t cap, size_t *n, const unsigned char *in,
+                          size_t length) {
+    static const char alphabet[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    unsigned value = 0, bits = 0;
+    *n = 0;
+    if (length % 4)
+        return -1;
+    for (size_t i = 0; i < length; i++) {
+        if (in[i] == '=')
+            break;
+        const char *p = strchr(alphabet, in[i]);
+        if (!p)
+            return -1;
+        value = (value << 6) | (unsigned)(p - alphabet);
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            if (*n >= cap)
+                return -1;
+            out[(*n)++] = (uint8_t)(value >> bits);
+        }
+    }
+    return 0;
+}
+bool gw_nrf_identity(uint8_t b[16], uint32_t *c, char v[64]) {
+    if (b)
+        memset(b, 1, 16);
+    if (c)
+        *c = 0xffff;
+    if (v)
+        strcpy(v, "test");
+    return true;
+}
+esp_err_t gw_nrf_scan(const cJSON *p, uint64_t r, int64_t d) {
+    (void)p;
+    (void)r;
+    (void)d;
+    effects++;
+    return effect_result;
+}
+esp_err_t gw_nrf_advertise(const cJSON *p, uint64_t r, int64_t d) { return gw_nrf_scan(p, r, d); }
+cJSON *gw_nrf_diagnostics(int64_t d) {
+    (void)d;
+    return cJSON_CreateObject();
+}
+void gw_capture_radio_enabled(uint8_t r, bool e) {
+    (void)r;
+    (void)e;
+}
+esp_err_t gw_ble_init(void) { return ESP_OK; }
+esp_err_t gw_ota_init(void) { return ESP_OK; }
+esp_err_t gw_gatt_nrf_init(void) { return ESP_OK; }
+cJSON *gw_ble_diagnostics(void) { return cJSON_CreateObject(); }
+esp_err_t gw_ble_configure(const cJSON *p, bool a, uint64_t r, uint64_t d, cJSON **out) {
+    (void)a;
+    *out = cJSON_CreateObject();
+    return gw_nrf_scan(p, r, (int64_t)d);
+}
+esp_err_t gw_ble_execute(const cJSON *c, uint64_t d, cJSON **out) {
+    (void)c;
+    (void)d;
+    effects++;
+    *out = cJSON_CreateObject();
+    cJSON_AddBoolToObject(*out, "attResponse", true);
+    return effect_result;
+}
+esp_err_t gw_gatt_nrf_execute(const cJSON *c, uint64_t d, cJSON **out) {
+    return gw_ble_execute(c, d, out);
+}
+esp_err_t gw_ota_execute(const cJSON *c, uint64_t d, cJSON **out) {
+    return gw_ble_execute(c, d, out);
+}
+esp_err_t gw_ota_recover(const cJSON *c, uint64_t d, cJSON **out) {
+    (void)c;
+    (void)d;
+    *out = cJSON_CreateObject();
+    return recover_result;
+}
+esp_err_t gw_gatt_nrf_recover(const cJSON *c, uint64_t d, cJSON **out) {
+    return gw_ota_recover(c, d, out);
+}
+static void reset_test(void) {
+    cJSON_Delete(database);
+    database = cJSON_CreateObject();
+    fail_store = false;
+    effects = transactions = 0;
+    effect_result = recover_result = ESP_OK;
+    *maintenance = 0;
+}
+static cJSON *command(const char *id, const char *type) {
+    cJSON *c = cJSON_CreateObject();
+    cJSON_AddStringToObject(c, "taskId", id);
+    cJSON_AddStringToObject(c, "type", type);
+    cJSON_AddObjectToObject(c, "parameters");
+    return c;
+}
+int main(void) {
+    assert(gw_actions_init() == ESP_OK);
+    reset_test();
+    cJSON *out = NULL;
+    cJSON *patch = cJSON_Parse("{\"radios\":{\"nrf54\":{\"scan\":{\"enabled\":true}}}}");
+    cJSON *complete = cJSON_Parse(
+        "{\"radios\":{\"nrf54\":{\"scan\":{\"enabled\":true,\"active\":false,\"intervalMs\":100,"
+        "\"windowMs\":50},\"filters\":{\"minRssi\":null,\"serviceUuids\":[\"180f\",\"0000180f-0000-"
+        "1000-8000-00805f9b34fb\"],\"manufacturerIds\":[76,76]},\"beaconRules\":[{\"action\":"
+        "\"ALLOW\",\"reportKinds\":[\"LEGACY_ADV\"],\"adType\":255,\"offset\":0,\"valueBase64\":"
+        "\"TAACFQ==\",\"maskBase64\":\"/////w==\"}]}}}");
+    struct gw_profile p;
+    const cJSON *radio = cJSON_GetObjectItemCaseSensitive(
+        cJSON_GetObjectItemCaseSensitive(complete, "radios"), "nrf54");
+    assert(gw_action_profile(radio, 1, &p) == ESP_OK);
+    assert(p.uuid_count == 1 && p.company_count == 1 && p.rule_count == 1 &&
+           p.rules[0].length == 4 && p.min_rssi == -128);
+    assert(gw_actions_configure(patch, complete, 1, 10000, &out) == ESP_OK);
+    cJSON_Delete(out);
+    assert(effects == 1 && transactions == 1);
+    assert(gw_actions_configure(patch, complete, 1, 10000, &out) == ESP_OK);
+    cJSON_Delete(out);
+    assert(effects == 1);
+    assert(gw_actions_configure(patch, complete, 2, 10000, &out) == ESP_OK);
+    cJSON_Delete(out);
+    assert(effects == 2);
+    assert(gw_actions_configure(patch, complete, 1, 10000, &out) == ESP_ERR_INVALID_STATE &&
+           effects == 2);
+    fail_store = true;
+    assert(gw_actions_configure(patch, complete, 3, 10000, &out) != ESP_OK && effects == 2);
+    fail_store = false;
+    effect_result = ESP_ERR_TIMEOUT;
+    assert(gw_actions_configure(patch, complete, 3, 10000, &out) == ESP_ERR_TIMEOUT);
+    cJSON_Delete(out);
+    assert(effects == 3);
+    assert(gw_actions_configure(patch, complete, 4, 10000, &out) == ESP_ERR_NOT_FINISHED &&
+           effects == 3);
+    cJSON *committed = gw_store_get_json("actions/target/nrf54/scan");
+    assert(!strcmp(gw_action_string(committed, "identity"), "2"));
+    cJSON_Delete(committed);
+    reset_test();
+    cJSON *write = command("write-1", "GATT_WRITE");
+    assert(gw_actions_execute(write, 10000, &out) == ESP_OK);
+    cJSON_Delete(out);
+    assert(effects == 1);
+    assert(gw_actions_execute(write, 10000, &out) == ESP_OK);
+    cJSON_Delete(out);
+    assert(effects == 1);
+    cJSON_AddStringToObject(write, "changed", "payload");
+    assert(gw_actions_execute(write, 10000, &out) == ESP_ERR_INVALID_ARG && effects == 1);
+    cJSON_Delete(write);
+    reset_test();
+    write = command("ambiguous-write", "GATT_WRITE");
+    effect_result = ESP_ERR_TIMEOUT;
+    assert(gw_actions_execute(write, 10000, &out) == ESP_ERR_TIMEOUT);
+    cJSON_Delete(out);
+    assert(effects == 1 && *maintenance);
+    assert(gw_actions_execute(write, 10000, &out) == ESP_ERR_TIMEOUT);
+    cJSON_Delete(out);
+    assert(effects == 1);
+    cJSON *next = command("next-write", "GATT_WRITE");
+    assert(gw_actions_execute(next, 10000, &out) == ESP_ERR_NOT_FINISHED && effects == 1);
+    cJSON_Delete(next);
+    recover_result = ESP_ERR_TIMEOUT;
+    assert(gw_actions_recover(write, 10000, &out) == ESP_ERR_TIMEOUT);
+    cJSON_Delete(out);
+    assert(effects == 1);
+    recover_result = ESP_OK;
+    assert(gw_actions_recover(write, 10000, &out) == ESP_OK);
+    cJSON_Delete(out);
+    assert(effects == 1 && !*maintenance);
+    cJSON_Delete(write);
+    reset_test();
+    cJSON *ota = command("ota", "FIRMWARE_UPGRADE");
+    effect_result = ESP_ERR_NOT_FINISHED;
+    assert(gw_actions_execute(ota, 10000, &out) == ESP_ERR_NOT_FINISHED);
+    cJSON_Delete(out);
+    recover_result = ESP_ERR_NOT_FINISHED;
+    assert(gw_actions_recover(ota, 10000, &out) == ESP_ERR_NOT_FINISHED);
+    cJSON_Delete(out);
+    assert(effects == 1);
+    recover_result = ESP_OK;
+    assert(gw_actions_recover(ota, 10000, &out) == ESP_OK);
+    cJSON_Delete(out);
+    assert(effects == 1);
+    cJSON_Delete(ota);
+    cJSON_Delete(patch);
+    cJSON_Delete(complete);
+    cJSON_Delete(database);
+    puts("PASS: actions intent/replay/conflict/storage failure/UNKNOWN/OTA recovery and profile "
+         "conversion");
+    return 0;
+}

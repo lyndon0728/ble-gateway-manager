@@ -75,6 +75,9 @@ esp_netif_t *gw_core_ap_netif(void);
 esp_netif_t *gw_core_uplink_netif(const char *interface);
 bool gw_core_interface_ready(const char *interface);
 bool gw_core_time_trusted(void);
+/* Bounded real Wi-Fi scan for an already authorized diagnostic caller.
+ * Uses the same network ownership lease as provisioning/candidates. */
+esp_err_t gw_core_wifi_scan(bool active, uint64_t deadline_mono_ms, cJSON **aps);
 
 #ifdef __cplusplus
 }

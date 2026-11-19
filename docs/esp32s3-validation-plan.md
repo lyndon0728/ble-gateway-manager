@@ -2,13 +2,13 @@
 
 版本：1.1；基线日期：2026-11-19。依据为 [ESP 需求](esp32s3-requirements.md) 的 **170 条需求、44 个 ESP-AT 用例**。实现次序见 [开发文档](esp32s3-development.md)，持久事务与恢复设计见 [持久化文档](esp32s3-persistence.md)。线上字段仍以 [服务器协议](../server/docs/gateway-protocol.md)、[消息 Schema](../server/internal/platform/assets/message-contracts.schema.json)、[UART 协议](../server/docs/gateway-uart-protocol.md) 为准。
 
-**本文是待执行计划，不是测试报告。全部 ESP 用例状态为未执行；当前没有可运行的 ESP 固件测试入口。** 仓库中已有服务器测试、nRF 主机替身测试和 Python 串口参考工具，可核对对端契约，但不能证明 ESP 的存储、驱动、并发、网络、射频或升级已经完成。本文不新增脚本或代码。新增本地配网、凭据部署及配置对账的待实现契约见 [网络配置设计](esp32s3-network-provisioning.md)；不能将其当作现有服务器 Schema 已支持的字段或入口。
+**本文是完整产品验收计划，不是测试报告。44项用例尚未整体完成实板验收。** 2026-11-19已新增ESP固件、主机测试、目标构建入口及平台配网扩展，分层执行证据见[固件验证记录](../firmware/esp32s3/VALIDATION.md)。下文各用例的“未执行”表示整项验收尚未完成；不能据此否认已记录的主机子测试，也不能把主机通过扩展为Flash、网络或射频实板通过。平台已实现的配网契约见[联调说明](../server/docs/network-provisioning-integration.md)。
 
 ## 1. 测试分层与运行条件
 
 | 层次 | 验证对象 | 必需条件 | 不能替代的证据 |
 | --- | --- | --- | --- |
-| H：ESP 主机测试 | 编解码、状态机、定时器、事务恢复、合并算法、任务防重 | 待实现的 ESP 可测试模块、确定性时钟及接口替身 | 实际 Flash、任务抢占、DMA、CTS、TLS、BLE 控制器行为 |
+| H：ESP 主机测试 | 编解码、状态机、定时器、事务恢复、合并算法、任务防重 | ESP生产模块、确定性时钟及接口替身；实际入口见固件验证记录 | 实际 Flash、任务抢占、DMA、CTS、TLS、BLE 控制器行为 |
 | K：SDK 目标构建/测试 | 锁定 ESP-IDF/依赖的 ABI、配置、链接、分区与驱动适配 | 真正 ESP 工程、锁定 toolchain/依赖、目标配置 | 仅编译不能证明执行时序或实板可用 |
 | B：实板测试 | 双芯片、电源、Flash、网络接口、BLE 空口、硬件复位 | 匹配 PCB、已验证可运行镜像、独立可控供电/复位、抓包/测量设备 | 替身状态或打印日志不能证明物理动作和掉电恢复 |
 | S：服务器集成测试 | 实际 API/Schema、身份、任务、持久 ACK、能力与结果校验 | 隔离测试实例、测试凭据/公钥、可恢复数据库及必要 Broker | 服务器接受结果不能独立证明设备实际执行 |
@@ -42,7 +42,7 @@ py -3 tools/uart_probe.py --self-test
 py -3 -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
-尚不存在的 ESP host/SDK/实板入口不能写成现成可执行命令。实现阶段须先交付入口、固定版本和使用前提，再将对应命令及结果补入运行记录。
+已存在的ESP host/SDK入口及其版本、运行条件见固件README与VALIDATION。以下用例保留完整验收范围，尚未配置的实板夹具不得描述成已经运行。
 
 ## 2. 接口替身、故障注入和判定原则
 
@@ -74,7 +74,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-01：UART 黄金向量与损坏输入
 
-- **分层/现有可运行**：H、K、B；ESP 入口未实现，未执行；可参考 R-UART。
+- **分层/现有可运行**：H、K、B；ESP整项验收未完成；已运行H/K子项见VALIDATION；可参考 R-UART。
 - **前置**：冻结 UART 帧黄金向量、最大合法长度、控制和数据类型；ESP 流式解码器接入可记录副作用的替身。
 - **注入**：在每个字节边界切分，连接多帧，插入空分隔、错 CRC/magic/version/长度、超长输入、未知类型和旧 link_id。
 - **步骤**：逐一输入合法/非法向量；在坏帧后紧接有效 HELLO/控制帧；目标构建后通过真实 UART 重放。
@@ -83,7 +83,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-02：CTS、溢出与 TX 中止
 
-- **分层/现有可运行**：H、K、B；ESP 入口未实现，未执行；R-UART 仅提供帧级参考。
+- **分层/现有可运行**：H、K、B；ESP整项验收未完成；已运行H/K子项见VALIDATION；R-UART 仅提供帧级参考。
 - **前置**：实际 UART 引脚/电平/缓冲所有权已冻结；可独立拉动 CTS，具有逻辑分析仪和驱动事件记录。
 - **注入**：长 CTS 阻塞、RX overflow、driver buffer full、传输中取消/复位；同时排入 ACK 和控制请求。
 - **步骤**：最大帧双向持续发送；分别停顿和中止；在旧 TX 取消/排空后恢复；验证完整 TX 完成前没有启动响应超时。
@@ -92,7 +92,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-03：控制请求重试、冲突与 BUSY
 
-- **分层/现有可运行**：H、B；ESP 入口未实现，未执行；参考 R-UART、R-BLE。
+- **分层/现有可运行**：H、B；ESP整项验收未完成；已运行H/K子项见VALIDATION；参考 R-UART、R-BLE。
 - **前置**：单在途控制调度器及请求持久映射；替身能记录请求 ID、opcode、内容及受理次数。
 - **注入**：动作受理后丢响应；同 ID 改内容；旧会话响应；明确 BUSY；在待决请求期间触发诊断轮询。
 - **步骤**：依次重试、重握手、查询动作；BUSY 后以新 msg_id 重发未受理请求，GATT 保留原 op_seq；分别逼近计数上限。
@@ -101,7 +101,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-04：提交前仅 ESP 断电
 
-- **分层/现有可运行**：H、K、B；ESP 持久测试入口未实现，未执行；无可替代的现成 ESP 测试。
+- **分层/现有可运行**：H、K、B；ESP持久化主机子测试已新增，完整NVS/Flash实板验收未完成。
 - **前置**：nRF 独立保持供电；首批及后续批次分别测试；存储事务具有可识别的完整提交边界。
 - **注入**：观测写入中、水位写入中、提交标记完成前切断 ESP 电源。
 - **步骤**：发送批次，确认尚未完整提交即断电；保持 nRF 原启动 ID 和队首；恢复 ESP 并重放。
@@ -110,7 +110,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-05：提交后、CUSTODY 前仅 ESP 断电
 
-- **分层/现有可运行**：H、K、B；ESP 入口未实现，未执行；R-UART 可参考批次重放语义。
+- **分层/现有可运行**：H、K、B；ESP整项验收未完成；已运行H/K子项见VALIDATION；R-UART 可参考批次重放语义。
 - **前置**：nRF 独立供电；观测与批次水位已作为一个事务持久提交；阻止 ACK 发出。
 - **注入**：提交完成后、ACK 出线前关闭 ESP。
 - **步骤**：恢复 ESP；核对原 nRF boot ID；重放相同批次与 payload，随后再发送下一批。
@@ -119,7 +119,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-06：CUSTODY 后、云端 ACK 前断电
 
-- **分层/现有可运行**：H、B、S；ESP 入口未实现，未执行；参考 R-SERVER 的接入去重。
+- **分层/现有可运行**：H、B、S；ESP整项验收未完成；已运行H/K子项见VALIDATION；参考 R-SERVER 的接入去重。
 - **前置**：含待合并观测、已定稿事件及两种 schemaVersion 的持久数据；云端暂不返回接管 ACK。
 - **注入**：CUSTODY 后断电；服务器已提交但响应丢失；分别测试仅 ESP 与整板掉电。
 - **步骤**：恢复后对失去旧时间映射的待定观测单独定稿，原定稿事件按原身份重发；恢复云端 ACK。
@@ -128,7 +128,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-07：RAW_PERSISTED 后 GC 中断
 
-- **分层/现有可运行**：H、K、B、S；ESP 入口未实现，未执行；R-SERVER 仅验证云端重复接纳。
+- **分层/现有可运行**：H、K、B、S；ESP整项验收未完成；已运行H/K子项见VALIDATION；R-SERVER 仅验证云端重复接纳。
 - **前置**：同一存储段混有已接管、未接管、隔离事件及控制/结果记录；GC 保留完整副本和索引发布边界。
 - **注入**：复制新段、提交索引、标记旧段可回收和擦除各阶段掉电/短写。
 - **步骤**：收到合法逐项云端 ACK 后触发回收；逐点恢复，校验全部记录；对恢复为待确认的旧事件再次上传。
@@ -137,7 +137,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-08：水位损坏、跳号和摘要冲突
 
-- **分层/现有可运行**：H、B；ESP 入口未实现，未执行；参考 R-UART。
+- **分层/现有可运行**：H、B；ESP整项验收未完成；已运行H/K子项见VALIDATION；参考 R-UART。
 - **前置**：已接管非首批且 nRF 继续运行；具有可诊断的损坏隔离和维护流程。
 - **注入**：删除/损坏持久水位；批号前跳；最近同批号改 payload/type；有效 CRC 下构造非法记录；另注入早于最近水位的旧帧。
 - **步骤**：恢复并提交上述批次；重新 HELLO 后观察；在批准的维护场景中记录后执行受控 nRF reset。
@@ -146,7 +146,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-09：配对时间边界与多候选
 
-- **分层/现有可运行**：H、B；ESP 合并算法入口未实现，未执行；没有现成 ESP 去重测试。
+- **分层/现有可运行**：H、B；ESP合并算法主机子测试已新增，双射频实板验收未完成。
 - **前置**：两路相同完整观测、可控单调时钟/误差、稳定入队次序；冻结事件分配与观测消费事务。
 - **注入**：时间差加误差在50 ms边界内/等于/之外；多个候选时间差相同；到期前后新候选到达；定稿事务中断。
 - **步骤**：推进各观测等待至150 ms；检查最小时间差及先入队规则；恢复中断的配对提交。
@@ -155,7 +155,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-10：不得合并的观测
 
-- **分层/现有可运行**：H、B、S；ESP 入口未实现，未执行；R-SERVER 可核对 capture 语义。
+- **分层/现有可运行**：H、B、S；ESP整项验收未完成；已运行H/K子项见VALIDATION；R-SERVER 可核对 capture 语义。
 - **前置**：固定相近时间；组合地址类型、原始 AD、报告种类、connectable、legacy/SID等元数据。
 - **注入**：同源重复、同地址不同AD、ADV/SCAN_RSP混合、匿名/bond未知地址、扩展报告缺SID、不可比属性和迟到记录。
 - **步骤**：输入正反例；同一个 UUID/MAC 多次周期发送；真实双扫描与空中记录对照。
@@ -164,7 +164,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-11：重启、锚过期与 UTC 跳变
 
-- **分层/现有可运行**：H、B、S；ESP 入口未实现，未执行；R-UART/R-SERVER 仅作时间字段参考。
+- **分层/现有可运行**：H、B、S；ESP整项验收未完成；已运行H/K子项见VALIDATION；R-UART/R-SERVER 仅作时间字段参考。
 - **前置**：已建立有效 nRF→ESP 单调锚和 UTC 锚；含待定观测与已定稿事件。
 - **注入**：任一芯片重启、锚龄跨60秒、TIME_PROBE重试/超50 ms往返、UTC前后跳、长时间积压的旧capture_ms。
 - **步骤**：刷新探测，尝试用新锚处理旧积压；重启后恢复待定区；重传已定稿事件。
@@ -173,7 +173,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-12：容量边界、慢写与预留空间
 
-- **分层/现有可运行**：H、K、B、S；ESP 入口未实现，未执行；R-SERVER 可参考 QUEUE_FULL/重试ACK。
+- **分层/现有可运行**：H、K、B、S；ESP整项验收未完成；已运行H/K子项见VALIDATION；R-SERVER 可参考 QUEUE_FULL/重试ACK。
 - **前置**：冻结条数/字节上限、隔离区满策略、控制/结果预留空间及 Flash 提交延迟预算。
 - **注入**：待定区达到256条或128 KiB；spool/隔离区满；Flash慢写/写失败；服务器队列满；持续本机BLE输入。
 - **步骤**：递增负载并断网；继续控制/状态查询；释放空间后观察有序恢复；检查GC及锁等待。
@@ -182,7 +182,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-13：传输 ACK 与应用 ACK 分离
 
-- **分层/现有可运行**：H、B、S；ESP 入口未实现，未执行；参考 R-SERVER。
+- **分层/现有可运行**：H、B、S；ESP整项验收未完成；已运行H/K子项见VALIDATION；参考 R-SERVER。
 - **前置**：一个含多事件的spool批次、多个任务结果、真实HTTP/MQTT适配器及可控制应用响应的测试服务。
 - **注入**：只给PUBACK/HTTP空2xx；丢应用ACK；错namespace/gateway/batch/event；结果错task/result；缺项、重复项、逐项拒绝及乱序ACK；切换HTTP/MQTT；改变retryAfterMs及认证失败类别。
 - **步骤**：在每种响应后检查回收状态；合法项与拒绝项混合；对同一事件和结果恢复合法ACK后重试。
@@ -191,7 +191,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-14：1.0/1.1 与严格字段校验
 
-- **分层/现有可运行**：H、B、S；ESP 入口未实现，未执行；参考 R-SERVER 的 Capture/Control 测试。
+- **分层/现有可运行**：H、B、S；ESP整项验收未完成；已运行H/K子项见VALIDATION；参考 R-SERVER 的 Capture/Control 测试。
 - **前置**：旧1.0事件、新1.1事件和已登记/未登记GW32_CAPTURE_CONTEXT_1的测试设备；冻结Schema版本。
 - **注入**：混版本组批、旧事件重编码、未知字段、非法Base64、同批重复eventId、超数量/字节限制；127/-128 RSSI、SCAN_RSP带connectable、legacy带SID、primaryPhy=LE_2M。
 - **步骤**：重放旧spool并采集新记录；验证默认64条或250 ms刷新及upload覆盖；验证200条/64 KiB单条/256 KiB原始批次/1 MiB HTTP边界，内部1000条缓冲必须拆批；分别提交合法和非法控制/心跳/采集信封。
@@ -200,7 +200,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-15：任务、配置 revision、取消与结果防重
 
-- **分层/现有可运行**：H、B、S；ESP 入口未实现，未执行；参考 R-SERVER Control/GW32。
+- **分层/现有可运行**：H、B、S；ESP整项验收未完成；已运行H/K子项见VALIDATION；参考 R-SERVER Control/GW32。
 - **前置**：真实任务创建/取消接口、测试副作用计数器、持久任务及结果journal；具备授权与缺失能力的设备配置。
 - **注入**：相同task/digest重投、同task换digest、resultId或resultSequence内容冲突、执行意图前后重启、结果ACK丢失、在途/UNKNOWN占用和TTL到期；格式错误的身份/时间/摘要和非协议错误枚举。
 - **步骤**：先取消未投递任务，再取消已投递任务；重投已终结任务；测试同revision同内容/不同内容、较旧revision、新revision相同配置、超过IEEE-754精确整数范围但仍在协议范围内的revision、跨组非法patch、扩展minRssi:null与旧版顶层null；执行持久意图后的真实ESP REBOOT并重投同任务。
@@ -209,7 +209,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-16：无可信 UTC 冷启动
 
-- **分层/现有可运行**：H、K、B、S；ESP 入口未实现，未执行；R-SERVER仅提供字段校验。
+- **分层/现有可运行**：H、K、B、S；ESP整项验收未完成；已运行H/K子项见VALIDATION；R-SERVER仅提供字段校验。
 - **前置**：冻结可信时间引导和证书验证策略；可模拟无RTC/时间不可用；本地存储仍可用。
 - **注入**：冷启动无可信UTC、时间服务失败、旧时间锚不可恢复、同步前后再次重启；接收临近过期任务。
 - **步骤**：开始采集并暂存内部状态/结果事实及单调时刻；尝试任务和TLS连接；建立可信时间后重新观察/对账并构造可发送信封。
@@ -218,7 +218,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-17：远程候选网络必须取得独立应用证明
 
-- **分层/现有可运行**：H、K、B、S；ESP 入口未实现，未执行；R-SERVER已有网络probe事务校验参考。
+- **分层/现有可运行**：H、K、B、S；ESP整项验收未完成；已运行H/K子项见VALIDATION；R-SERVER已有网络probe事务校验参考。
 - **前置**：两条可区分路由的网络；持久last-good；能独立使候选接口DNS/TLS/服务失败；服务器有效CONFIGURE任务。
 - **注入**：仅旧接口可达、候选DNS/TLS失败、缺少一个probe ACK、错candidateRevision；将首次probe和SUCCEEDED放同一结果批次；无效SSID/credentialRef/STATIC参数。
 - **步骤**：测试DHCP和完整STATIC、UTF-8 SSID字节边界、WPA2/WPA3实际支持与credentialRef解析；验证候选首选接口及uplinkOrder中发生配置变化的接口。逐接口提交EXECUTING/NONE的details.networkProbe，字段为interface、candidateRevision、linkReady/ipReady/dnsReady/tlsReady；四个Ready均须真实满足后为true。先取得逐接口持久ACK，再提交成功。
@@ -227,7 +227,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-18：远程网络提交前后掉电与主备切换
 
-- **分层/现有可运行**：H、K、B、S；ESP 入口未实现，未执行；参考 R-SERVER 的配置/结果校验。
+- **分层/现有可运行**：H、K、B、S；ESP整项验收未完成；已运行H/K子项见VALIDATION；参考 R-SERVER 的配置/结果校验。
 - **前置**：服务器有效CONFIGURE任务；两接口均已验证，具备candidate/last-good原子提交边界；保留待发事件和任务结果。本项覆盖远程任务，本地无任务的网络事务另见AT-39～41。
 - **注入**：试用中断电、全部probe ACK后但提交前断电、提交后但成功结果前断电；主用链路反复抖动，备用链路断开。
 - **步骤**：逐点恢复；核对生效配置；依uplinkOrder切换并重传原spool；清空业务配置的独立受控场景验证管理恢复流程。
@@ -236,7 +236,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-19：双路扫描与过滤对照
 
-- **分层/现有可运行**：H、K、B、S；ESP 入口未实现，未执行；参考 R-BLE、R-UART、R-SERVER解析测试。
+- **分层/现有可运行**：H、K、B、S；ESP整项验收未完成；已运行H/K子项见VALIDATION；参考 R-BLE、R-UART、R-SERVER解析测试。
 - **前置**：可编程BLE广播源、独立抓包器，两控制器各自合法扫描任务；基础/Beacon过滤目标及预期真值表。
 - **注入**：RSSI边界、16/32/128位服务UUID、厂商列表、8条有序ALLOW/DENY、掩码/偏移边界、畸形完整AD、截断报告、仅SCAN_RSP带UUID。
 - **步骤**：主动/被动扫描分别执行，interval/window边界及量化回读；空过滤、混合AND/列表OR、首命中和默认动作逐一对照；验证两路配置分别提交。
@@ -245,7 +245,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-20：广播配置、能力与空口一致性
 
-- **分层/现有可运行**：H、K、B、S；ESP 入口未实现，未执行；参考 R-BLE、R-SERVER广播能力校验。
+- **分层/现有可运行**：H、K、B、S；ESP整项验收未完成；已运行H/K子项见VALIDATION；参考 R-BLE、R-SERVER广播能力校验。
 - **前置**：nRF和ESP目标分别测试；准备三模式、iBeacon、16/32/128位Service Data和自定义合法AD；当前能力已核实。
 - **注入**：缺BLE_ADV/Peripheral或HELLO bit、扫描角色冲突、32字节载荷、畸形AD、不可扫描模式非空ScanRsp、仅enabled patch及旧revision。
 - **步骤**：服务器分别提交停扫/广播配置，执行启停/类型/内容/间隔边界；验证bit10新命令与无bit10兼容回读；同内容新revision提交，重握手及芯片重启后分别对账。
@@ -254,7 +254,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-21：载荷热更新失败与已连接手机
 
-- **分层/现有可运行**：H、B、S；ESP 入口未实现，未执行；参考 R-BLE热更新/Peripheral测试。
+- **分层/现有可运行**：H、B、S；ESP整项验收未完成；已运行H/K子项见VALIDATION；参考 R-BLE热更新/Peripheral测试。
 - **前置**：已运行广播与已知旧AD/ScanRsp；另有模式2手机连接及已订阅TX的场景。
 - **注入**：AD更新成功而ScanRsp失败，旧载荷恢复失败，模式/间隔重启失败，手机连接/断开回调竞态。
 - **步骤**：更新载荷并读回；连接时查询目标enabled与实际PAUSED；提交enabled=false，再断开手机；测试连接中新的enabled=true配置及显式授权断连。
@@ -263,7 +263,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-22：自动连接授权、新鲜度与发现
 
-- **分层/现有可运行**：H、B、S；ESP 入口未实现，未执行；参考 R-SERVER自动连接及R-BLE发现测试。
+- **分层/现有可运行**：H、B、S；ESP整项验收未完成；已运行H/K子项见VALIDATION；参考 R-SERVER自动连接及R-BLE发现测试。
 - **前置**：登记public/random-static对端、授权规则、可信采集时间和本地观测证据；目标服务/特征可配置。
 - **注入**：未知/RPA/匿名地址、不可连接/过期ADV、规则撤权、缺能力、仅SCAN_RSP含UUID及两种到达顺序、服务缺失/多重匹配；客户端自行注入autoTrigger。
 - **步骤**：观察服务器候选和任务；ESP在动作前核对原ADV、boot ID、maxAgeMs和总预算；建链后按要求查服务/特征与真实对端/安全状态。
@@ -272,7 +272,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-23：GATT 写入模糊结果与总预算
 
-- **分层/现有可运行**：H、B、S；ESP 入口未实现，未执行；参考 R-BLE、R-SERVER GATT校验。
+- **分层/现有可运行**：H、B、S；ESP整项验收未完成；已运行H/K子项见VALIDATION；参考 R-BLE、R-SERVER GATT校验。
 - **前置**：具有可独立读取写入次数的测试对端、当前发现句柄和协商MTU、持久task→op_seq映射。
 - **注入**：写出后断链/nRF或ESP复位、UART受理/查询响应丢失、ATT错误、超时；空写/超过MTU、WITHOUT_RESPONSE、APPLICATION_REPLY、过期句柄。
 - **步骤**：分别测试WITH_RESPONSE+NONE/READBACK；无connectionRef时连接至断开共用一份timeoutMs；同task重投并查询旧op，不创建新物理写。
@@ -281,7 +281,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-24：ESP 重启、旧连接和队列通知
 
-- **分层/现有可运行**：H、B、S；ESP 入口未实现，未执行；参考 R-BLE与R-SERVER连接关闭标记测试。
+- **分层/现有可运行**：H、B、S；ESP整项验收未完成；已运行H/K子项见VALIDATION；参考 R-BLE与R-SERVER连接关闭标记测试。
 - **前置**：Central连接、订阅和已入nRF FIFO的通知/指示；另设已有未完成GATT动作；nRF独立保持供电。
 - **注入**：ESP重启；迟到成功连接结果与GATT_LINK_DOWN乱序；同连接号在不同nRF启动重新出现。
 - **步骤**：先对有效引用执行READ、SUBSCRIBE、UNSUBSCRIBE并检查真实读值/通知状态；ESP重启后恢复journal先对账；由nRF boot ID/radio/conn_id重建原connectionRef；无待决请求时按初始2 s机会查0x09，必要时0x0A；关闭失去活连接登记的旧连接并持久上报断链。
@@ -290,7 +290,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-25：Peripheral 恶意输入、背压与回复
 
-- **分层/现有可运行**：H、B、S边界校验；ESP应用入口未实现，未执行；参考 R-BLE/R-UART，现无云端Peripheral业务闭环入口。
+- **分层/现有可运行**：H、B、S边界校验；ESP本地inbox已实现，手机业务闭环验收未完成；参考 R-BLE/R-UART，现无云端Peripheral业务闭环入口。
 - **前置**：受控BLE客户端、公开RX/TX服务、本地应用inbox；认证/业务适配器未实现的构建与已实现构建分开记录。
 - **注入**：未认证配网/升级/写入请求、重放、超长/高速输入、inbox满、未订阅CCC、通知受理响应丢失及发送期间断链。
 - **步骤**：按0x22接管原始应用字节；确认持久后才CUSTODY；测试业务授权、tx_seq持久映射、同通知重放和应用ACK；尝试将0x22伪装为GATT_NOTIFY上传。
@@ -299,7 +299,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-26：nRF 制品准入与两层签名
 
-- **分层/现有可运行**：H、K、B、S；ESP入口未实现，未执行；参考 R-DFU/R-SERVER。真实MCUboot验签须B层完成。
+- **分层/现有可运行**：H、K、B、S；ESP整项验收未完成；已运行H/K子项见VALIDATION；参考 R-DFU/R-SERVER。真实MCUboot验签须B层完成。
 - **前置**：隔离发行测试密钥、已安装匹配MCUboot/初始签名应用、可恢复板卡；合法zephyr.signed.bin及对应服务器任务。
 - **注入**：错component/model/hardware/version、manifest签名或文件SHA错误、裸bin/merged.hex、超max_image_size、缺FIRMWARE_UPGRADE/NRF54_UART_DFU_1/HELLO bit12、当前运行镜像未确认或存在冲突连接；另用合法manifest包裹MCUboot签名错误的镜像。
 - **步骤**：逐项下载并准入；检查原manifest字节验签、整文件暂存完成后才BEGIN；测试非空nRF fromFirmwareVersions拒绝；错误MCUboot签名样本单独进入试启动。
@@ -308,7 +308,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-27：nRF 下载重握手、复位与块边界
 
-- **分层/现有可运行**：H、B、S；ESP入口未实现，未执行；参考 R-DFU/R-UART。
+- **分层/现有可运行**：H、B、S；ESP整项验收未完成；已运行H/K子项见VALIDATION；参考 R-DFU/R-UART。
 - **前置**：完整已验证的本地镜像、升级journal、nRF RECEIVING状态；有原采集FIFO待接管。
 - **注入**：每块响应丢失、UART重握手、nRF复位、错offset/大小/摘要、相同最新块重复/改内容、较旧块、首块不足32字节及超过1024字节。
 - **步骤**：以30 s DFU等待政策传输；同请求原字节重试；重握手先查STATUS且比对boot/session/state/size/SHA/offset；独立复位后重建阶段。
@@ -317,7 +317,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-28：READY 后未经 REBOOT 命令即掉电
 
-- **分层/现有可运行**：H、K、B、S；ESP入口未实现，未执行；R-DFU仅模拟状态，真实槽启动必须实板。
+- **分层/现有可运行**：H、K、B、S；ESP整项验收未完成；已运行H/K子项见VALIDATION；R-DFU仅模拟状态，真实槽启动必须实板。
 - **前置**：合法FINISH已读回校验并设置MCUboot TEST标记，尚未发送REBOOT；升级journal已持久。
 - **注入**：READY后仅nRF复位和整板断电；另测清理候选时ABORT失败、已经进入REBOOT_PENDING的场景。
 - **步骤**：重启ESP/nRF并主动HELLO，查询实际运行版本、确认状态和镜像；按试运行流程决策；对仍可终止的旧会话验证ABORT真正完成。
@@ -326,7 +326,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-29：同版本不同镜像与确认门槛
 
-- **分层/现有可运行**：H、B、S；ESP入口未实现，未执行；参考 R-DFU/R-SERVER成功摘要校验。
+- **分层/现有可运行**：H、B、S；ESP整项验收未完成；已运行H/K子项见VALIDATION；参考 R-DFU/R-SERVER成功摘要校验。
 - **前置**：两个版本字符串相同但文件SHA不同的签名镜像；新试运行镜像、已确认镜像两种场景；可信任务绑定。
 - **注入**：VERIFY_RUNNING使用错误长度/摘要、校验成功后再失败、未执行VERIFY就CONFIRM、跨芯片重启后复用验证、确认窗口到期；伪造缺失/错误/大写imageSha256结果。
 - **步骤**：执行0x37→健康证据核对→0x36→STATUS；测试UART重握手与芯片重启的区别；检查confirm_remaining_ms并限制重试预算。
@@ -335,7 +335,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-30：nRF 挂死、确认前后复位与结果恢复
 
-- **分层/现有可运行**：H、K、B、S；ESP入口未实现，未执行；参考 R-DFU，真实复位/回滚另需实板。
+- **分层/现有可运行**：H、K、B、S；ESP整项验收未完成；已运行H/K子项见VALIDATION；参考 R-DFU，真实复位/回滚另需实板。
 - **前置**：冻结健康项目、ESP受控复位及匹配回滚镜像；可使用隔离测试构建触发试运行故障。
 - **注入**：候选挂死/重启循环、CONFIRM前复位、确认已写入但响应丢失、确认后ESP掉电、成功结果ACK丢失。
 - **步骤**：在确认预算内持续检查实际进展；失效时按确认的板级开漏/释放方式复位；恢复后查运行镜像与确认状态，重传既有结果。
@@ -344,7 +344,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-31：ESP 自身 OTA 分区与试运行
 
-- **分层/现有可运行**：H、K、B、S；ESP OTA入口未实现，未执行；R-SERVER仅有通用制品/任务参考，没有ESP启动验证。
+- **分层/现有可运行**：H、K、B、S；ESP OTA源码与测试已新增，真实镜像试启动验收未完成；R-SERVER仅有通用制品/任务参考，没有ESP启动验证。
 - **前置**：锁定IDF回滚配置、双应用槽/OTA元数据、合法ESP制品、旧版本及救援路径；保存nRF旧动作和未交付数据。
 - **注入**：写候选槽中断、切槽前后掉电、试运行Flash/UART/身份/网络自检失败、错组件/源版本/签名/尺寸及旧版本回退。
 - **步骤**：component=GATEWAY或兼容省略；核对实际ESP源版本与manifest，写非运行槽；真实重启、自检后标有效；各故障点回到可用镜像并对账nRF。
@@ -362,7 +362,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-33：72 小时混合压力与资源预算
 
-- **分层/现有可运行**：K、B、S；ESP系统未实现，未执行；现有nRF/server测试不能替代长稳。
+- **分层/现有可运行**：K、B、S；ESP工程已新增，系统长稳验收未完成；现有nRF/server测试不能替代长稳。
 - **前置**：功能用例已通过相应层次；冻结包率、离线时长、可接受空档/延迟/损失、内存/Flash余量及负载脚本版本；无指标则不能判定通过。
 - **注入**：至少72小时双扫描、Wi-Fi与以太网抖动、TLS重连、Flash GC、云端限流/重试、UART背压、周期控制/诊断；包括一段完全离线达到目标容量。
 - **步骤**：记录初始资源基线并持续采样；在允许资源组合内切换广播/GATT；定期查询状态、统计和记录对账，结束后排空全部队列。
@@ -380,7 +380,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-35：整板断电与 nRF RAM 损失边界
 
-- **分层/现有可运行**：H、B、S；ESP入口未实现，未执行；R-UART只提供RAM队列行为参考。
+- **分层/现有可运行**：H、B、S；ESP整项验收未完成；已运行H/K子项见VALIDATION；R-UART只提供RAM队列行为参考。
 - **前置**：同批次分别处于未接管、已提交未ACK、已CUSTODY三种阶段；两芯片确实同时掉电，记录电源及启动身份。
 - **注入**：在各阶段切断整板电源并恢复；不得通过测试替身保留掉电前nRF RAM冒充硬件。
 - **步骤**：检查nRF新boot ID和首批起点；恢复ESP完整事务；核对旧未接管输入、已接管记录及新启动输入。
@@ -389,7 +389,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-36：DFU 各状态重握手恢复
 
-- **分层/现有可运行**：H、B、S；ESP入口未实现，未执行；参考 R-DFU/R-UART状态机。
+- **分层/现有可运行**：H、B、S；ESP整项验收未完成；已运行H/K子项见VALIDATION；参考 R-DFU/R-UART状态机。
 - **前置**：同一镜像可停留于RECEIVING、READY、FAULT、ABORTED及REBOOT_PENDING；ESP持久记录session/boot/大小/SHA和业务目标。
 - **注入**：各状态分别重握手；相同摘要但不同session/大小/boot；FAULT后ABORT失败，ABORTED重用旧session，READY后迟到CHUNK及错误CONFIRM。
 - **步骤**：首先STATUS；同boot的所有恢复状态均先与持久journal核对session/size/SHA及任务绑定，不匹配则停止业务恢复，不终止或重启未知会话。匹配后按状态分派：仅RECEIVING继续合法offset；READY转启动核验或允许的安全终止；FAULT用原session成功ABORT；ABORTED新session重新BEGIN；REBOOT_PENDING等待/重握手核对启动，不发送ABORT。boot改变则重新识别实际运行镜像，不能沿用旧会话作控制依据。
@@ -443,7 +443,7 @@ py -3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ### ESP-AT-42：平台远程网络配置与凭据缺失
 
-- **分层/现有可运行**：H、K、B、S；R-SERVER 提供既有网络配置校验参考，ESP 执行器和远程凭据投递扩展未实现，未执行。
+- **分层/现有可运行**：H、K、B、S；R-SERVER 提供既有网络配置校验参考，ESP执行器与凭据投递扩展已新增，设备端到端验收未完成。
 - **前置**：合法管理员、在线已认证设备、可用且属于目标设备的 credentialRef；有效 CONFIGURE/network 任务；与 AT-17/18 相同的真实候选接口证明条件。
 - **注入**：不存在/已撤销/不属本机的引用、错误密码、未实现的凭据投递请求、未授权用户、过期任务、首次 probe 与 SUCCEEDED 同批、断网和 ACK 丢失；本地来源 credentialRef 没有 deliveryId、状态重复上报、伪造安装来源和引用其他设备本地凭据。
 - **步骤**：平台修改 SSID、引用、IPv4 和 uplinkOrder；先验证凭据存在再试用；逐接口提交稳定 resultId 的 networkProbe，取得前一服务器事务的 RESULT_PERSISTED 后才提交配置和成功结果。新增密码部署只在完整扩展实现后按其独立契约测试。另测试本地 PUT_CREDENTIAL 安装后，在设备网络状态中上报 LOCAL/INSTALLED 的 ref/version 及 SSID/security 绑定，服务器以认证设备归属登记引用，再执行 ADOPT_LOCAL。

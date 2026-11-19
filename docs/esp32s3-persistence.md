@@ -2,7 +2,7 @@
 
 版本 0.2，日期 2026-11-19。适用 GW32 ESP32-S3 主机，对接 nRF 固件 0.2.0、UART 1.1 和服务器消息契约 1.0/1.1；补充本地与远程网络配置存储。
 
-**状态：待实现的工程设计。** 本文细化 [ESP32-S3 详细需求](esp32s3-requirements.md) 中的存储与恢复要求，不表示仓库已有可运行 ESP 存储组件、原子事务库或掉电测试结果。内部记录、状态和接口是设计提案，不增加 UART opcode 或服务器 JSON 字段。若实现选用其他后端，仍须满足相同提交、重放和验收条件。
+**状态：持久语义与原始后端设计。** 本文细化 [ESP32-S3 详细需求](esp32s3-requirements.md) 中的存储与恢复要求。0.1.0源码已采用“低频双快照＋高频独立spool”的后端；与本文追加日志、检查点和统一物理域的差异见[实现决策](../firmware/esp32s3/IMPLEMENTATION.md)，实际验证见[验证记录](../firmware/esp32s3/VALIDATION.md)。下文记录格式与拟议接口不代表已实现的二进制布局；提交、重放和防重要求仍是验收约束。内部设计不增加UART opcode或服务器JSON字段。
 
 关联文档：[开发总览](esp32s3-development.md) · [UART 协议](../server/docs/gateway-uart-protocol.md) · [服务器协议](../server/docs/gateway-protocol.md) · [消息 Schema](../server/internal/platform/assets/message-contracts.schema.json)。字段和行为发生冲突时，以已冻结需求及两层协议为准。
 

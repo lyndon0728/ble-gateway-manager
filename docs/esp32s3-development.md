@@ -8,7 +8,7 @@
 | 当前状态 | 设计已形成，ESP工程和平台配网扩展已有源码；验证状态见固件VALIDATION |
 | 配套文档 | [本地与远程配网](esp32s3-network-provisioning.md)、[持久化与恢复设计](esp32s3-persistence.md)、[验证计划](esp32s3-validation-plan.md)、[文档维护约定](README.md) |
 
-本文把需求转为模块、接口、状态、恢复算法和开发步骤。2026-11-19已新增[固件工程](../firmware/esp32s3/README.md)；以下为逻辑设计，实际组件合并与API以源码为准，测试证据见[验证记录](../firmware/esp32s3/VALIDATION.md)。目录树、函数名、内部状态和配置名是**计划实现的设计**，不表示仓库已有相应 API、脚本或可烧录产物。线上字段仍以 [UART 协议](../server/docs/gateway-uart-protocol.md)、[服务器协议](../server/docs/gateway-protocol.md) 和两份 JSON Schema 为准。
+本文把需求转为模块、接口、状态、恢复算法和开发步骤。2026-11-19已新增[固件工程](../firmware/esp32s3/README.md)；以下逻辑模块和拟议接口保留设计职责，实际组件合并、API及容量以源码和[实现决策](../firmware/esp32s3/IMPLEMENTATION.md)为准，测试证据见[验证记录](../firmware/esp32s3/VALIDATION.md)。设计中的名称不自动成为同名C接口或测试入口。线上字段仍以 [UART 协议](../server/docs/gateway-uart-protocol.md)、[服务器协议](../server/docs/gateway-protocol.md) 和两份 JSON Schema 为准。
 
 ## 1. 开发约束与技术决策
 
@@ -453,7 +453,7 @@ BEGIN不是删除现有RAM FIFO；开始维护后可一边下载一边接管剩�
 - [串口探针](../firmware/nrf54l15/tools/uart_probe.py)：辅助联调，不具备ESP持久spool，不发送CUSTODY；不能替代接管模块。
 - [服务器联调](../server/docs/protocol-v11-integration.md)：身份、规则、任务、模拟网络流程；不能证明真实网口和射频。
 
-### 16.2 ESP工程建立后的命令示例
+### 16.2 ESP工程构建入口
 
 当前已存在`firmware/esp32s3/CMakeLists.txt`，SDK锁定v5.5.6。下列命令是构建入口，实际执行结论和环境限制见固件VALIDATION；不能把示例本身当作测试记录。
 
@@ -472,7 +472,7 @@ idf.py -B build-gw32 size
 
 保存实际SDK版本、依赖锁、sdkconfig、分区表、map、镜像大小/SHA和构建输出；不能在需求未冻结时把示例地址、串口或签名密钥写进发布脚本。烧录、整片擦除和eFuse配置分别走明确目标的硬件操作流程。
 
-### 16.3 CI计划
+### 16.3 CI与验收层次
 
 | 层级 | 自动检查 | 输出 |
 | --- | --- | --- |
@@ -483,7 +483,7 @@ idf.py -B build-gw32 size
 | HIL | 受控板卡、电源、网络、UART、BLE对端夹具 | 44验收场景证据，失败可重放 |
 | 发布 | 专用签名环境、兼容性/回退矩阵、能力清单 | Markdown发布记录与可追溯制品 |
 
-本次不新增虚构的ESP测试脚本/CI通过标记。完成对应实现后再接入真实命令，并更新验证计划中的运行状态。
+已新增[ESP目标构建工作流](../.github/workflows/esp32s3-firmware.yml)和固件目录下的真实主机测试入口。执行结果与环境记录统一保存在[固件验证记录](../firmware/esp32s3/VALIDATION.md)；下表中的服务端实机联调、HIL和生产发布仍需相应设备与证据。
 
 ## 17. 未冻结决策与变更控制
 
@@ -504,11 +504,11 @@ idf.py -B build-gw32 size
 
 本指南与配套存储/配网/验证文档定义开发设计；已新增ESP源码和平台扩展，已有部分主机测试证据，尚未完成整机实板验收。实际实现/构建状态见[固件验证记录](../firmware/esp32s3/VALIDATION.md)，产品放行仍以[验证计划](esp32s3-validation-plan.md)和之后真实产生的验证记录为准。各模块对应的170条需求和44项验收覆盖映射由验证计划统一维护。
 
-2026-11-19核对的ESP-IDF stable参考页显示v6.1.1，这只是查阅版本，不自动成为工程已验证基线。最终API/Kconfig按DEV-01锁定版本检查：
+实际工程锁定ESP-IDF v5.5.6、NimBLE和CH390组件0.4.1；较新的stable网页不改变该编译基线。API/Kconfig使用以下固定版本文档核对：
 
-- [ESP-IDF 构建系统](https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-guides/build-system.html)。
-- [IDF FreeRTOS](https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-reference/system/freertos_idf.html)。
-- [NVS与持久对象边界](https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-reference/storage/nvs_flash.html)。
-- [应用OTA与回滚](https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-reference/system/ota.html)。
+- [ESP-IDF 构建系统](https://docs.espressif.com/projects/esp-idf/en/v5.5.6/esp32s3/api-guides/build-system.html)。
+- [IDF FreeRTOS](https://docs.espressif.com/projects/esp-idf/en/v5.5.6/esp32s3/api-reference/system/freertos_idf.html)。
+- [NVS与持久对象边界](https://docs.espressif.com/projects/esp-idf/en/v5.5.6/esp32s3/api-reference/storage/nvs_flash.html)。
+- [应用OTA与回滚](https://docs.espressif.com/projects/esp-idf/en/v5.5.6/esp32s3/api-reference/system/ota.html)。
 
 Nordic端接口采用仓库已有nRF 0.2.0源码及UART协议，本次不更改NCS版本、板定义或nRF固件。

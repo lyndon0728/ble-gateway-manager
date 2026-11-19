@@ -23,6 +23,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  host-contracts:
+    runs-on: ubuntu-24.04
+    container: espressif/idf:v5.5.6@sha256:bf72fe7a15c22849a9a94147301165a545fb8905d97c176cf748e3e4614cac84
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test production modules with host I/O
+        shell: bash
+        run: |
+          set -euo pipefail
+          . /opt/esp/idf/export.sh
+          python -m pip install 'jsonschema==4.25.1'
+          python firmware/esp32s3/scripts/test_host.py --cc gcc --idf "$IDF_PATH"
+          node --test firmware/esp32s3/components/gw_provision/tests/security2.test.mjs
   target-build:
     runs-on: ubuntu-24.04
     # Official v5.5.6 multi-platform manifest, verified against Docker Hub.

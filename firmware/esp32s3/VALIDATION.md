@@ -13,6 +13,11 @@
 | 配网C输入守卫 | 实际生产C函数的UTF-8、长度、深度和NUL边界 | 主机测试通过 |
 | 核心规则与记录 | `Test-Core.ps1`、Zig 0.14.1 | 无损整数、UTF-8、IPv4、快照/指针截断、损坏及世代绑定通过 |
 | 云任务状态机 | `Test-Cloud.ps1`、Zig 0.14.1、cJSON 1.7.19 | 持久受理、ACK丢失后推进、命令重放/摘要冲突、写入失败、到期、模糊执行UNKNOWN、回退probe隔离通过 |
+| nRF GATT执行器 | 生产`gw_gatt_nrf.c`配合UART/Flash/时钟替身 | 意图先持久、op_seq、防模糊重写、UUID/MAC校验、READBACK同连接、临时断开、旧观测拒绝及结果原子发布通过 |
+| 采集与Flash spool | 生产持久层/适配器、真实cJSON/MbedTLS、分区与HTTP替身 | 69个断电注入点、重放/水位、满盘/损坏、双源配对、逐项ACK/隔离、inbox与稳定事件通过；5份生产JSON通过平台Schema |
+| OTA签名验证 | 未修改Monocypher 4.0.3生产代码；独立Python/OpenSSL与RFC8032 | 145项互通、改字节、错误签名/公钥、非规范签名拒绝通过；不是实板bootloader验签 |
+
+跨模块入口：`python scripts/test_host.py --cc <C11编译器或zig> --idf <ESP-IDF v5.5.6源码>`，从固件目录执行，Python需cryptography和jsonschema。GitHub工作流另执行Linux GCC主机测试及Node Security2向量。主机测试直接编译相应生产逻辑，替换设备I/O；不能替代目标运行。
 
 ## 目标构建与待完成记录
 

@@ -9,7 +9,8 @@ void gw_action_hex_encode(const uint8_t *in, size_t n, char *out);
 bool gw_action_uuid(const char *s, uint8_t out[16]);
 esp_err_t gw_action_profile(const cJSON *complete, uint64_t revision, struct gw_profile *profile);
 esp_err_t gw_ble_init(void);
-esp_err_t gw_ble_configure(const cJSON *complete, bool advertising, uint64_t revision, uint64_t deadline, cJSON **details);
+esp_err_t gw_ble_configure(const cJSON *complete, bool advertising, uint64_t revision,
+                           uint64_t deadline, cJSON **details);
 esp_err_t gw_ble_execute(const cJSON *command, uint64_t deadline, cJSON **details);
 cJSON *gw_ble_diagnostics(void);
 esp_err_t gw_ble_pause(uint64_t deadline);

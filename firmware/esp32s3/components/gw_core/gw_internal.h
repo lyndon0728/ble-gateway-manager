@@ -7,7 +7,7 @@ esp_err_t gw_store_init(void);
 esp_err_t gw_network_init(void);
 esp_err_t gw_network_validate(const cJSON *network, char *error, size_t size);
 esp_err_t gw_network_apply(const cJSON *network);
-esp_err_t gw_network_scan(bool active, cJSON **result);
+esp_err_t gw_network_scan(bool active, uint64_t deadline_mono_ms, cJSON **result);
 esp_err_t gw_credential_password(const char *ref, const char *ssid,
                                const char *security, char password[65]);
 bool gw_json_u64(const cJSON *v, uint64_t *out);
