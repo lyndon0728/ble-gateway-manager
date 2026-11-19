@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Own BLE Gateway Server API",
-    "version": "1.10.0",
+    "version": "1.11.0",
     "description": "Server 0.4.0: AI-assisted document onboarding, immutable protocol templates and deterministic peripheral routing; GW32 1.0/1.1 wire contracts remain compatible."
   },
   "servers": [
@@ -26576,6 +26576,424 @@
           }
         ]
       }
+    },
+    "/api/v1/gateway-network-probes": {
+      "post": {
+        "summary": "Authenticated network provisioning POST",
+        "description": "TLS required outside explicit development mode. Device identity determines gateway. No-store responses; secret bodies must never be logged.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetworkProbeResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authorization, validation, revision or state conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NetworkProbeRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "GatewayMTLS": []
+          },
+          {
+            "GatewayToken": []
+          }
+        ]
+      }
+    },
+    "/api/v1/gateway-network-state": {
+      "put": {
+        "summary": "Authenticated network provisioning PUT",
+        "description": "TLS required outside explicit development mode. Device identity determines gateway. No-store responses; secret bodies must never be logged.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetworkStateAck"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authorization, validation, revision or state conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NetworkStateReport"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "GatewayMTLS": []
+          },
+          {
+            "GatewayToken": []
+          }
+        ]
+      }
+    },
+    "/api/v1/gateways/{gatewayId}/network-state": {
+      "get": {
+        "summary": "Authenticated network provisioning GET",
+        "description": "TLS required outside explicit development mode. Device identity determines gateway. No-store responses; secret bodies must never be logged.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetworkStateView"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authorization, validation, revision or state conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "gatewayId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          }
+        ],
+        "security": [
+          {
+            "SessionCookie": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/gateways/{gatewayId}/network-credentials": {
+      "post": {
+        "summary": "Authenticated network provisioning POST",
+        "description": "TLS required outside explicit development mode. Device identity determines gateway. No-store responses; secret bodies must never be logged.",
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetworkCredentialCreated"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authorization, validation, revision or state conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "gatewayId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NetworkCredentialCreate"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": [],
+            "CsrfToken": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "get": {
+        "summary": "Authenticated network provisioning GET",
+        "description": "TLS required outside explicit development mode. Device identity determines gateway. No-store responses; secret bodies must never be logged.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetworkCredentialList"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authorization, validation, revision or state conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "gatewayId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          }
+        ],
+        "security": [
+          {
+            "SessionCookie": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/gateway-network-credentials/pending": {
+      "get": {
+        "summary": "Authenticated network provisioning GET",
+        "description": "TLS required outside explicit development mode. Device identity determines gateway. No-store responses; secret bodies must never be logged.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetworkPendingCredentials"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authorization, validation, revision or state conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [],
+        "security": [
+          {
+            "GatewayMTLS": []
+          },
+          {
+            "GatewayToken": []
+          }
+        ]
+      }
+    },
+    "/api/v1/gateway-network-credentials/receipts": {
+      "post": {
+        "summary": "Authenticated network provisioning POST",
+        "description": "TLS required outside explicit development mode. Device identity determines gateway. No-store responses; secret bodies must never be logged.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetworkCredentialReceiptAck"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authorization, validation, revision or state conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NetworkCredentialReceipt"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "GatewayMTLS": []
+          },
+          {
+            "GatewayToken": []
+          }
+        ]
+      }
+    },
+    "/api/v1/gateways/{gatewayId}/network-reconciliation": {
+      "post": {
+        "summary": "Authenticated network provisioning POST",
+        "description": "TLS required outside explicit development mode. Device identity determines gateway. No-store responses; secret bodies must never be logged.",
+        "responses": {
+          "202": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authorization, validation, revision or state conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "gatewayId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NetworkReconciliationRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": [],
+            "CsrfToken": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -27239,6 +27657,9 @@
           "expiresAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "networkPrecondition": {
+            "$ref": "#/components/schemas/NetworkPrecondition"
           }
         },
         "required": [
@@ -27258,6 +27679,9 @@
           "expectedReportedRevision": {
             "type": "integer",
             "minimum": 0
+          },
+          "networkPrecondition": {
+            "$ref": "#/components/schemas/NetworkPrecondition"
           }
         },
         "required": [
@@ -27445,7 +27869,10 @@
         "properties": {
           "component": {
             "type": "string",
-            "enum": ["GATEWAY", "NRF54"]
+            "enum": [
+              "GATEWAY",
+              "NRF54"
+            ]
           },
           "artifactId": {
             "type": "string",
@@ -30745,6 +31172,9 @@
           "desiredRevision": {
             "type": "integer",
             "minimum": 1
+          },
+          "networkPrecondition": {
+            "$ref": "#/components/schemas/NetworkPrecondition"
           }
         },
         "required": [
@@ -34216,6 +34646,634 @@
         "type": "object",
         "properties": {},
         "additionalProperties": false
+      },
+      "NetworkPrecondition": {
+        "type": "object",
+        "properties": {
+          "expectedNetworkGeneration": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,19})$"
+          },
+          "snapshotId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "resolutionToken": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "expectedNetworkGeneration",
+          "snapshotId"
+        ],
+        "additionalProperties": false
+      },
+      "NetworkProbeRequest": {
+        "type": "object",
+        "properties": {
+          "transactionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "interface": {
+            "type": "string",
+            "enum": [
+              "ETHERNET",
+              "WIFI_STA"
+            ]
+          },
+          "snapshotId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "nonce": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32,64}$"
+          }
+        },
+        "required": [
+          "transactionId",
+          "interface",
+          "snapshotId",
+          "nonce"
+        ],
+        "additionalProperties": false
+      },
+      "NetworkProbeResponse": {
+        "type": "object",
+        "properties": {
+          "transactionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "interface": {
+            "type": "string",
+            "enum": [
+              "ETHERNET",
+              "WIFI_STA"
+            ]
+          },
+          "snapshotId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "nonce": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32,64}$"
+          },
+          "receiptId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "gatewayId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "namespaceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "transactionId",
+          "interface",
+          "snapshotId",
+          "nonce",
+          "receiptId",
+          "gatewayId",
+          "namespaceId"
+        ],
+        "additionalProperties": false
+      },
+      "NetworkLocalCredential": {
+        "type": "object",
+        "properties": {
+          "credentialRef": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "ssid": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "security": {
+            "type": "string",
+            "enum": [
+              "WPA2_PSK",
+              "WPA3_SAE"
+            ]
+          },
+          "source": {
+            "const": "LOCAL"
+          },
+          "state": {
+            "const": "INSTALLED"
+          }
+        },
+        "required": [
+          "credentialRef",
+          "version",
+          "ssid",
+          "security",
+          "source",
+          "state"
+        ],
+        "additionalProperties": false
+      },
+      "NetworkStateReport": {
+        "type": "object",
+        "properties": {
+          "networkGeneration": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,19})$"
+          },
+          "localRevision": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,19})$"
+          },
+          "desiredLocalNetwork": {
+            "$ref": "#/components/schemas/NetworkConfiguration"
+          },
+          "actualNetwork": {
+            "$ref": "#/components/schemas/NetworkConfiguration"
+          },
+          "activeInterface": {
+            "type": "string",
+            "enum": [
+              "ETHERNET",
+              "WIFI_STA",
+              "NONE"
+            ]
+          },
+          "localOverride": {
+            "type": "boolean"
+          },
+          "verificationState": {
+            "type": "string",
+            "enum": [
+              "LOCAL_ONLY",
+              "PLATFORM_CONNECTED",
+              "PLATFORM_SYNCED",
+              "ROLLED_BACK",
+              "UNCONFIGURED"
+            ]
+          },
+          "lastKnownPlatformRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "appliedTaskId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "credentials": {
+            "type": "array",
+            "maxItems": 128,
+            "items": {
+              "$ref": "#/components/schemas/NetworkLocalCredential"
+            }
+          }
+        },
+        "required": [
+          "networkGeneration",
+          "localRevision",
+          "desiredLocalNetwork",
+          "actualNetwork",
+          "activeInterface",
+          "localOverride",
+          "verificationState",
+          "lastKnownPlatformRevision"
+        ],
+        "additionalProperties": false
+      },
+      "NetworkStateView": {
+        "type": "object",
+        "properties": {
+          "networkGeneration": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,19})$"
+          },
+          "localRevision": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,19})$"
+          },
+          "desiredLocalNetwork": {
+            "$ref": "#/components/schemas/NetworkConfiguration"
+          },
+          "actualNetwork": {
+            "$ref": "#/components/schemas/NetworkConfiguration"
+          },
+          "activeInterface": {
+            "type": "string",
+            "enum": [
+              "ETHERNET",
+              "WIFI_STA",
+              "NONE"
+            ]
+          },
+          "localOverride": {
+            "type": "boolean"
+          },
+          "verificationState": {
+            "type": "string",
+            "enum": [
+              "LOCAL_ONLY",
+              "PLATFORM_CONNECTED",
+              "PLATFORM_SYNCED",
+              "ROLLED_BACK",
+              "UNCONFIGURED"
+            ]
+          },
+          "lastKnownPlatformRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "appliedTaskId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "credentials": {
+            "type": "array",
+            "maxItems": 128,
+            "items": {
+              "$ref": "#/components/schemas/NetworkLocalCredential"
+            }
+          },
+          "snapshotId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "actualSnapshotId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "networkGeneration",
+          "localRevision",
+          "desiredLocalNetwork",
+          "actualNetwork",
+          "activeInterface",
+          "localOverride",
+          "verificationState",
+          "lastKnownPlatformRevision",
+          "snapshotId",
+          "actualSnapshotId"
+        ],
+        "additionalProperties": false
+      },
+      "NetworkStateAck": {
+        "type": "object",
+        "properties": {
+          "syncToken": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "stateVersion": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "snapshotId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "actualSnapshotId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "syncToken",
+          "stateVersion",
+          "snapshotId",
+          "actualSnapshotId"
+        ],
+        "additionalProperties": false
+      },
+      "NetworkCredentialCreate": {
+        "type": "object",
+        "properties": {
+          "ssid": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "security": {
+            "type": "string",
+            "enum": [
+              "WPA2_PSK",
+              "WPA3_SAE"
+            ]
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 63,
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "ssid",
+          "security",
+          "password"
+        ],
+        "additionalProperties": false
+      },
+      "NetworkCredentialCreated": {
+        "type": "object",
+        "properties": {
+          "credentialRef": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "deliveryId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "state": {
+            "const": "PENDING"
+          }
+        },
+        "required": [
+          "credentialRef",
+          "version",
+          "deliveryId",
+          "state"
+        ],
+        "additionalProperties": false
+      },
+      "NetworkCredentialReceipt": {
+        "type": "object",
+        "properties": {
+          "deliveryId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "credentialRef": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "INSTALLED",
+              "FAILED"
+            ]
+          }
+        },
+        "required": [
+          "deliveryId",
+          "credentialRef",
+          "version",
+          "state"
+        ],
+        "additionalProperties": false
+      },
+      "NetworkCredentialReceiptAck": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "const": "ACCEPTED"
+          },
+          "deliveryId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "INSTALLED",
+              "FAILED"
+            ]
+          }
+        },
+        "required": [
+          "status",
+          "deliveryId",
+          "state"
+        ],
+        "additionalProperties": false
+      },
+      "NetworkPendingCredential": {
+        "type": "object",
+        "properties": {
+          "deliveryId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "credentialRef": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "ssid": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "security": {
+            "type": "string",
+            "enum": [
+              "WPA2_PSK",
+              "WPA3_SAE"
+            ]
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 63
+          }
+        },
+        "required": [
+          "deliveryId",
+          "credentialRef",
+          "version",
+          "ssid",
+          "security",
+          "password"
+        ],
+        "additionalProperties": false
+      },
+      "NetworkPendingCredentials": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "$ref": "#/components/schemas/NetworkPendingCredential"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "NetworkCredentialMetadata": {
+        "type": "object",
+        "properties": {
+          "deliveryId": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 80
+          },
+          "credentialRef": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "ssid": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "security": {
+            "type": "string",
+            "enum": [
+              "WPA2_PSK",
+              "WPA3_SAE"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "LOCAL",
+              "PLATFORM"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "INSTALLED",
+              "FAILED"
+            ]
+          }
+        },
+        "required": [
+          "deliveryId",
+          "credentialRef",
+          "version",
+          "ssid",
+          "security",
+          "source",
+          "state"
+        ],
+        "additionalProperties": false
+      },
+      "NetworkCredentialList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 128,
+            "items": {
+              "$ref": "#/components/schemas/NetworkCredentialMetadata"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "NetworkReconciliationRequest": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "ADOPT_LOCAL",
+              "APPLY_PLATFORM"
+            ]
+          },
+          "expectedNetworkGeneration": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,19})$"
+          },
+          "snapshotId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "network": {
+            "$ref": "#/components/schemas/NetworkConfiguration"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "cancelQueued": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "action",
+          "expectedNetworkGeneration",
+          "snapshotId",
+          "expiresAt"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "APPLY_PLATFORM"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "network"
+              ]
+            }
+          }
+        ]
       }
     },
     "parameters": {

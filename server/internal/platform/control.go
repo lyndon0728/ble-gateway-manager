@@ -255,6 +255,9 @@ func (a *App) putConfiguration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req := map[string]any{"gatewayId": id, "type": "CONFIGURE", "parameters": map[string]any{"configuration": Obj(body, "configuration"), "expectedReportedRevision": Num(body, "expectedReportedRevision")}, "expiresAt": Str(body, "expiresAt")}
+	if pre, present := body["networkPrecondition"]; present {
+		Obj(req, "parameters")["networkPrecondition"] = pre
+	}
 	status, v, e := a.DoIdempotent(r.Context(), p.ID, "configuration.put", r.Header.Get("Idempotency-Key"), map[string]any{"request": req, "ifMatch": r.Header.Get("If-Match")}, func(tx *sql.Tx) (int, string, any, error) {
 		m, e := a.configurationView(r.Context(), tx, id)
 		if e != nil {
@@ -339,6 +342,9 @@ func (a *App) newTask(ctx context.Context, tx *sql.Tx, actor, key string, req ma
 	var configID, artifactID any
 	risk := "idempotent"
 	if op == "CONFIGURE" {
+		if e = a.prepareNetworkTask(ctx, tx, gateway, params); e != nil {
+			return 0, "", nil, e
+		}
 		if e = a.validateGatewayConfiguration(ctx, tx, g, Obj(params, "configuration")); e != nil {
 			return 0, "", nil, e
 		}
@@ -382,6 +388,11 @@ func (a *App) newTask(ctx context.Context, tx *sql.Tx, actor, key string, req ma
 	_, e = tx.ExecContext(ctx, "INSERT INTO command_tasks(task_id,gateway_id,created_by,operation,idempotency_key,request_hash,request_json,config_id,artifact_id,state,risk_class,expires_at_ms,created_at_ms,updated_at_ms) VALUES(?,?,?,?,?,?,?,?,?,'queued',?,?,?,?)", id, gateway, actor, op, key, Str(command, "requestDigest"), encode(command), configID, artifactID, risk, t.UnixMilli(), now, now)
 	if e != nil {
 		return 0, "", nil, e
+	}
+	if token := Str(Obj(params, "networkPrecondition"), "resolutionToken"); token != "" {
+		if _, e = tx.ExecContext(ctx, "UPDATE gateway_network_resolutions SET task_id=? WHERE resolution_token=? AND task_id IS NULL", id, token); e != nil {
+			return 0, "", nil, e
+		}
 	}
 	if e = a.reserveGW32Connection(ctx, tx, g, id, op, params); e != nil {
 		return 0, "", nil, e
@@ -898,6 +909,13 @@ func (a *App) PullCommands(ctx context.Context, g string) ([]any, error) {
 		if e = json.Unmarshal([]byte(v.raw), &m); e != nil {
 			return nil, e
 		}
+		blocked, blockErr := a.networkCommandBlocked(ctx, tx, g, m)
+		if blockErr != nil {
+			return nil, blockErr
+		}
+		if blocked {
+			continue
+		}
 		_, e = tx.ExecContext(ctx, "UPDATE command_outbox SET state='awaiting_receipt',attempts=attempts+1,next_attempt_at_ms=?,lease_token=lease_token+1,lease_owner=NULL,lease_until_ms=NULL WHERE message_id=?", now+10000, v.id)
 		if e != nil {
 			return nil, e
@@ -990,6 +1008,19 @@ func (a *App) dispatchControl(ctx context.Context) error {
 	}
 	if e != nil {
 		return e
+	}
+	if kind == "command" {
+		blocked, blockErr := a.networkCommandBlocked(ctx, tx, g, pm(raw))
+		if blockErr != nil {
+			return blockErr
+		}
+		if blocked {
+			_, e = tx.ExecContext(ctx, "UPDATE command_outbox SET next_attempt_at_ms=? WHERE message_id=?", Now()+10000, id)
+			if e != nil {
+				return e
+			}
+			return tx.Commit()
+		}
 	}
 	token++
 	_, e = tx.ExecContext(ctx, "UPDATE command_outbox SET state='leased',attempts=attempts+1,lease_token=?,lease_owner=?,lease_until_ms=? WHERE message_id=?", token, a.Config.NodeID, Now()+30000, id)

@@ -350,7 +350,7 @@ func (a *App) validateGW32NetworkProof(ctx context.Context, tx *sql.Tx, gateway 
 		if v == "WIFI_STA" {
 			name = "wifiSta"
 		}
-		if i == 0 || Hash(Obj(next, name)) != Hash(Obj(old, name)) {
+		if i == 0 || Str(Obj(params, "networkPrecondition"), "resolutionToken") != "" || Hash(Obj(next, name)) != Hash(Obj(old, name)) {
 			required[v.(string)] = true
 		}
 	}

@@ -45,3 +45,12 @@ test('multipart leaves boundary to browser; relative URL guard prevents external
  await assert.rejects(client.api('https://external.invalid/api'))
  await assert.rejects(client.api('//external.invalid/api'))
 })
+
+test('network secrets use caller idempotency without entering generic pending-intent cache',async()=>{
+ client.clearPendingRequests();const keys=[]
+ globalThis.fetch=async(_path,options)=>{keys.push(options.headers['Idempotency-Key']);throw new TypeError('offline')}
+ for(let i=0;i<130;i++)await assert.rejects(client.api('/api/v1/gateways/gw_test/network-credentials','POST',{ssid:'site',password:'test-secret-'+i},{key:'secret-attempt-'+i}),e=>e.code==='NETWORK_UNCERTAIN')
+ assert.equal(keys[0],'secret-attempt-0');assert.equal(keys[129],'secret-attempt-129')
+ globalThis.fetch=async()=>json({taskId:'next-task'})
+ await client.api('/api/v1/tasks','POST',{type:'DIAGNOSTICS'})
+})

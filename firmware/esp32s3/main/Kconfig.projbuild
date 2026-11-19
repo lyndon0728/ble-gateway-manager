@@ -1,0 +1,52 @@
+menu "GW32 gateway"
+config GW_REQUIRE_FLASH_ENCRYPTION
+    bool "Require encrypted flash before accessing factory secrets"
+    default y
+    help
+        Runtime check only. Does not burn eFuses or enable encryption on boot.
+        Provision hardware encryption and encrypted NVS keys using the approved
+        manufacturing process before deploying a production image.
+config GW_FACTORY_AUTHORIZED_SETUP
+    bool "Open one bounded setup window on first unconfigured boot"
+    default n
+config GW_SETUP_BUTTON_GPIO
+    int "Verified active-low setup button GPIO (-1 disables)"
+    range -1 48
+    default -1
+config GW_ETH_ENABLED
+    bool "Enable board-verified external SPI Ethernet driver"
+    default n
+    help
+        CH390H SPI driver. Set every GPIO from the verified target PCB before
+        enabling. Never infer unverified PCB pins.
+config GW_ETH_MOSI
+    int "Verified CH390 MOSI GPIO"
+    default -1
+config GW_ETH_MISO
+    int "Verified CH390 MISO GPIO"
+    default -1
+config GW_ETH_SCLK
+    int "Verified CH390 clock GPIO"
+    default -1
+config GW_ETH_CS
+    int "Verified CH390 chip select GPIO"
+    default -1
+config GW_ETH_INT
+    int "Verified CH390 interrupt GPIO (-1 uses polling)"
+    default -1
+config GW_ETH_RESET
+    int "Verified CH390 reset GPIO (-1 disables)"
+    default -1
+config GW_UART_TX_GPIO
+    int "nRF UART TX GPIO"
+    default 17
+config GW_UART_RX_GPIO
+    int "nRF UART RX GPIO"
+    default 18
+config GW_UART_RTS_GPIO
+    int "nRF UART RTS GPIO"
+    default 15
+config GW_UART_CTS_GPIO
+    int "nRF UART CTS GPIO"
+    default 16
+endmenu

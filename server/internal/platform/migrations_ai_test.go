@@ -43,7 +43,7 @@ func TestAIUpgradeFromV2PreservesDataAndMigrationHistory(t *testing.T) {
 				t.Fatal("pre-upgrade data changed", sentinel, err)
 			}
 			var latest int
-			if err = db.QueryRow("SELECT max(version) FROM schema_migrations").Scan(&latest); err != nil || latest != 3 {
+			if err = db.QueryRow("SELECT max(version) FROM schema_migrations").Scan(&latest); err != nil || latest != 4 {
 				t.Fatal("v3 not applied", latest, err)
 			}
 			if schema == "management.sql" {

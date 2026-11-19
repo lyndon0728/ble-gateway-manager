@@ -1,0 +1,11 @@
+{
+  "tag": "v5.5.6",
+  "repository": "https://github.com/espressif/esp-idf",
+  "sha256": {
+    "srp6a.py": "9dc802e1540cce95220479cf1c56a836beeeba0869117fd3904008ac67f5537c",
+    "security2.py": "bdc90f36a754a9a767aa7298bd697b7ed0ddf42777bda159d13ed646a7c39445",
+    "esp_srp.c": "eca11a0e2e61913465971e43807cb000f08c018b2d46a23a3d0e8c24c6866001",
+    "sec2.proto": "47499cdff3cdcc282a5857e35f19250f3f6cce07e042bc57d46c41fc2c410975",
+    "session.proto": "4388992ab23cb527c0d53a0feac64c7bf3f92d99e3127f73d1ca821a2e181533"
+  }
+}

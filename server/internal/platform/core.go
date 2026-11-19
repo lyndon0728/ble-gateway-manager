@@ -46,6 +46,7 @@ type Config struct {
 	MaxQueueBytes                                                         int64
 	RawRetention, DedupRetention, WorkerInterval, HTTPTimeout             time.Duration
 	PipelineURL                                                           string
+	NetworkCredentialKey                                                  string
 }
 
 func ConfigFromEnv() (Config, error) {
@@ -57,6 +58,7 @@ func ConfigFromEnv() (Config, error) {
 		}
 		c.MaxQueueBytes = n
 	}
+	c.NetworkCredentialKey = os.Getenv("GW_NETWORK_CREDENTIAL_KEY")
 	if v := os.Getenv("GW_ALLOWED_TARGET_HOSTS"); v != "" {
 		c.AllowedTargetHosts = strings.Split(v, ",")
 	}
@@ -365,6 +367,7 @@ func (a *App) Handler() http.Handler {
 	a.RegisterAutoConnect(r)
 	a.RegisterFrontendAPI(r)
 	a.RegisterControl(r)
+	a.RegisterNetworkProvisioning(r)
 	a.RegisterPipeline(r)
 	a.RegisterAI(r)
 	a.RegisterProtocol(r)

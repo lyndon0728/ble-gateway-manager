@@ -1,0 +1,11 @@
+build/
+build-*/
+managed_components/
+sdkconfig
+sdkconfig.old
+target-build.log
+target-size.log
+factory-output/
+*.bin
+*.elf
+*.map

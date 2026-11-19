@@ -5,7 +5,7 @@
 | 文档版本 / 日期 | 1.0 / 2026-11-19 |
 | 需求依据 | [ESP 专项需求](esp32s3-requirements.md) ESP-NET、ESP-PROV-001～020；[验收计划](esp32s3-validation-plan.md) ESP-AT-17/18、37～44 |
 | 范围 | 手机或笔记本连接网关热点，用浏览器配置上联网；平台远程修改同一组网络参数 |
-| 当前状态 | 本文是待实现开发契约。平台已有网络 CONFIGURE；ESP 网页/执行器、凭据投递和本地对账扩展均未实现或验收 |
+| 当前状态 | 本文保留设计契约；对应固件及平台扩展已有源码/部分主机证据，完整实板验收尚未完成 |
 | 协议边界 | 现有服务器消息仍按 [服务器协议](../server/docs/gateway-protocol.md)；本文新增接口明确列为草案，不表示当前 Schema/API 已接受 |
 
 ## 1. 用户操作与职责
@@ -185,7 +185,7 @@ PUT_CREDENTIAL、候选创建和应用等修改均检查版本/所有者；已�
 
 ## 7. 本地改动与平台对账扩展
 
-以下设备/管理接口及配置前置条件均为**待实现的版本化扩展**；本次不修改现有 JSON Schema/OpenAPI 或服务端源码。必须同时实现设备、服务端、Schema、权限、页面和测试后才能启用完整双入口交付。
+以下是版本化扩展的设计基线。2026-11-19已同步设备源码、服务端、Schema/OpenAPI、权限和页面；准确线上字段及兼容约束见[平台联调文档](../server/docs/network-provisioning-integration.md)。完整双入口交付仍需实板与客户端验收。
 
 | 草案接口 | 关键请求与应答 | 约束 |
 | --- | --- | --- |
@@ -229,6 +229,6 @@ snapshotId 是脱敏完整网络快照的 SHA-256：按 RFC 8785 JSON canonicali
 
 本功能新增 ESP-PROV-001～020 和 ESP-AT-37～44，完整步骤见[验证计划](esp32s3-validation-plan.md)。至少覆盖首次无网、隐藏 SSID、错误密码、静态冲突、AP 信道迁移、浏览器重连、认证攻击、凭据安装失败、掉电各提交点、完全离线的远程任务、双入口冲突及 OTA 互斥。
 
-上线前必须冻结：实际现场开窗动作、制造标签和 setup 凭据重置、浏览器密码客户端/静态页信任方案、IDF/组件版本、分区/秘密库、云端扩展 Schema/ACL/幂等和迁移、国家信道、后台重试/容量及共存指标。当前只有文档和已有服务端配置基础；新增网页、设备与服务端扩展的目标构建、互通、安全及实板测试均未执行。
+上线前必须冻结：实际现场开窗动作、制造标签和 setup 凭据重置、浏览器密码客户端/静态页信任方案、IDF/组件版本、分区/秘密库、云端扩展 Schema/ACL/幂等和迁移、国家信道、后台重试/容量及共存指标。已加入固件和平台扩展，浏览器/协议/服务器主机测试已有证据；目标构建及其余验证的实际状态见[固件VALIDATION](../firmware/esp32s3/VALIDATION.md)，实板及完整手机兼容验收仍待执行。
 
 官方参考：2026-11-19 查阅的 ESP-IDF stable 页显示 v6.1.1，仅作为能力参考，不锁定工程 SDK。另见 [Wi-Fi 驱动 API](https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-reference/network/esp_wifi.html) 和 [JSON Canonicalization Scheme](https://www.rfc-editor.org/rfc/rfc8785)。

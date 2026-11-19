@@ -287,7 +287,7 @@ Invoke-RestMethod -Method Put -Uri $configurationUrl -Headers $writeHeaders -Con
 
 ESP32-S3须提供手机/笔记本连接热点后使用的本地网页，配置Wi-Fi STA、Ethernet、DHCP/静态IPv4和主备顺序。该入口与平台共享参数校验、候选试用和回退管理；本地事务使用独立localRevision/transactionId，不能伪造CONFIGURE任务或自行推进desiredRevision。明确LOCAL_ONLY保存不等于平台已确认。
 
-当前Schema继续只接受credentialRef，不接受明文password。远程新密码安装、本地在线挑战、设备网络状态上报与采用/覆盖本地改动的裁决属于待实现扩展，完整端点草案与版本前置条件见[配网设计](../../docs/esp32s3-network-provisioning.md)。本节不宣称这些草案已进入当前Schema/OpenAPI；实现时须同步服务端、设备、权限、页面和验收。现有远程networkProbe及RESULT_PERSISTED先持久后成功的门槛保持不变。
+普通network配置Schema继续只接受credentialRef，不接受明文password。独立的远程秘密安装、本地在线挑战、设备网络状态和采用/覆盖本地修改的裁决接口已加入服务端、Schema、OpenAPI及平台页面，准确字段与部署见[配网接口实现](network-provisioning-integration.md)；产品流程见[配网设计](../../docs/esp32s3-network-provisioning.md)。上报过网络状态的设备收到的CONFIGURE可包含networkPrecondition，设备须执行世代/快照及裁决校验。现有远程networkProbe及RESULT_PERSISTED先持久后成功的门槛保持不变；服务器主机验证不代表真实设备已经完成配网验收。
 
 ### ESP Wi-Fi 与原生 BLE
 

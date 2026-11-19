@@ -5,10 +5,10 @@
 | 文档版本 / 日期 | 1.1 / 2026-11-19 |
 | 输入需求 | [ESP32-S3 需求规格](esp32s3-requirements.md)：170 条需求、44 个验收用例 |
 | 对接对象 | nRF54L15 应用 0.2.0；UART 协议 1.1、线上 frame version=1；服务器既有 1.0/1.1 消息 |
-| 当前状态 | 开发设计已编写；ESP 工程、驱动、业务执行器和测试实现仍待开发 |
+| 当前状态 | 设计已形成，ESP工程和平台配网扩展已有源码；验证状态见固件VALIDATION |
 | 配套文档 | [本地与远程配网](esp32s3-network-provisioning.md)、[持久化与恢复设计](esp32s3-persistence.md)、[验证计划](esp32s3-validation-plan.md)、[文档维护约定](README.md) |
 
-本文把需求转为模块、接口、状态、恢复算法和开发步骤。目录树、函数名、内部状态和配置名是**计划实现的设计**，不表示仓库已有相应 API、脚本或可烧录产物。线上字段仍以 [UART 协议](../server/docs/gateway-uart-protocol.md)、[服务器协议](../server/docs/gateway-protocol.md) 和两份 JSON Schema 为准。
+本文把需求转为模块、接口、状态、恢复算法和开发步骤。2026-11-19已新增[固件工程](../firmware/esp32s3/README.md)；以下为逻辑设计，实际组件合并与API以源码为准，测试证据见[验证记录](../firmware/esp32s3/VALIDATION.md)。目录树、函数名、内部状态和配置名是**计划实现的设计**，不表示仓库已有相应 API、脚本或可烧录产物。线上字段仍以 [UART 协议](../server/docs/gateway-uart-protocol.md)、[服务器协议](../server/docs/gateway-protocol.md) 和两份 JSON Schema 为准。
 
 ## 1. 开发约束与技术决策
 
@@ -27,7 +27,7 @@ ESP-IDF 的组件模型和 `idf.py` 构建入口用于组织目标工程；FreeR
 
 ## 2. 计划工程结构与依赖方向
 
-以下目录尚未创建为 ESP 源码工程；实施 M0 时建立，目录中的 README/设计/验证记录均为 Markdown。
+以下是设计时的逻辑目录；当前实现把配置/存储/网络合并到gw_core，把无线动作和升级合并到gw_actions，其他实际组件见固件README；目录中的说明和验证记录均为Markdown。
 
 ```text
 firmware/esp32s3/
@@ -455,7 +455,7 @@ BEGIN不是删除现有RAM FIFO；开始维护后可一边下载一边接管剩�
 
 ### 16.2 ESP工程建立后的命令示例
 
-当前没有`firmware/esp32s3/CMakeLists.txt`，下面不是本次已执行命令。先完成DEV-01并进入锁定版本的ESP-IDF终端；路径必须指向新建的ESP工程。
+当前已存在`firmware/esp32s3/CMakeLists.txt`，SDK锁定v5.5.6。下列命令是构建入口，实际执行结论和环境限制见固件VALIDATION；不能把示例本身当作测试记录。
 
 ```powershell
 # 在仓库根目录，确认工程真实存在后再运行。
@@ -502,7 +502,7 @@ idf.py -B build-gw32 size
 
 ## 18. 本次文档状态与参考
 
-本指南与配套存储/配网/验证文档完成的是开发设计。当前ESP源码工程、目标构建、实板验收及新增配网平台接口均未完成；具体测试状态以[验证计划](esp32s3-validation-plan.md)和之后真实产生的验证记录为准。各模块对应的170条需求和44项验收覆盖映射由验证计划统一维护。
+本指南与配套存储/配网/验证文档定义开发设计；已新增ESP源码和平台扩展，已有部分主机测试证据，尚未完成整机实板验收。实际实现/构建状态见[固件验证记录](../firmware/esp32s3/VALIDATION.md)，产品放行仍以[验证计划](esp32s3-validation-plan.md)和之后真实产生的验证记录为准。各模块对应的170条需求和44项验收覆盖映射由验证计划统一维护。
 
 2026-11-19核对的ESP-IDF stable参考页显示v6.1.1，这只是查阅版本，不自动成为工程已验证基线。最终API/Kconfig按DEV-01锁定版本检查：
 

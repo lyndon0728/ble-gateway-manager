@@ -2,7 +2,9 @@
 
 这是服务于自有网关、由客户开发业务应用的服务器实现。软件运行在客户服务器上，提供设备管理、可靠上下行、按规则解析或原样转发、持久投递与应用确认；不包含定位功能，也不内置客户业务系统。
 
-当前软件版本为 `0.4.0`，API 契约 `1.10.0`，兼容原 1.0 数据及 GW32 1.1 采集与控制扩展，新增 AI 资料导入、模板审阅发布、受限解析器及从设备绑定。服务器原有实现及运行边界见 [实现范围](docs/implementation-status.md)，0.3.0 前端与联调记录见 [前端实现说明](docs/frontend-implementation.md)。`REFERENCE_GW`、`reference_sensor` 和 GW32 模拟 profile 均不代表实机已验证。真实固件需要按 [网关协议](docs/gateway-protocol.md) 及 [UART 协议](docs/gateway-uart-protocol.md) 实现并联调；软件联调方式见 [1.1 对接说明](docs/protocol-v11-integration.md)。
+当前软件版本为 `0.4.0`，API 契约 `1.11.0`，兼容原 1.0 数据及 GW32 1.1 采集与控制扩展，新增 AI 资料导入、模板审阅发布、受限解析器及从设备绑定。服务器原有实现及运行边界见 [实现范围](docs/implementation-status.md)，0.3.0 前端与联调记录见 [前端实现说明](docs/frontend-implementation.md)。`REFERENCE_GW`、`reference_sensor` 和 GW32 模拟 profile 均不代表实机已验证。真实固件需要按 [网关协议](docs/gateway-protocol.md) 及 [UART 协议](docs/gateway-uart-protocol.md) 实现并联调；软件联调方式见 [1.1 对接说明](docs/protocol-v11-integration.md)。
+
+本地配网状态上报、远程密码安全安装、网络版本对账及平台配置页面的新增实现见[配网接口与部署](docs/network-provisioning-integration.md)。数据库自动升级到v4；远程秘密投递需显式注入`GW_NETWORK_CREDENTIAL_KEY`，设备动作仍需与ESP固件及实板联调。
 
 完整管理前端已按 [前端总体规划](docs/frontend-plan.md) 及 AI 首期策略实现：7 个功能大类、26 个业务页面加 1 个登录页，共 27 页；入口 `/ui/`，访问根目录自动进入控制台。Vue 构建产物随 Go 程序交付，客户运行时不需要 Node.js。结构化目录见 [frontend-pages.json](docs/frontend-pages.json)，开发与测试见 [前端 README](../frontend/README.md)。
 

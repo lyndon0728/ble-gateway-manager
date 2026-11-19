@@ -15,7 +15,8 @@ export async function apiResult<T=any>(path:string,method='GET',body?:any,option
   if(body!==undefined&&!isForm)headers['Content-Type']='application/json'
   const encoded=body===undefined?undefined:isForm?body:JSON.stringify(body)
   let fingerprint=''
-  if(!['GET','HEAD'].includes(method)&&!path.includes('/auth/')&&!path.includes('/credentials')){
+  if(!['GET','HEAD'].includes(method)&&options.key)headers['Idempotency-Key']=options.key
+  if(!['GET','HEAD'].includes(method)&&!path.includes('/auth/')&&!/\/(?:network-)?credentials/.test(path)){
     if(options.key)headers['Idempotency-Key']=options.key
     else if(isForm){if(!formKeys.has(body))formKeys.set(body,newKey());headers['Idempotency-Key']=formKeys.get(body)!}
     else {fingerprint=method+' '+path+' '+(encoded||'');if(!pendingKeys.has(fingerprint)){if(pendingKeys.size>=128)throw new Error('存在过多结果待核实的操作，请刷新并查询任务后再继续');pendingKeys.set(fingerprint,newKey())}headers['Idempotency-Key']=pendingKeys.get(fingerprint)!}
