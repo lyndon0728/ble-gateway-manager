@@ -237,6 +237,18 @@ static esp_err_t verify_manifest(const cJSON *command, const cJSON *response, cJ
         e = ESP_ERR_INVALID_ARG;
         goto done;
     }
+    const cJSON *size = cJSON_GetObjectItemCaseSensitive(m, "sizeBytes"),
+                *format = cJSON_GetObjectItemCaseSensitive(m, "imageFormat");
+    /* Older GATEWAY manifests may omit these fields. Explicit signed metadata
+     * is authoritative, including its type, and must never be silently ignored. */
+    if ((size && (!cJSON_IsNumber(size) || !isfinite(size->valuedouble) ||
+                  size->valuedouble < 32 || size->valuedouble > UINT32_MAX ||
+                  floor(size->valuedouble) != size->valuedouble)) ||
+        (!strcmp(component, "GATEWAY") && format &&
+         (!cJSON_IsString(format) || strcmp(format->valuestring, "ESP_IDF_APP_BIN")))) {
+        e = ESP_ERR_INVALID_ARG;
+        goto done;
+    }
     *out = m;
     m = NULL;
     e = ESP_OK;
@@ -266,18 +278,29 @@ typedef struct {
     bool gateway;
     mbedtls_sha256_context hash;
     size_t offset, total;
+    size_t limit;
+    const cJSON *journal;
+    uint64_t deadline;
     uint8_t pending[16];
     size_t pending_length;
 } download_t;
 static esp_err_t download_sink(const uint8_t *data, size_t n, void *context) {
     download_t *d = context;
-    if (d->total + n > d->partition->size)
+    if (!task_budget(d->journal, d->journal, &d->deadline))
+        return ESP_ERR_TIMEOUT;
+    if (n > d->limit - d->total)
         return ESP_ERR_INVALID_SIZE;
     if (mbedtls_sha256_update(&d->hash, data, n))
         return ESP_FAIL;
     d->total += n;
-    if (d->gateway)
-        return esp_ota_write(d->handle, data, n);
+    if (d->gateway) {
+        if (!task_budget(d->journal, d->journal, &d->deadline))
+            return ESP_ERR_TIMEOUT;
+        esp_err_t e = esp_ota_write(d->handle, data, n);
+        if (e != ESP_OK)
+            return e;
+        return task_budget(d->journal, d->journal, &d->deadline) ? ESP_OK : ESP_ERR_TIMEOUT;
+    }
     while (n) {
         size_t take = 16 - d->pending_length;
         if (take > n)
@@ -287,6 +310,8 @@ static esp_err_t download_sink(const uint8_t *data, size_t n, void *context) {
         data += take;
         n -= take;
         if (d->pending_length == 16) {
+            if (!task_budget(d->journal, d->journal, &d->deadline))
+                return ESP_ERR_TIMEOUT;
             esp_err_t e = esp_partition_write(d->partition, d->offset, d->pending, 16);
             if (e != ESP_OK)
                 return e;
@@ -294,7 +319,7 @@ static esp_err_t download_sink(const uint8_t *data, size_t n, void *context) {
             d->pending_length = 0;
         }
     }
-    return ESP_OK;
+    return task_budget(d->journal, d->journal, &d->deadline) ? ESP_OK : ESP_ERR_TIMEOUT;
 }
 static esp_err_t partition_hash(const esp_partition_t *p, size_t length, uint8_t hash[32]) {
     if (!p || length > p->size)
@@ -329,15 +354,29 @@ static esp_err_t download(cJSON *j, uint64_t deadline) {
                 : esp_partition_find_first(ESP_PARTITION_TYPE_DATA, 0x41, "nrf_image");
     if (!p)
         return ESP_ERR_NOT_FOUND;
-    download_t d = {.partition = p, .gateway = gateway};
+    const cJSON *signed_size = cJSON_GetObjectItemCaseSensitive(j, "signedSize");
+    if (signed_size && (!cJSON_IsNumber(signed_size) || !isfinite(signed_size->valuedouble) ||
+                        signed_size->valuedouble < 32 || signed_size->valuedouble > p->size ||
+                        floor(signed_size->valuedouble) != signed_size->valuedouble))
+        return ESP_ERR_INVALID_SIZE;
+    download_t d = {.partition = p, .gateway = gateway, .journal = j, .deadline = deadline,
+                    .limit = signed_size ? (size_t)signed_size->valuedouble : p->size};
     mbedtls_sha256_init(&d.hash);
     esp_err_t e = phase(j, "DOWNLOADING");
     if (e != ESP_OK)
         goto done;
-    e = gateway ? esp_ota_begin(p, OTA_SIZE_UNKNOWN, &d.handle)
+    if (!task_budget(j, j, &d.deadline)) {
+        e = ESP_ERR_TIMEOUT;
+        goto done;
+    }
+    e = gateway ? esp_ota_begin(p, signed_size ? d.limit : OTA_SIZE_UNKNOWN, &d.handle)
                 : esp_partition_erase_range(p, 0, p->size);
     if (e != ESP_OK)
         goto done;
+    if (!task_budget(j, j, &d.deadline)) {
+        e = ESP_ERR_TIMEOUT;
+        goto abort;
+    }
     if (mbedtls_sha256_starts(&d.hash, 0)) {
         e = ESP_FAIL;
         goto abort;
@@ -345,13 +384,18 @@ static esp_err_t download(cJSON *j, uint64_t deadline) {
     char path[192];
     snprintf(path, sizeof(path), "/api/v1/artifacts/%s/content", gw_action_string(j, "artifactId"));
     size_t received = 0;
-    e = gw_http_stream(path, deadline, p->size, download_sink, &d, &received);
+    e = gw_http_stream(path, d.deadline, d.limit, download_sink, &d, &received);
     if (e != ESP_OK)
         goto abort;
     uint8_t hash[32], expected[32];
-    if (received != d.total || d.total < 32 || mbedtls_sha256_finish(&d.hash, hash) ||
+    if (received != d.total || d.total < 32 || (signed_size && d.total != d.limit) ||
+        mbedtls_sha256_finish(&d.hash, hash) ||
         !gw_action_hex(gw_action_string(j, "sha256"), expected, 32) || memcmp(hash, expected, 32)) {
         e = ESP_ERR_INVALID_CRC;
+        goto abort;
+    }
+    if (!task_budget(j, j, &d.deadline)) {
+        e = ESP_ERR_TIMEOUT;
         goto abort;
     }
     if (gateway) {
@@ -375,6 +419,10 @@ static esp_err_t download(cJSON *j, uint64_t deadline) {
     e = partition_hash(p, d.total, hash);
     if (e != ESP_OK || memcmp(hash, expected, 32)) {
         e = ESP_ERR_INVALID_CRC;
+        goto done;
+    }
+    if (!task_budget(j, j, &d.deadline)) {
+        e = ESP_ERR_TIMEOUT;
         goto done;
     }
     set(j, "size", cJSON_CreateNumber((double)d.total));
@@ -722,6 +770,11 @@ esp_err_t gw_ota_execute(const cJSON *command_json, uint64_t deadline, cJSON **d
     cJSON_AddStringToObject(j, "artifactId", gw_action_string(p, "artifactId"));
     cJSON_AddStringToObject(j, "version", gw_action_string(m, "version"));
     cJSON_AddStringToObject(j, "sha256", gw_action_string(m, "sha256"));
+    const cJSON *signed_size = cJSON_GetObjectItemCaseSensitive(m, "sizeBytes");
+    if (signed_size && !cJSON_AddNumberToObject(j, "signedSize", signed_size->valuedouble)) {
+        e = ESP_ERR_NO_MEM;
+        goto done;
+    }
     cJSON_AddStringToObject(j, "expiresAt", gw_action_string(command_json, "expiresAt"));
     uint8_t esp_boot[16];
     char esp_hex[33], mono[24];
@@ -1077,6 +1130,11 @@ static esp_err_t local_begin(const cJSON *body, uint64_t deadline) {
     local_ota.offset = local_ota.last_size = local_ota.last_offset = 0;
     local_ota.deadline = deadline;
     local_ota.idle_deadline = gw_core_mono_ms() + 300000;
+    if (gw_core_mono_ms() >= deadline || atomic_load(&local_revoked)) {
+        (void)local_stop("ABORTED");
+        e = ESP_ERR_TIMEOUT;
+        goto done;
+    }
     e = esp_ota_begin(p, total, &local_ota.handle);
     if (e == ESP_OK && (gw_core_mono_ms() >= deadline || atomic_load(&local_revoked)))
         e = ESP_ERR_TIMEOUT;
@@ -1111,6 +1169,12 @@ static esp_err_t local_write(const cJSON *body) {
                               text_size) ||
         !n || n > LOCAL_CHUNK_SIZE || mbedtls_sha256(data, n, digest, 0))
         goto done;
+    if (local_uploading() &&
+        (gw_core_mono_ms() >= local_ota.deadline || atomic_load(&local_revoked))) {
+        (void)local_stop("ABORTED");
+        e = ESP_ERR_TIMEOUT;
+        goto done;
+    }
     if (local_uploading() && offset == local_ota.last_offset && local_ota.last_size == n &&
         !memcmp(digest, local_ota.last_hash, 32)) {
         e = ESP_OK;
@@ -1122,6 +1186,8 @@ static esp_err_t local_write(const cJSON *body) {
         goto done;
     }
     e = esp_ota_write(local_ota.handle, data, n);
+    if (e == ESP_OK && (gw_core_mono_ms() >= local_ota.deadline || atomic_load(&local_revoked)))
+        e = ESP_ERR_TIMEOUT;
     if (e != ESP_OK) {
         (void)local_stop("FAILED");
         goto done;
@@ -1178,15 +1244,13 @@ static esp_err_t local_commit(void) {
         return ESP_ERR_TIMEOUT;
     }
     e = esp_ota_set_boot_partition(local_ota.partition);
-    if (e != ESP_OK) {
-        (void)local_stop("FAILED");
-        return e;
-    }
-    e = esp_timer_start_once(local_ota.reboot_timer, 2000000);
-    /* Candidate is durable. Never release maintenance or claim aborted here. */
-    if (e != ESP_OK)
+    /* A metadata write can take effect before returning an I/O error. Retain
+     * the durable intent and lease even then; the next boot determines the
+     * actual slot and either confirms it or records rollback. */
+    esp_err_t scheduled = esp_timer_start_once(local_ota.reboot_timer, 2000000);
+    if (scheduled != ESP_OK)
         esp_restart();
-    return ESP_OK;
+    return e == ESP_OK ? ESP_OK : ESP_FAIL;
 }
 void gw_ota_local_window_closed(void) {
     atomic_store(&local_revoked, false);

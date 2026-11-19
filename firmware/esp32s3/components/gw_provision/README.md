@@ -1,6 +1,6 @@
 # ESP32-S3 本地网页配网与 OTA 组件
 
-版本：0.2.0；日期：2026-11-19。关联[配网设计](../../../../docs/esp32s3-network-provisioning.md)、[本地与远程 OTA 协议](../../../../docs/esp32s3-ota.md)，对应 ESP-PROV-001～020、ESP-EOTA-009～020。
+版本：0.2.1；日期：2026-11-19。关联[配网设计](../../../../docs/esp32s3-network-provisioning.md)、[本地与远程 OTA 协议](../../../../docs/esp32s3-ota.md)，对应 ESP-PROV-001～020、ESP-EOTA-009～020。
 
 本组件实现本机离线网页、Security 2 浏览器客户端、受限 HTTP transport、认证窗口、`gw_core` 网络事务适配和 `gw_actions` 本地固件升级入口。网页不依赖 CDN 或手机 App。代码、主机测试、目标构建与实板验收分别记录；实际通过范围见[固件验证记录](../../VALIDATION.md)。
 
@@ -9,6 +9,8 @@
 `gw_provision_init()`创建窗口监督任务但不开热点。经现场授权后调用`gw_provision_open_window(600)`，仅接受1～1800秒；未认证访问不能延长窗口。5分钟无已认证业务操作关闭；本地在线提交成功后最多保留60秒查看期。`gw_provision_close_window()`异步收尾，撤销未提交本地候选并通知 OTA 取消未提交上传，再停止HTTP与SoftAP；已提交配置保持，已提交 OTA 的启动确认/回滚义务继续。
 
 核心必须先初始化Wi-Fi/网络/加密存储。组件调用`gw_core_ap_start/stop/ap_netif`，不另建STA状态机。制造区须具有`setup_user`、`sec2_salt`（16字节）、`sec2_verifier`（384字节）、独立`ap_ssid/ap_password`；缺少任一必需材料拒绝开窗。本仓库测试口令仅是公开测试数据，不能用于制造。
+
+0.2.1增加`gw_provision_io`固定接收期限与socket跟踪。POST正文预算15 s，单次阻塞接收仍受SDK的5 s超时约束；每次接收前后检查窗口及固定期限，迟到的最后一块也不分派。关窗主动shutdown所有已接受连接，打断HTTP头/正文读取，再停止AP和HTTP服务。shutdown和最终close使用同一mutex避免fd重用竞态；最终close由HTTP任务负责，不使用只会排队的关闭API等待慢客户端。新增`tests/io_test.c`直接测试生产helper，主机I/O替身不等同真实Wi-Fi验证。
 
 固件必须启用`CONFIG_ESP_PROTOCOMM_SUPPORT_SECURITY_VERSION_2`，禁用Security 0/1兼容入口。当前实现要求官方Security 2 `patch_ver=1`，每次请求和响应递增96位nonce的末32位大端计数；旧固定nonce方案拒绝连接。浏览器SHA-512/AES-GCM由锁定Noble库提供，SRP和protobuf适配依据ESP-IDF v5.5.6官方源码实现。
 

@@ -1,7 +1,16 @@
 /* Actual OTA executor with deterministic Flash/UART/HTTP/clock boundaries.
  * SHA boundary uses test SHA512 truncation; Ed25519 uses production Monocypher.
  * Cryptographic cross-implementation validation lives in test_ed25519.py. */
+#include <time.h>
+static time_t wall_time = 1800000000;
+static time_t ota_test_time(time_t *out) {
+    if (out)
+        *out = wall_time;
+    return wall_time;
+}
+#define time ota_test_time
 #include "../gw_ota.c"
+#undef time
 #include <assert.h>
 static cJSON *database, *verification;
 static uint8_t image[1024], flash[4096], nrf_flash[4096], peer_boot[16] = {1};
@@ -12,6 +21,9 @@ static bool bad_stream, fail_store, untrusted, bad_signature, trial, trial_nrf, 
     fail_confirm, busy_begin, lost_chunk_reply, fault_chunk;
 static unsigned restarts, boots, confirms, aborts, uart_chunks, begin_count;
 static unsigned begin_advance, write_advance;
+static unsigned journal_advance, stream_advance, erase_count, reboot_timers;
+static bool boot_write_error, boot_write_applied, revoke_write, regress_clock;
+static const esp_partition_t *selected_boot;
 static bool unhealthy, bad_description, fail_confirm_journal;
 static char owner[129];
 static esp_partition_t slot0 = {.size = 4096, .label = "ota_0"},
@@ -57,6 +69,9 @@ esp_err_t gw_store_put_json(const char *key, const cJSON *v) {
         return ESP_FAIL;
     cJSON_DeleteItemFromObjectCaseSensitive(database, key);
     cJSON_AddItemToObject(database, key, cJSON_Duplicate(v, true));
+    if (!strcmp(gw_action_string(v, "phase"), "DOWNLOADING") ||
+        !strcmp(gw_action_string(v, "phase"), "RECEIVING"))
+        monotonic += journal_advance;
     return ESP_OK;
 }
 esp_err_t gw_core_maintenance_acquire(const char *s) {
@@ -101,11 +116,14 @@ esp_err_t esp_partition_write(const esp_partition_t *p, size_t offset, const voi
     if (offset + n > p->size)
         return ESP_FAIL;
     memcpy((p == &cache ? nrf_flash : flash) + offset, in, n);
+    monotonic += write_advance;
     return ESP_OK;
 }
 esp_err_t esp_partition_erase_range(const esp_partition_t *p, size_t offset, size_t n) {
     (void)offset;
     memset(p == &cache ? nrf_flash : flash, 255, n);
+    erase_count++;
+    monotonic += begin_advance;
     return ESP_OK;
 }
 esp_err_t esp_ota_begin(const esp_partition_t *p, size_t n, esp_ota_handle_t *h) {
@@ -122,6 +140,8 @@ esp_err_t esp_ota_write(esp_ota_handle_t h, const void *p, size_t n) {
     memcpy(flash + written, p, n);
     written += n;
     monotonic += write_advance;
+    if (revoke_write)
+        gw_ota_local_revoke();
     return ESP_OK;
 }
 esp_err_t esp_ota_end(esp_ota_handle_t h) {
@@ -144,7 +164,9 @@ esp_err_t esp_ota_get_partition_description(const esp_partition_t *p, esp_app_de
 esp_err_t esp_ota_set_boot_partition(const esp_partition_t *p) {
     assert(p == &slot1);
     boots++;
-    return ESP_OK;
+    if (!boot_write_error || boot_write_applied)
+        selected_boot = p; /* The write may take effect before returning an I/O error. */
+    return boot_write_error ? ESP_FAIL : ESP_OK;
 }
 esp_err_t esp_ota_get_state_partition(const esp_partition_t *p, esp_ota_img_states_t *s) {
     (void)p;
@@ -168,6 +190,8 @@ esp_err_t esp_timer_create(const esp_timer_create_args_t *args, esp_timer_handle
 esp_err_t esp_timer_start_once(esp_timer_handle_t t, uint64_t us) {
     (void)t;
     assert(us == 90000000 || us == 2000000);
+    if (us == 2000000)
+        reboot_timers++;
     return ESP_OK;
 }
 esp_err_t esp_timer_stop(esp_timer_handle_t t) {
@@ -363,6 +387,9 @@ esp_err_t gw_http_stream(const char *path, uint64_t deadline, size_t limit, gw_h
     (void)path;
     (void)deadline;
     (void)limit;
+    monotonic += stream_advance;
+    if (regress_clock)
+        wall_time -= 3600;
     uint8_t copy[sizeof(image)];
     memcpy(copy, image, sizeof(copy));
     if (bad_stream)
@@ -373,7 +400,12 @@ esp_err_t gw_http_stream(const char *path, uint64_t deadline, size_t limit, gw_h
 static cJSON *setup(bool nrf) {
     atomic_store(&local_revoked, false);
     unhealthy = bad_description = fail_confirm_journal = false;
-    begin_advance = write_advance = 0;
+    begin_advance = write_advance = journal_advance = stream_advance = 0;
+    erase_count = reboot_timers = 0;
+    boot_write_error = revoke_write = regress_clock = false;
+    boot_write_applied = true;
+    selected_boot = &slot0;
+    wall_time = 1800000000;
     cJSON_Delete(local_ota.journal);
     memset(&local_ota, 0, sizeof(local_ota));
     cJSON_Delete(database);
@@ -674,12 +706,107 @@ static void local_tests(void) {
     monotonic += 11000;
     gw_ota_local_tick();
     assert(local_is("CONFIRMED") && !*owner);
+    /* A delayed intent write must not authorize a first erase after expiry. */
+    local_setup();
+    journal_advance = 200000;
+    local_check("OTA_BEGIN", local_begin_body(), 100000, "SESSION_EXPIRED");
+    assert(begin_count == 0 && local_is("ABORTED") && !*owner);
+    /* Check every write, including a non-final chunk and asynchronous close. */
+    for (unsigned revoke = 0; revoke < 2; revoke++) {
+        local_setup();
+        local_check("OTA_BEGIN", local_begin_body(), 100000, "OK");
+        write_advance = revoke ? 0 : 200000;
+        revoke_write = revoke != 0;
+        local_check("OTA_WRITE", chunk(0, 512, false), 100000, "SESSION_EXPIRED");
+        assert(local_is("FAILED") && aborts == 1 && !*owner && !boots);
+    }
+    /* An ambiguous boot-selection write keeps its obligation and never lets a
+     * second upload overwrite the candidate. Recovery uses the actual boot. */
+    for (unsigned applied = 0; applied < 2; applied++) {
+        local_setup();
+        local_check("OTA_BEGIN", local_begin_body(), 100000, "OK");
+        local_check("OTA_WRITE", chunk(0, sizeof(image), false), 100000, "OK");
+        boot_write_error = true;
+        boot_write_applied = applied != 0;
+        local_check("OTA_COMMIT", local_body(), 100000, "STORAGE_FAULT");
+        assert(local_is("REBOOT_PENDING") && *owner && reboot_timers == 1 && boots == 1);
+        assert(gw_core_maintenance_acquire("other-action") == ESP_ERR_INVALID_STATE);
+        local_check("OTA_ABORT", local_body(), 100000, "CONFLICT");
+        cJSON *next = local_begin_body();
+        set(next, "uploadId", cJSON_CreateString("second-upload"));
+        local_check("OTA_BEGIN", next, 100000, "BUSY");
+        running = selected_boot;
+        trial = applied != 0;
+        strcpy(description.version, applied ? "v2" : "v1");
+        assert(gw_ota_init() == ESP_OK);
+        if (applied) {
+            gw_ota_local_boot_ready();
+            monotonic += 11000;
+            gw_ota_local_tick();
+        }
+        assert(local_is(applied ? "CONFIRMED" : "ROLLED_BACK") && !*owner);
+    }
     puts("PASS: local OTA authenticated manifest, lease/expiry/cancel, chunk "
          "replay, Flash hash, "
          "offline trial confirmation, lost reply and reboot recovery");
 }
+static void remote_boundaries(void) {
+    for (unsigned nrf = 0; nrf < 2; nrf++) {
+        cJSON *details = NULL, *c = setup(nrf != 0);
+        journal_advance = 200000;
+        assert(gw_ota_execute(c, 100000, &details) == ESP_ERR_TIMEOUT);
+        assert(!begin_count && !erase_count && !boots && !*owner);
+        cJSON_Delete(c);
+        c = setup(nrf != 0);
+        begin_advance = 200000;
+        assert(gw_ota_execute(c, 100000, &details) == ESP_ERR_TIMEOUT);
+        assert(!written && !boots && !uart_chunks && !*owner);
+        cJSON_Delete(c);
+        c = setup(nrf != 0);
+        stream_advance = 200000;
+        regress_clock = true; /* UTC moved back; saved monotonic budget stays fixed. */
+        assert(gw_ota_execute(c, 100000, &details) == ESP_ERR_TIMEOUT);
+        assert(!written && !boots && !uart_chunks && !*owner);
+        cJSON_Delete(c);
+        c = setup(nrf != 0);
+        write_advance = 200000;
+        assert(gw_ota_execute(c, 100000, &details) == ESP_ERR_TIMEOUT);
+        assert(!boots && !uart_chunks && !*owner);
+        cJSON_Delete(c);
+        const char *invalid_sizes[] = {"null", "\"1024\"", "0", "-1", "31", "1024.5", "1e100", "4097"};
+        for (size_t i = 0; i < sizeof(invalid_sizes) / sizeof(invalid_sizes[0]); i++) {
+            c = setup(nrf != 0);
+            local_signed_field("sizeBytes", cJSON_Parse(invalid_sizes[i]));
+            assert(gw_ota_execute(c, 100000, &details) != ESP_OK);
+            assert(!begin_count && !erase_count && !boots);
+            cJSON_Delete(c);
+        }
+        for (unsigned shorter = 0; shorter < 2; shorter++) {
+            c = setup(nrf != 0);
+            local_signed_field("sizeBytes", cJSON_CreateNumber(shorter ? 512 : 2048));
+            assert(gw_ota_execute(c, 100000, &details) != ESP_OK);
+            assert(!boots && !uart_chunks && !*owner);
+            cJSON_Delete(c);
+        }
+    }
+    cJSON *details = NULL, *c = setup(false);
+    local_signed_field("imageFormat", cJSON_CreateString("MCUBOOT_SIGNED_BIN"));
+    assert(gw_ota_execute(c, 100000, &details) == ESP_ERR_INVALID_ARG && !begin_count);
+    cJSON_Delete(c);
+    c = setup(false);
+    local_signed_field("imageFormat", cJSON_CreateNull());
+    assert(gw_ota_execute(c, 100000, &details) == ESP_ERR_INVALID_ARG && !begin_count);
+    cJSON_Delete(c);
+    c = setup(false);
+    local_signed_field("imageFormat", NULL);
+    local_signed_field("sizeBytes", NULL);
+    assert(gw_ota_execute(c, 100000, &details) == ESP_ERR_NOT_FINISHED && boots == 1);
+    cJSON_Delete(c);
+    puts("PASS: remote signed size/format/legacy compatibility and erase/write authorization budgets");
+}
 int main(void) {
     local_tests();
+    remote_boundaries();
     assert(expires_seconds("2024-02-29T12:00:00Z") > 0);
     assert(expires_seconds("2023-02-29T12:00:00Z") < 0);
     assert(expires_seconds("2024-01-01T00:00:00+08:00") == expires_seconds("2023-12-31T16:00:00Z"));

@@ -10,6 +10,8 @@ static struct tm *gmtime_r(const time_t *t, struct tm *out) {
 
 static cJSON *disk, *config_disk, *configured_target;
 static bool fail_http, fail_store;
+static bool wrong_result_ack;
+static const char *result_ack_status = "ACCEPTED";
 static unsigned actions, requests, resets;
 static esp_err_t action_result = ESP_OK, recovery_result = ESP_ERR_TIMEOUT;
 static uint64_t random_counter;
@@ -182,8 +184,9 @@ esp_err_t gw_http_json(const char *p, const char *m, const cJSON *b,
         *item = cJSON_CreateObject();
   cJSON_AddItemToArray(items, item);
   cJSON_AddStringToObject(item, "taskId", str(r, "taskId"));
-  cJSON_AddStringToObject(item, "resultId", str(r, "resultId"));
-  cJSON_AddStringToObject(item, "status", "ACCEPTED");
+  cJSON_AddStringToObject(item, "resultId",
+                          wrong_result_ack ? "unrelated-result" : str(r, "resultId"));
+  cJSON_AddStringToObject(item, "status", result_ack_status);
   return ESP_OK;
 }
 static cJSON *new_command(const char *id) {
@@ -201,6 +204,89 @@ static cJSON *new_command(const char *id) {
   strftime(when, sizeof(when), "%Y-%m-%dT%H:%M:%SZ", &t);
   text(c, "expiresAt", when);
   return c;
+}
+static cJSON *revision_command(const char *id, unsigned revision) {
+  cJSON *c = new_command(id);
+  text(c, "type", "CONFIGURE");
+  cJSON *params = cJSON_GetObjectItemCaseSensitive(c, "parameters");
+  put(params, "desiredRevision", cJSON_CreateNumber(revision));
+  put(params, "configuration", cJSON_Parse("{\"upload\":{\"flushIntervalMs\":500}}"));
+  command(c);
+  return c;
+}
+static void revision_ack_tests(void) {
+  /* Model revision 1 persisted remotely but its response lost; the server may
+   * now issue revision 2, whose result ACK arrives before the retry of 1. */
+  put(journal, "reportedRevision", cJSON_CreateNumber(0));
+  assert(save() == ESP_OK);
+  cJSON *older = revision_command("revision-old", 1);
+  fail_http = true;
+  finish_config(older, NULL, 5000);
+  fail_http = false;
+  assert(num(journal, "reportedRevision") == 0);
+  cJSON *pending_old = cJSON_Duplicate(cJSON_GetArrayItem(
+      cJSON_GetObjectItemCaseSensitive(find_record("revision-old"), "pending"), 0), true);
+  assert(pending_old);
+  cJSON *newer = revision_command("revision-new", 2);
+  finish_config(newer, NULL, 5000);
+  assert(num(journal, "reportedRevision") == 2);
+  result_ack_status = "DUPLICATE";
+  assert(deliver(pending_old, NULL, 5000) == ESP_OK);
+  assert(num(journal, "reportedRevision") == 2 && num(disk, "reportedRevision") == 2);
+  /* Replaying a completed finish path must not reintroduce its old revision. */
+  finish_config(older, NULL, 5000);
+  assert(num(journal, "reportedRevision") == 2);
+  cJSON_Delete(journal);
+  journal = NULL;
+  assert(gw_cloud_init() == ESP_OK);
+  assert(num(journal, "reportedRevision") == 2);
+  assert(deliver(pending_old, NULL, 5000) == ESP_OK);
+  assert(num(journal, "reportedRevision") == 2);
+  cJSON_Delete(pending_old);
+  cJSON_Delete(older);
+  cJSON_Delete(newer);
+
+  cJSON *next = revision_command("revision-next", 3);
+  wrong_result_ack = true;
+  finish_config(next, NULL, 5000);
+  assert(num(journal, "reportedRevision") == 2 && num(disk, "reportedRevision") == 2);
+  wrong_result_ack = false;
+  result_ack_status = "REJECTED_PERMANENT";
+  finish_config(next, NULL, 5000);
+  assert(num(journal, "reportedRevision") == 2);
+  result_ack_status = "ACCEPTED";
+  finish_config(next, NULL, 5000);
+  assert(num(journal, "reportedRevision") == 3);
+  cJSON_Delete(next);
+
+  /* Numeric strings, fractions, negatives and unsafe numbers cannot become
+   * a reporting revision even with an otherwise matching result ACK. */
+  const char *bad[] = {"\"9\"", "3.5", "-1", "9007199254740992", "null"};
+  for (unsigned i = 0; i < sizeof(bad) / sizeof(*bad); ++i) {
+    char id[32];
+    snprintf(id, sizeof(id), "revision-invalid-%u", i);
+    cJSON *c = revision_command(id, 4), *d = cJSON_CreateObject();
+    cJSON_AddItemToObject(d, "reportedConfigurationRevision", cJSON_Parse(bad[i]));
+    assert(result_for(id, "terminal", "SUCCEEDED", "VERIFIED", d, NULL, NULL, 5000) == ESP_OK);
+    assert(num(journal, "reportedRevision") == 3 && num(disk, "reportedRevision") == 3);
+    cJSON_Delete(d);
+    cJSON_Delete(c);
+  }
+  cJSON *failed = revision_command("revision-failed", 4),
+        *d = cJSON_Parse("{\"reportedConfigurationRevision\":4}");
+  assert(result_for("revision-failed", "terminal", "FAILED", "NONE", d,
+                    "TEST_FAILURE", NULL, 5000) == ESP_OK);
+  assert(num(journal, "reportedRevision") == 3);
+  cJSON_Delete(failed);
+  cJSON_Delete(d);
+  cJSON *limit = revision_command("revision-limit", 4);
+  d = cJSON_Parse("{\"reportedConfigurationRevision\":9007199254740991}");
+  assert(result_for("revision-limit", "terminal", "SUCCEEDED", "VERIFIED", d,
+                    NULL, NULL, 5000) == ESP_OK);
+  assert(num(journal, "reportedRevision") == 9007199254740991.0 &&
+         num(disk, "reportedRevision") == 9007199254740991.0);
+  cJSON_Delete(limit);
+  cJSON_Delete(d);
 }
 int main(void) {
   assert(gw_cloud_init() == ESP_OK);
@@ -312,12 +398,13 @@ int main(void) {
          parse_utc("2025-02-29T00:00:00Z") == -1 &&
          parse_utc("2026-11-19T01:00:00+01:00") ==
              parse_utc("2026-11-19T00:00:00Z"));
+  revision_ack_tests();
   cJSON_Delete(journal);
   journal = NULL;
   cJSON_Delete(disk);
   cJSON_Delete(config_disk);
   cJSON_Delete(configured_target);
   puts("cloud: admission, ACK retry, exactly-once intent, expiry, conflict, "
-       "probe quarantine passed");
+       "probe quarantine, monotonic configuration ACK/restart passed");
   return 0;
 }

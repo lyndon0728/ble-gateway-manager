@@ -35,6 +35,7 @@ with tempfile.TemporaryDirectory(prefix="gw-host-") as temp:
                components / "gw_actions/tests/gatt_stubs", cjson])
     provision = components / "gw_provision"
     build_run("guard", [provision / "tests/guard_test.c", provision / "gw_provision_guard.c"], [provision])
+    build_run("provision-io", [provision / "tests/io_test.c", provision / "gw_provision_io.c"], [provision])
     cloud = components / "gw_cloud"
     cloud_includes = [cloud / "tests/mocks"] + [components / name / "include" for name in (
         "gw_cloud", "gw_core", "gw_http", "gw_nrf", "gw_wire", "gw_actions")]

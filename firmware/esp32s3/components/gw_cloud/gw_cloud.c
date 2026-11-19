@@ -104,6 +104,23 @@ static int64_t parse_utc(const char *s) {
 static cJSON *records(void) {
   return cJSON_GetObjectItemCaseSensitive(journal, "records");
 }
+static bool revision_number(const cJSON *value, double *revision) {
+  if (!cJSON_IsNumber(value) || !isfinite(value->valuedouble) ||
+      value->valuedouble < 0 || value->valuedouble > 9007199254740991.0 ||
+      floor(value->valuedouble) != value->valuedouble)
+    return false;
+  *revision = value->valuedouble;
+  return true;
+}
+/* Result delivery can finish out of order after a lost ACK. An older
+ * acknowledged result must not roll back the durable reporting watermark. */
+static void advance_reported_revision(const cJSON *value) {
+  double current, next;
+  if (revision_number(cJSON_GetObjectItemCaseSensitive(journal, "reportedRevision"),
+                      &current) &&
+      revision_number(value, &next) && next > current)
+    put(journal, "reportedRevision", cJSON_Duplicate(value, true));
+}
 static cJSON *find_record(const char *id) {
   cJSON *r;
   cJSON_ArrayForEach(r, records()) if (!strcmp(str(r, "taskId"), id)) return r;
@@ -177,8 +194,7 @@ static esp_err_t deliver(const cJSON *result, const char *interface,
             cJSON_GetObjectItemCaseSensitive(result, "details");
         const cJSON *rev = cJSON_GetObjectItemCaseSensitive(
             details, "reportedConfigurationRevision");
-        if (cJSON_IsNumber(rev))
-          put(journal, "reportedRevision", cJSON_Duplicate(rev, true));
+        advance_reported_revision(rev);
       }
       const char *stage = str(result, "state");
       if (strcmp(stage, "ACCEPTED") && strcmp(stage, "EXECUTING")) {
@@ -441,14 +457,10 @@ static void finish_config(const cJSON *command, const cJSON *details,
                       true));
   cJSON_AddNumberToObject(d, "reportedConfigurationRevision",
                           num(params, "desiredRevision"));
-  if (result_for(str(command, "taskId"), "terminal", "SUCCEEDED", "VERIFIED", d,
-                 NULL, NULL, deadline) == ESP_OK) {
-    xSemaphoreTake(mutex, portMAX_DELAY);
-    put(journal, "reportedRevision",
-        cJSON_CreateNumber(num(params, "desiredRevision")));
-    save();
-    xSemaphoreGive(mutex);
-  }
+  /* deliver() advances and saves the reporting watermark with the validated
+   * ACK. Do not rewrite it here using a possibly older task revision. */
+  (void)result_for(str(command, "taskId"), "terminal", "SUCCEEDED", "VERIFIED", d,
+                   NULL, NULL, deadline);
   cJSON_Delete(d);
 }
 static bool command_valid(const cJSON *c) {

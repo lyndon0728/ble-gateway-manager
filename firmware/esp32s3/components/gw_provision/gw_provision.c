@@ -9,6 +9,7 @@
 #include "gw_core.h"
 #include "gw_actions.h"
 #include "gw_provision_guard.h"
+#include "gw_provision_io.h"
 #include "lwip/sockets.h"
 #include "mbedtls/platform_util.h"
 #include "protocomm.h"
@@ -19,12 +20,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #define REQUEST_MAX (16384U + 16U)
 #define RESPONSE_MAX 32768U
 #define IDLE_MS 300000ULL
 #define AUTH_FAILURE_LIMIT 5U
 #define MAX_SESSION_MESSAGES 65536U
+#define BODY_BUDGET_MS 15000ULL
 
 /* IDF 5.5.6 EMBED_FILES uses the file basename, without its source directory. */
 extern const uint8_t index_start[] asm("_binary_index_html_start");
@@ -38,6 +41,8 @@ static struct {
     httpd_handle_t server;
     protocomm_t *pc;
     SemaphoreHandle_t lifecycle;
+    SemaphoreHandle_t sockets_lock;
+    gw_prov_sockets_t sockets;
     uint64_t deadline, last_authenticated, rate_started;
     unsigned rate_count, failures, messages;
     bool open, close_requested, authenticated, session_open;
@@ -67,6 +72,50 @@ static void touch(void) {
     portENTER_CRITICAL(&state_lock);
     state.last_authenticated = gw_core_mono_ms();
     portEXIT_CRITICAL(&state_lock);
+}
+/* The SDK's stop/trigger-close APIs enqueue work on the HTTP task. An accepted
+ * client can hold that task in header/body recv, so window expiry must interrupt
+ * its sockets directly. Serialize shutdown and close to prevent fd reuse. */
+static esp_err_t socket_open(httpd_handle_t server, int fd) {
+    (void)server;
+    xSemaphoreTake(state.sockets_lock, portMAX_DELAY);
+    bool accepted = active() && gw_prov_socket_add(&state.sockets, fd);
+    if (!accepted)
+        (void)shutdown(fd, SHUT_RDWR);
+    xSemaphoreGive(state.sockets_lock);
+    /* In IDF 5.5.6 a failing open_fn goes through sess_delete(close_fn), then
+     * accept_conn closes newfd again. Return an already-shutdown session so
+     * normal HTTP cleanup owns exactly one close, even during window teardown. */
+    return ESP_OK;
+}
+static void socket_close(httpd_handle_t server, int fd) {
+    (void)server;
+    xSemaphoreTake(state.sockets_lock, portMAX_DELAY);
+    gw_prov_socket_remove(&state.sockets, fd);
+    close(fd); /* A custom close_fn must close the descriptor itself. */
+    xSemaphoreGive(state.sockets_lock);
+}
+static void shutdown_socket(void *unused, int fd) {
+    (void)unused;
+    (void)shutdown(fd, SHUT_RDWR);
+}
+static void interrupt_clients(void) {
+    if (!state.sockets_lock)
+        return;
+    xSemaphoreTake(state.sockets_lock, portMAX_DELAY);
+    gw_prov_sockets_shutdown(&state.sockets, shutdown_socket, NULL);
+    xSemaphoreGive(state.sockets_lock);
+}
+static int body_recv(void *ctx, uint8_t *data, size_t size) {
+    return httpd_req_recv((httpd_req_t *)ctx, (char *)data, size);
+}
+static uint64_t body_now(void *ctx) {
+    (void)ctx;
+    return gw_core_mono_ms();
+}
+static bool body_active(void *ctx) {
+    (void)ctx;
+    return active();
 }
 static void headers(httpd_req_t *r, const char *type) {
     httpd_resp_set_type(r, type);
@@ -301,15 +350,18 @@ static esp_err_t post(httpd_req_t *r) {
     ssize_t output_len = 0;
     if (!input)
         return fail(r, "503 Service Unavailable", "Memory limit");
-    size_t received = 0;
-    while (received < r->content_len) {
-        int n = httpd_req_recv(r, (char *)input + received, r->content_len - received);
-        if (n <= 0) {
-            secure_free(input, r->content_len);
-            return ESP_FAIL;
-        }
-        received += (size_t)n;
+    const gw_prov_reader_t reader = {.recv = body_recv, .now_ms = body_now,
+                                     .active = body_active, .ctx = r};
+    uint64_t request_deadline = gw_core_mono_ms() + BODY_BUDGET_MS;
+    portENTER_CRITICAL(&state_lock);
+    if (request_deadline > state.deadline)
+        request_deadline = state.deadline;
+    portEXIT_CRITICAL(&state_lock);
+    if (gw_prov_receive(&reader, input, r->content_len, request_deadline) != 0) {
+        secure_free(input, r->content_len);
+        return ESP_FAIL; /* Close this HTTP connection, never dispatch late data. */
     }
+    size_t received = r->content_len;
     unsigned command = 99;
     if (handshake) {
         SessionData *message = session_data__unpack(NULL, received, input);
@@ -400,8 +452,11 @@ static void stop_locked(void) {
     portENTER_CRITICAL(&state_lock);
     state.open = false;
     portEXIT_CRITICAL(&state_lock);
-    gw_core_set_local_window_deadline(0);
     gw_actions_local_ota_window_closed();
+    interrupt_clients();
+    gw_core_set_local_window_deadline(0);
+    /* Disable the radio endpoint before waiting for the HTTP task to finish. */
+    gw_core_ap_stop();
     if (state.server) {
         httpd_stop(state.server);
         state.server = NULL;
@@ -411,7 +466,6 @@ static void stop_locked(void) {
         protocomm_delete(state.pc);
         state.pc = NULL;
     }
-    gw_core_ap_stop();
     mbedtls_platform_zeroize(state.salt, sizeof(state.salt));
     mbedtls_platform_zeroize(state.verifier, sizeof(state.verifier));
 }
@@ -453,9 +507,18 @@ esp_err_t gw_provision_init(void) {
     state.lifecycle = xSemaphoreCreateMutex();
     if (!state.lifecycle)
         return ESP_ERR_NO_MEM;
+    state.sockets_lock = xSemaphoreCreateMutex();
+    if (!state.sockets_lock) {
+        vSemaphoreDelete(state.lifecycle);
+        state.lifecycle = NULL;
+        return ESP_ERR_NO_MEM;
+    }
+    gw_prov_sockets_init(&state.sockets);
     if (xTaskCreate(supervisor, "gw_prov_window", 4096, NULL, 3, NULL) != pdPASS) {
         vSemaphoreDelete(state.lifecycle);
         state.lifecycle = NULL;
+        vSemaphoreDelete(state.sockets_lock);
+        state.sockets_lock = NULL;
         return ESP_ERR_NO_MEM;
     }
     return ESP_OK;
@@ -498,7 +561,9 @@ esp_err_t gw_provision_open_window(uint32_t seconds) {
         goto failure;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.max_uri_handlers = 6;
-    config.max_open_sockets = 3;
+    config.max_open_sockets = GW_PROV_SOCKET_MAX;
+    config.open_fn = socket_open;
+    config.close_fn = socket_close;
     config.lru_purge_enable = true;
     config.stack_size = 12288;
     config.recv_wait_timeout = 5;

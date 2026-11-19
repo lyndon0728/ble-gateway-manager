@@ -1,4 +1,4 @@
-# ESP32-S3 0.2.0 实现决策与交付范围
+# ESP32-S3 0.2.1 实现决策与交付范围
 
 日期：2026-11-19。本文将[开发设计](../../docs/esp32s3-development.md)映射到本次源码；它不替代[验证记录](VALIDATION.md)或[50项整机验收](../../docs/esp32s3-validation-plan.md)。
 
@@ -39,6 +39,8 @@ SDK固定ESP-IDF v5.5.6，BLE Host采用NimBLE，CH390组件固定0.4.1。默认
 本地入口与远程入口共用网络执行器及排他租约。本地版本使用`localRevision`，所有网络变更推进`networkGeneration`；服务器`desiredRevision`由服务器分配。LOCAL_ONLY允许现场保存但保留最后验证成功网络，不能伪报平台已确认。
 
 远程凭据单独通过设备认证接口投递；CONFIGURE仅引用credentialRef。候选验证把DNS与TLS连接绑定被测接口，平台逐项确认EXECUTING探测结果后才提交。最终SUCCEEDED获得RESULT_PERSISTED后更新平台确认版本并解除租约。旧候选回退后，未确认的旧probe不会经同名旧接口重发成新证明。
+
+0.2.1将已报告配置版本作为单调水位：只有匹配的成功结果ACK可推进，迟到旧结果、DUPLICATE、错误ACK或不安全数值不会使版本倒退。ACK删除与水位推进仍由同一journal提交，不额外写入另一份可被旧任务覆盖的版本。
 
 平台新增数据库v4迁移、OpenAPI/消息Schema和网络配置页面；[平台联调文档](../../server/docs/network-provisioning-integration.md)包含部署主密钥、权限、请求与结果契约。此扩展必须与固件一起部署。
 

@@ -1,6 +1,6 @@
 # GW32 ESP32-S3 固件
 
-版本：0.2.0；日期：2026-11-19。芯片目标ESP32-S3，ESP-IDF固定v5.5.6，8MiB Flash布局。依据[需求](../../docs/esp32s3-requirements.md)、[开发设计](../../docs/esp32s3-development.md)、[本地/远程配网设计](../../docs/esp32s3-network-provisioning.md)及[本地/远程 OTA 协议](../../docs/esp32s3-ota.md)。
+版本：0.2.1；日期：2026-11-19。芯片目标ESP32-S3，ESP-IDF固定v5.5.6，8MiB Flash布局。依据[需求](../../docs/esp32s3-requirements.md)、[开发设计](../../docs/esp32s3-development.md)、[本地/远程配网设计](../../docs/esp32s3-network-provisioning.md)及[本地/远程 OTA 协议](../../docs/esp32s3-ota.md)。本次需求落实与修复见[变更记录](CHANGELOG.md)。
 
 本目录提供实际C固件、离线网页、制造/构建工具和测试。源码存在、主机测试通过、ESP目标编译通过、实板通过是不同状态；以[验证记录](VALIDATION.md)为准，不将未连接的硬件写为已验收。
 
